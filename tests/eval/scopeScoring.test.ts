@@ -62,12 +62,16 @@ describe("the scope cases' Documents", () => {
     expect(SCOPE_CASES.map((each) => each.id)).toEqual([
       "unfiled-5",
       "filed-5",
+      "scoped-5",
       "unfiled-20",
       "filed-20",
+      "scoped-20",
       "zh-unfiled-5",
       "zh-filed-5",
+      "zh-scoped-5",
       "zh-unfiled-20",
       "zh-filed-20",
+      "zh-scoped-20",
       "unfiled-no-agreements-17",
     ]);
     for (const language of LANGUAGES) {

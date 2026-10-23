@@ -2,9 +2,10 @@
  * The cases `npm run eval:scope` checks (README.md): a Mind that summarises
  * the employment agreement of ./cases, in a Library of the agreement and
  * other invented Documents, either filed into the Folder that holds the
- * agreement or in none. The language, the placement and the number of other
- * Documents are a case's parameters; the Documents and the sentences never
- * change, so a case can be run again unchanged.
+ * agreement, in none, or in none with the agreement as the Search scope the
+ * User set for it (#1623). The language, the placement and the number of
+ * other Documents are a case's parameters; the Documents and the sentences
+ * never change, so a case can be run again unchanged.
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,7 +15,7 @@ import { DOCUMENTS, type RepeatDocument, type RepeatSentence, SETS } from "./cas
 import { OTHER_DOCUMENTS, type OtherDocument } from "./scopeDocuments";
 import { OTHER_DOCUMENTS_ZH } from "./scopeDocumentsZh";
 
-export type Placement = "unfiled" | "filed";
+export type Placement = "unfiled" | "filed" | "scoped";
 
 export type ScopeLanguage = "en" | "zh-CN";
 
@@ -45,7 +46,7 @@ export const OTHER_COUNTS = [5, 20] as const;
 
 const casesOf = (language: ScopeLanguage, prefix: string): ScopeCase[] =>
   OTHER_COUNTS.flatMap((others) =>
-    (["unfiled", "filed"] as const).map((placement) => ({
+    (["unfiled", "filed", "scoped"] as const).map((placement) => ({
       id: `${prefix}${placement}-${others}`,
       language,
       placement,

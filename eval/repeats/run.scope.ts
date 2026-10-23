@@ -90,10 +90,16 @@ test("the scope of a check from a Mind", async () => {
         const provider = await core.saveChatProvider(chatProviderOf(chat));
         const choice = { providerId: provider.id, modelId: chat.modelId };
         const folderId = scopeCase.placement === "filed" ? await fileAgreement(library, set) : null;
+        const agreement = library.documents.get(set.agreement.file);
+        const scope =
+          scopeCase.placement === "scoped" && agreement
+            ? { folderIds: [], tagIds: [], documentIds: [agreement.id] }
+            : undefined;
         log(`${model} · ${scopeCase.id}: ${set.sentences.length} sentences, ${repeats} checks`);
         await repeatChecks(core, {
           mind: set.mind,
           folderId,
+          ...(scope && { scope }),
           sentences: set.sentences.map((each) => each.text),
           repeats,
           model: choice,
