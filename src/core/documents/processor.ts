@@ -33,11 +33,12 @@ export interface ProcessorHandlers {
   /** How many scans are read at once (the host works it out with `scansAtOnce`). Default: one. */
   scansAtOnce?: number | undefined;
   /**
-   * A processing job is about to go to a worker: from the queue, or its turn in the scan lane.
+   * A processing job is about to go to a worker, from the queue or its turn in the scan lane:
+   * returns it as it starts, if that has changed since it was queued (the scanned pages it keeps).
    * `warm`: the worker has run a job of its kind before, so it has nothing to load first (a new
    * worker starts up, and loads PDF.js for its first PDF).
    */
-  onStart(job: ProcessingJob, warm: boolean): void;
+  onStart(job: ProcessingJob, warm: boolean): ProcessingJob | undefined;
   /** A job that reads scanned pages stopped to wait its turn in the scan lane. */
   onWaiting(job: ProcessingJob): void;
   onResult(job: ProcessingJob, result: ProcessingResult): void;
@@ -271,14 +272,14 @@ export function createProcessor(
     return held ? undefined : queue.shift();
   }
 
-  function start(job: WorkerJob, lane: "queue" | "scan"): void {
+  function start(queued: WorkerJob, lane: "queue" | "scan"): void {
     const id = nextId++;
     const worker = idle.pop() ?? startWorker();
-    const warm = worker.kinds.has(job.kind);
-    worker.kinds.add(job.kind);
+    const warm = worker.kinds.has(queued.kind);
+    worker.kinds.add(queued.kind);
     const run: Run = {
       id,
-      job,
+      job: queued,
       worker,
       lane,
       posted: false,
@@ -286,7 +287,14 @@ export function createProcessor(
       cancelled: false,
     };
     running.set(id, run);
-    if (job.task === "process") call(() => handlers.onStart(job, warm));
+    if (queued.task === "process") {
+      try {
+        run.job = handlers.onStart(queued, warm) ?? queued;
+      } catch (error) {
+        reportError(error);
+      }
+    }
+    const { job } = run;
     const send = (password: string | undefined) => {
       if (closed || running.get(id) !== run || !run.worker.alive) return;
       // Stopped while its password was read: it never starts.
