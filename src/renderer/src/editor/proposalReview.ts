@@ -798,13 +798,15 @@ export function changeReason(
  * (`decideProposals`). The change reaches the core as the User's edits do.
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
  * just brought back included, rather than a list read earlier, but those an
- * edit is applying and those of the requests `except` names.
+ * edit is applying and those of the requests `except` names. `alsoRecord`
+ * writes more into the Mind in the same step, with what was resolved.
  */
 export function resolveInEditor(
   editor: Editor,
   ids: ReadonlySet<string> | "all",
   outcome: "accept" | "reject",
   except: ReadonlySet<string> = new Set(),
+  alsoRecord?: (doc: Y.Doc, resolved: readonly ResolvedProposal[]) => void,
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
   if (!binding || (ids !== "all" && ids.size === 0)) return [];
@@ -824,6 +826,7 @@ export function resolveInEditor(
           : ids.has(proposal.id),
       outcome,
     );
+    alsoRecord?.(binding.doc, resolved);
   }, ySyncPluginKey);
   undo?.stopCapturing();
   return resolved;
