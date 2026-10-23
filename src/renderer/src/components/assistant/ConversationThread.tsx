@@ -25,13 +25,15 @@ import { useAppStore } from "../../store";
 import { interleave, type ThreadStart, threadTasks } from "../../taskGroups";
 import { loadTasks, useTasks } from "../../tasks";
 import { aimAt } from "../../taskTell";
+import { useTipRoom } from "../../tips";
 import { SearchIcon } from "../icons";
 import { PlanLineIcon, SearchLineIcon, SparkLineIcon } from "../lineIcons";
 import { AddToMindPicker } from "./AddToMindPicker";
-import { WritingLine } from "./AnswerActions";
+import { TipRoom, WritingLine } from "./AnswerActions";
 import { LiveLine } from "./AnswerSteps";
 import { type AnswerKeeping, AssistantAnswer } from "./AssistantAnswer";
 import { MeetingStarters } from "./MeetingStarters";
+import { useReadMindEmpty } from "./readMind";
 import { TaskProgress, type TaskProgressActions } from "./TaskProgress";
 
 const TASK_ACTIONS: TaskProgressActions = { plan: togglePlanView, tell: aimAt };
@@ -74,6 +76,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   const focusedMindName = focusedMindId
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
+  const mindEmpty = useReadMindEmpty(focusedMindId);
   const nextScope = useNextScope(focusedMindId);
   // While the Mind's meeting records, the assistant listens to its live transcript (#144).
   const listening = useMeetings((state) =>
@@ -105,6 +108,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
   // A Research topic asked, or a Task started, grows it too; a Task's every step doesn't move it.
   const started = tasks.length;
   const askedAt = plan?.askedAt;
+  const tipRoomOpen = useTipRoom("add-answer", null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each change to the messages may grow the thread.
   useLayoutEffect(() => {
     const scroller = log.current?.parentElement;
@@ -135,6 +139,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     void addAnswer({ answer, conversation, blocks }, target, focusedMindId === null);
   const keeping: AnswerKeeping = {
     focusedMindName,
+    mindEmpty,
     add(answer) {
       if (focusedMindId) add(answer, { kind: "mind", mindId: focusedMindId });
     },
@@ -263,6 +268,7 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
               ) : undefined
             }
           />
+          {focusedMindId !== null && tipRoomOpen && <TipRoom />}
         </div>
       )}
       {picking && (

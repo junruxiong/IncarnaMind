@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
+import { KEY_PROVIDERS } from "../src/core/providers/catalog/providers";
 import {
   acceptPlainTextKeys,
   addProviderForm,
@@ -69,7 +70,7 @@ test("each preset is a tile in Add a provider; Groq's page has its key page and 
   }
 });
 
-test("the setup card offers the first-class providers and Kimi and GLM, which its key line names, but no preset", async () => {
+test("the setup card's More… lists every provider that takes a key, in English and Chinese, and the card stays inside a 900px window", async () => {
   const { app, window } = await launchApp(dataDir, { ollama: "http://127.0.0.1:9" });
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -81,13 +82,40 @@ test("the setup card offers the first-class providers and Kimi and GLM, which it
     const card = window.getByTestId("model-setup");
     await card.getByTestId("setup-key").click();
     const form = card.getByTestId("provider-form");
+    const chips = form.locator('input[name$="-kind"]');
+    const shown = await chips.count();
     await form.getByTestId("provider-more-toggle").click();
-    await expect(form.getByRole("radio", { name: "OpenRouter", exact: true })).toHaveCount(1);
-    for (const name of ["Groq", "Mistral", "xAI", "OpenAI-compatible server"]) {
-      await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(0);
+    await expect(form.getByTestId("provider-more-toggle")).toHaveCount(0);
+    await expect(chips).toHaveCount(KEY_PROVIDERS.length);
+    expect(shown).toBeLessThan(KEY_PROVIDERS.length);
+    for (const id of KEY_PROVIDERS)
+      await expect(form.locator(`input[value="${id}"]`)).toHaveCount(1);
+    for (const name of ["Groq", "Mistral", "xAI", "OpenAI-compatible server", "OpenRouter"]) {
+      await expect(form.getByRole("radio", { name, exact: true })).toHaveCount(1);
     }
     for (const name of [/^Kimi/, /^GLM/]) {
       await expect(form.getByRole("radio", { name })).toHaveCount(1);
+    }
+
+    // A provider found there is set up with the same form: its own key line and button.
+    await form.locator("label", { has: window.locator('input[value="mistral"]') }).click();
+    await expect(form.getByTestId("provider-form-title")).toHaveText("Paste your Mistral key");
+    await expect(form.getByTestId("provider-use-key")).toBeVisible();
+
+    for (const [language, height] of [
+      ["en", 900],
+      ["zh-CN", 900],
+      ["zh-CN", 700],
+    ] as const) {
+      await setLanguage(window, language);
+      await setWindowSize(app, window, 900, height);
+      const box = await card.boundingBox();
+      expect(box, `${language}, ${height}`).not.toBeNull();
+      expect(
+        (box?.y ?? 0) + (box?.height ?? 0),
+        `${language}, ${height}: inside the window`,
+      ).toBeLessThanOrEqual(height);
+      await expect(chips).toHaveCount(KEY_PROVIDERS.length);
     }
   } finally {
     await app.close();

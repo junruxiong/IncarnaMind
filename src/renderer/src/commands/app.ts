@@ -55,6 +55,7 @@ import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
 import { researchCommands } from "./research";
+import { reviewCommands } from "./review";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
@@ -440,6 +441,7 @@ const appCommands: readonly Command[] = [
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,
+  ...reviewCommands,
   ...checkCommands,
 ];
 

@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type {
   ChatProvider,
@@ -14,7 +14,6 @@ import {
   catalogProvider,
   dataUseOf,
   endpointOf,
-  FIRST_RUN_BEST_EFFORT,
   fieldAccepts,
   fieldUrl,
   isPreset,
@@ -22,7 +21,7 @@ import {
   kindOfCatalogId,
   untestedForCitations,
 } from "../../../../core/providers/catalog/providers";
-import type { Role } from "../../../../core/providers/catalog/types";
+import type { Endpoint, Role } from "../../../../core/providers/catalog/types";
 import { serviceForUrl } from "../../../../core/providers/service";
 import { checkApiKey } from "../../../../shared/apiKey";
 import type { MessageKey } from "../../../../shared/i18n";
@@ -51,7 +50,14 @@ import { KeyHelp } from "./KeyHelp";
 import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
-import { defaultRegion, keyProviderName, testErrorKey, useProviderKey } from "./shared";
+import {
+  defaultRegion,
+  keyProviderName,
+  regionName,
+  regionsListed,
+  testErrorKey,
+  useProviderKey,
+} from "./shared";
 
 type CatalogId = string;
 
@@ -114,6 +120,38 @@ const sameServer = (
       ? provider.baseUrl === baseUrl.trim().replace(/\/+$/, "")
       : provider.endpoint === endpoint);
 
+function ChoiceChip({
+  name,
+  value,
+  checked,
+  onChange,
+  children,
+}: {
+  name: string;
+  value: string;
+  checked: boolean;
+  onChange(): void;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      className={`inline-flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[13px] has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
+        checked ? "border-ink font-semibold text-ink" : "border-rule text-ink-secondary"
+      }`}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+        className="sr-only"
+      />
+      {children}
+    </label>
+  );
+}
+
 /**
  * Pick a provider, paste a key (and a URL for an OpenAI-compatible server),
  * keep the model its line names or Change it, test the connection,
@@ -122,7 +160,6 @@ const sameServer = (
 export function ProviderForm({
   providers,
   onSaved,
-  withMoreProviders = false,
   initialKind,
   only,
   refused = null,
@@ -134,8 +171,6 @@ export function ProviderForm({
   providers: readonly ChatProvider[];
   /** `keyNotChecked`: Local mode stopped the key's test, so it was saved unchecked. */
   onSaved(provider: ChatProvider, keyNotChecked?: boolean): void;
-  /** Lists every provider, the best-effort ones under "More…", as Settings does; without it, as first run does: the first-class ones and those the catalog marks `firstRun`. */
-  withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
   initialKind?: CatalogId;
   /** The one provider this form sets up, with no chips to change it: a local server's row. */
@@ -175,15 +210,16 @@ export function ProviderForm({
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
-  const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
+  const [switchedFrom, setSwitchedFrom] = useState<{ kind: CatalogId; region: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     core.getSecretStorage().then(setSecretStorage, () => undefined);
   }, []);
 
-  const { main, more } = keyProviderGroups(
-    withMoreProviders ? providers.map((each) => each.catalogId ?? each.kind) : [],
-  );
+  const { main, more } = keyProviderGroups();
+  const offered = [...main, ...more];
   const refusedHere = refused !== null && refused.catalogId === kind;
   const keyField = useRef<HTMLInputElement>(null);
   const modelPicker = useRef<HTMLSelectElement>(null);
@@ -215,6 +251,7 @@ export function ProviderForm({
   }, []);
   const outcome = useRef<HTMLDivElement>(null);
   const keyLine = useRef<HTMLDivElement>(null);
+  const regionGroup = useRef<HTMLDivElement>(null);
   // The setup card keeps the action row at its foot, which would leave a failure under it out of sight.
   useEffect(() => {
     if (test?.ok === false || error) outcome.current?.scrollIntoView({ block: "nearest" });
@@ -274,34 +311,35 @@ export function ProviderForm({
           : keyProviderName(option, t, language);
 
   const chip = (option: CatalogId) => (
-    <label
+    <ChoiceChip
       key={option}
-      className={`inline-flex h-7 cursor-pointer items-center rounded-md border px-2.5 text-[13px] has-[:checked]:border-ink has-[:checked]:bg-wash has-[:focus-visible]:outline-2 ${
-        kind === option ? "border-ink font-semibold text-ink" : "border-rule text-ink-secondary"
-      }`}
+      name={`${id}-kind`}
+      value={option}
+      checked={kind === option}
+      onChange={() => choose(option, { keepKey: keyCheck.blocked })}
     >
-      <input
-        type="radio"
-        name={`${id}-kind`}
-        value={option}
-        checked={kind === option}
-        onChange={() => choose(option, { keepKey: keyCheck.blocked })}
-        className="sr-only"
-      />
       {shortName(option)}
-    </label>
+    </ChoiceChip>
   );
 
   const choose = (
     next: CatalogId,
-    { keepKey = false, from = null }: { keepKey?: boolean; from?: CatalogId | null } = {},
+    {
+      keepKey = false,
+      from = null,
+      region,
+    }: {
+      keepKey?: boolean;
+      from?: { kind: CatalogId; region: string } | null;
+      region?: string;
+    } = {},
   ) => {
     // A key typed for one provider is never sent to another, unless it was pasted for this one.
     if (next !== kind && !keepKey) key.clear();
     setKind(next);
     setSwitchedFrom(from);
     if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
-    setEndpointId(defaultRegion(next, language));
+    setEndpointId(region ?? defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId(suggestedModel(next));
     setOtherModel(false);
@@ -317,13 +355,16 @@ export function ProviderForm({
     const { key: given, stray } = checkApiKey(value);
     // Spaces around the same key change nothing, and leave an agreement to use it where it was.
     if (given === key.text) return;
+    // A refusal is about the key that was sent: a changed key is not refused yet.
+    setTest(null);
+    setError(null);
     setSwitchedFrom(null);
     const named =
       only || kind === null || kind === "openai-compatible" || local || stray !== null
         ? null
         : serviceOfKey(given);
-    if (named !== null && named !== kind && offered.includes(named)) {
-      choose(named, { keepKey: true, from: kind });
+    if (named !== null && kind !== null && named !== kind && offered.includes(named)) {
+      choose(named, { keepKey: true, from: { kind, region: endpointId } });
     }
   };
 
@@ -333,19 +374,39 @@ export function ProviderForm({
     if (first !== undefined) setModelId((current) => (models.includes(current) ? current : first));
   }, [server.status]);
 
+  // A key already typed stays: the User's pick decides its host, and nothing is sent until they send it.
+  const chooseRegion = (region: string) => {
+    setEndpointId(region);
+    setModelId(modelIn(region));
+    setTest(null);
+    setError(null);
+  };
+
+  // The one way a key reaches the other region's host, by the User pressing the refusal's button.
+  const sendTo = (region: Endpoint) => {
+    flushSync(() => chooseRegion(region.id));
+    regionGroup.current?.querySelector<HTMLInputElement>("input:checked")?.focus();
+    void run(region);
+  };
+
   const changeField = (value: string) => {
     setFieldValue(value);
     setTest(null);
     setError(null);
   };
 
-  const input = (): TestChatConnectionInput | null => {
+  const modelIn = (region: string) =>
+    otherModel || !kind || catalogMenu(kind, region).includes(modelId)
+      ? modelId
+      : suggestedModel(kind);
+
+  const input = (on: Endpoint | undefined = endpoint): TestChatConnectionInput | null => {
     if (!kind) return null;
     return {
       kind: kindOfCatalogId(kind),
       ...(isPreset(catalogProvider(kind)) && { catalogId: kind }),
-      modelId: modelId.trim(),
-      ...(endpoint ? { endpoint: endpoint.id } : {}),
+      modelId: (on && on !== endpoint ? modelIn(on.id) : modelId).trim(),
+      ...(on ? { endpoint: on.id } : {}),
       ...(field ? { endpointValue: fieldUsed } : {}),
       ...(kind === "openai-compatible" ? { baseUrl: baseUrl.trim() } : {}),
       ...(key.text ? { apiKey: key.text } : {}),
@@ -353,14 +414,14 @@ export function ProviderForm({
   };
 
   /** One button: the key is tested as it saves, and a failure stays here, in plain words. */
-  const run = async () => {
-    const request = input();
+  const run = async (on?: Endpoint) => {
+    const request = input(on);
     if (!request) return;
     setBusy("saving");
     setError(null);
     setTest(null);
     setNotChecked(false);
-    setTestedRegion(endpoint?.id ?? null);
+    setTestedRegion((on ?? endpoint)?.id ?? null);
     try {
       const result = await core.testChatConnection(request);
       const notChecked = !result.ok && result.error.kind === "local-mode";
@@ -412,6 +473,14 @@ export function ProviderForm({
         site: siteOf(refusedOn.keyUrl ?? catalog?.keyUrl),
       })
     : t("providers.form.badKey", { provider: providerName, site });
+  const otherRegion =
+    refusedOn && catalog ? catalog.endpoints.find((each) => each.id !== refusedOn.id) : undefined;
+  const sendToWhere =
+    otherRegion &&
+    t("providers.form.sendTo.aria", {
+      region: regionName(otherRegion, t, language),
+      host: siteOf(otherRegion.baseUrl),
+    });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -455,9 +524,6 @@ export function ProviderForm({
       className={inputClass}
     />
   );
-  const offered = withMoreProviders
-    ? [...main, ...more]
-    : [...main, ...FIRST_RUN_BEST_EFFORT.filter((each) => !main.includes(each))];
   const rowKinds = ROW[language].filter((each) => offered.includes(each));
   // A key that fits no service's prefix may be one the services under More… issue.
   const showMore =
@@ -500,33 +566,28 @@ export function ProviderForm({
       {kind && (
         <>
           {catalog && catalog.endpoints.length > 1 && (
-            <label className={fieldLabelClass}>
-              {t("providers.form.region")}
-              <select
-                value={endpoint?.id ?? ""}
-                onChange={(event) => {
-                  // A key belongs to its region: it is never sent to another.
-                  key.clear();
-                  setEndpointId(event.target.value);
-                  if (!otherModel) {
-                    setModelId((current) =>
-                      catalogMenu(kind, event.target.value).includes(current)
-                        ? current
-                        : suggestedModel(kind),
-                    );
-                  }
-                  setTest(null);
-                  setError(null);
-                }}
-                className={inputClass}
-              >
-                {catalog.endpoints.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label[words]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div
+              ref={regionGroup}
+              role="radiogroup"
+              aria-labelledby={`${id}-region`}
+              data-testid="provider-region"
+              className="flex flex-wrap items-center gap-1"
+            >
+              <span id={`${id}-region`} className="mr-1 text-[13px] leading-5 text-ink-secondary">
+                {t("providers.form.region")}
+              </span>
+              {regionsListed(catalog.endpoints).map((option) => (
+                <ChoiceChip
+                  key={option.id}
+                  name={`${id}-region`}
+                  value={option.id}
+                  checked={option.id === endpoint?.id}
+                  onChange={() => chooseRegion(option.id)}
+                >
+                  {regionName(option, t, language)}
+                </ChoiceChip>
+              ))}
+            </div>
           )}
 
           {field && (
@@ -624,10 +685,10 @@ export function ProviderForm({
                 onAnyway={() => keyCheck.agree()}
                 {...(switchedFrom !== null && {
                   from: {
-                    name: shortName(switchedFrom),
+                    name: shortName(switchedFrom.kind),
                     back: () => {
-                      choose(switchedFrom, { keepKey: true });
-                      keyCheck.agree(switchedFrom);
+                      choose(switchedFrom.kind, { keepKey: true, region: switchedFrom.region });
+                      keyCheck.agree(switchedFrom.kind);
                     },
                   },
                 })}
@@ -775,6 +836,18 @@ export function ProviderForm({
                   result={test}
                   model={shownName(modelId)}
                   {...(test.error.kind === "auth" && site ? { line: badKeyLine } : {})}
+                  {...(test.error.kind === "auth" &&
+                    otherRegion && {
+                      action: {
+                        label: t("providers.form.sendTo", {
+                          region: regionName(otherRegion, t, language),
+                        }),
+                        ariaLabel: sendToWhere,
+                        title: sendToWhere,
+                        testId: "provider-send-other-region",
+                        onClick: () => sendTo(otherRegion),
+                      },
+                    })}
                   {...(test.error.kind === "data-retention" && {
                     action: {
                       label: t("answer.error.chooseModel"),
