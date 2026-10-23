@@ -20,7 +20,8 @@ interface Held {
   range: Range;
 }
 
-/** A field the User types in elsewhere (⌘K, the composer, the Mind picker): the selection is still the one acted on. */
+// The focus in a field elsewhere (⌘K, the composer, the Mind picker) takes the page's selection
+// with it, but the words selected are still the ones acted on.
 const typesInField = (element: Element | null) =>
   element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
 
@@ -29,7 +30,8 @@ const inPopover = (target: EventTarget | null) =>
 
 const HELD = "viewer-held-selection";
 
-/** The words acted on, drawn in the inactive-selection grey once the page's own selection has gone, as a Mind's are (#565). */
+// Chromium draws no selection the focus has left: the words acted on are drawn in the
+// inactive-selection grey instead, as a Mind's are (#565).
 function drawHeld(range: Range | null): void {
   const highlights = globalThis.CSS?.highlights;
   if (!highlights) return;
@@ -39,10 +41,10 @@ function drawHeld(range: Range | null): void {
 
 /**
  * The small menu under text selected in a Document's view (#101; DESIGN.md ›
- * Viewer › Selecting to ask), as the view reads it: Add to note and Copy with citation. It shows once the
- * mouse comes up on a selection, or Shift extends one, and goes with it. ⌘/
- * moves into it, ↑ ↓ go through it, Esc closes it, as the Mind's selection
- * menu does. ⌘K reaches both while the selection lasts.
+ * Viewer › Selecting to ask), as the view reads it: Add to note and Copy with
+ * citation. It shows once the mouse comes up on a selection, or Shift extends
+ * one, and goes with it. ⌘/ moves into it, ↑ ↓ go through it, Esc closes it,
+ * as the Mind's selection menu does. ⌘K reaches both while the selection lasts.
  */
 export function SelectionMenu({
   document,
@@ -65,10 +67,8 @@ export function SelectionMenu({
     first.current = element;
     setAdding(element);
   }, []);
-  /** Where the focus was before ⌘/ moved it into the menu, to go back to. */
-  const cameFrom = useRef<HTMLElement | null>(null);
+  const focusBeforeMenu = useRef<HTMLElement | null>(null);
   const [focusWanted, setFocusWanted] = useState(false);
-  /** The page's selection went with the focus into a field: the words are drawn by `drawHeld`. */
   const [away, setAway] = useState(false);
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export function SelectionMenu({
       if (typesInField(window.document.activeElement)) return;
       event.preventDefault();
       if (!menu.current?.contains(window.document.activeElement)) {
-        cameFrom.current = window.document.activeElement as HTMLElement | null;
+        focusBeforeMenu.current = window.document.activeElement as HTMLElement | null;
       }
       if (open) first.current?.focus();
       else {
@@ -169,7 +169,7 @@ export function SelectionMenu({
     setOpen(false);
     setPicking(false);
     setFocusWanted(false);
-    if (menu.current?.contains(window.document.activeElement)) cameFrom.current?.focus();
+    if (menu.current?.contains(window.document.activeElement)) focusBeforeMenu.current?.focus();
   }, []);
 
   const actions = useMemo(
