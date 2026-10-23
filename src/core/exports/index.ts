@@ -560,7 +560,7 @@ export function createExports(deps: ExportsDependencies) {
           title,
           labels,
           language: language === "zh-CN" ? "zh-CN" : "en-US",
-          paper: language === "en" ? "letter" : "a4",
+          paper: deps.paper(),
           created: deps.now(),
           review: reviewChoices(prepared, false),
           font: prepared.font,
