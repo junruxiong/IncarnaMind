@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
 import type { Core } from "../../src/core";
+import { shareWriteChecks } from "../../src/core/answers/checks/written";
 import { OLLAMA_CLOUD } from "../../src/core/providers/ollamaCloud";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { claimCheckShown, SENTENCES_CHECKED_AT_MOST } from "../../src/shared/claimChecks";
@@ -433,6 +434,34 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     const marks = await marksIn(core, client);
     expect(marks.filter((mark) => mark.check.reason === "too-many")).toHaveLength(3);
   });
+
+  // protects=the checks of one write's paragraphs share the places of the sentences checked at once, a model on a service's three and a local model's one, taken in the order asked (#1635); fails_when=each paragraph's check has places of its own, so a long write sends many at once; no_claim=the cap, which the test above covers.
+  test.each([
+    [true, 3],
+    [false, 1],
+  ])(
+    "a write's checks run at most a model's own number at once (on a service: %s)",
+    async (onService, places) => {
+      const share = shareWriteChecks(onService);
+      const started: number[] = [];
+      const releases: (() => void)[] = [];
+      const runs = Array.from({ length: 5 }, (_, index) =>
+        share.run(async () => {
+          started.push(index);
+          await new Promise<void>((resolve) => releases.push(resolve));
+          return index;
+        }),
+      );
+      await Promise.resolve();
+      expect(started).toEqual(Array.from({ length: places }, (_, index) => index));
+      for (let released = 0; released < 5; released++) {
+        await expect.poll(() => releases.length).toBeGreaterThan(released);
+        releases[released]?.();
+      }
+      expect(await Promise.all(runs)).toEqual([0, 1, 2, 3, 4]);
+      expect(started).toEqual([0, 1, 2, 3, 4]);
+    },
+  );
 
   // protects=words the User types into what the assistant wrote while the check runs stay: only the sentences cut or marked are written, each only while unchanged (one with no cut too); fails_when=the User's words vanish, or a sentence they changed is cut over; no_claim=none beyond protects.
   test("words the User types while the check runs stay, and a sentence they changed is only marked", async () => {

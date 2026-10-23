@@ -43,7 +43,6 @@ import {
   readChart,
   sameChartData,
 } from "../../../shared/charts";
-import { SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import type { PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
 import { looksLikeTable } from "../../../shared/markdownTables";
@@ -63,7 +62,12 @@ import {
   syncContent,
   topLevelBlocks,
 } from "../../answers/blocks";
-import type { CheckWrittenInput, WrittenCheck } from "../../answers/checks/written";
+import {
+  type CheckWrittenInput,
+  shareWriteChecks,
+  type WriteCheckShare,
+  type WrittenCheck,
+} from "../../answers/checks/written";
 import type { ParagraphAsked } from "../../answers/paragraphAsked";
 import { withoutPointersBack } from "../../answers/pointersBack";
 import {
@@ -1193,7 +1197,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const withdraw = (writer: Writer): void => {
     for (const [toolCallId, early] of earlyChecks) {
       if (early.writer !== writer) continue;
-      early.stop.abort();
+      dropChecks(early);
       earlyChecks.delete(toolCallId);
     }
     if (writer.written === 0) return;
@@ -1518,60 +1522,67 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
 
   /**
    * By call: the check of what it wrote, started on each paragraph as it lands rather than after
-   * the whole text (#1635). Its paragraphs are checked one after another, each a few sentences at
-   * once, so the write's checks never run more at once than one check does, and share its cap.
+   * the whole text (#1635). Its paragraphs' checks share one cap and the places of the sentences
+   * checked at once, so a write never sends more, or more at once, than one check of it would.
    */
-  const earlyChecks = new Map<
-    string,
-    {
-      writer: Writer | null;
-      mindId: string;
-      request: string;
-      stop: AbortController;
-      checked: Set<string>;
-      sentences: number;
-      done: Promise<WrittenCheck[]>;
-    }
-  >();
+  interface EarlyChecks {
+    writer: Writer | null;
+    mindId: string;
+    request: string;
+    stop: AbortController;
+    share: WriteCheckShare;
+    checked: Set<string>;
+    sentences: number;
+    running: Promise<WrittenCheck | null>[];
+  }
+  const earlyChecks = new Map<string, EarlyChecks>();
 
-  const newChecks = (writer: Writer | null, mindId: string) => ({
+  const newChecks = (writer: Writer | null, mindId: string): EarlyChecks => ({
     writer,
     mindId,
     request: randomUUID(),
     stop: new AbortController(),
+    share: shareWriteChecks(options.prepared.provider.service !== null),
     checked: new Set<string>(),
     sentences: 0,
-    done: Promise.resolve<WrittenCheck[]>([]),
+    running: [],
   });
 
+  const dropChecks = (early: EarlyChecks): void => {
+    early.stop.abort();
+    for (const running of early.running) {
+      running.catch((error: unknown) =>
+        console.error(`A check of text taken back in Mind ${early.mindId} failed:`, error),
+      );
+    }
+  };
+
   const checkMore = (
-    early: NonNullable<ReturnType<typeof earlyChecks.get>>,
+    early: EarlyChecks,
     blocks: readonly NodeJSON[],
     ids: readonly string[],
     signal: AbortSignal,
     reportChecking: (count: number) => void,
   ): void => {
-    if (blocks.length === 0 || blocks.length !== ids.length) return;
+    if (blocks.length === 0 || blocks.length !== ids.length || signal.aborted) return;
     for (const id of ids) early.checked.add(id);
     const { mindId } = early;
-    early.done = early.done.then(async (done) => {
-      if (signal.aborted) return done;
-      const checked = await minds.checkWritten({
+    early.running.push(
+      minds.checkWritten({
         mindId,
         blocks,
         ids,
         prepared: options.prepared,
         signal,
         request: early.request,
-        atMost: SENTENCES_CHECKED_AT_MOST - done.reduce((total, check) => total + check.sent, 0),
+        share: early.share,
         checking: (count) => {
           early.sentences += count;
           reportChecking(early.sentences);
         },
         edit: (change) => minds.edit(mindId, change),
-      });
-      return checked ? [...done, checked] : done;
-    });
+      }),
+    );
   };
 
   // Not while markers `cite` hasn't recorded are still to come: such a paragraph isn't written yet.
@@ -1585,7 +1596,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (options.signal.aborted) return;
     let early = earlyChecks.get(toolCallId);
     if (early && early.writer !== writer) {
-      early.stop.abort();
+      dropChecks(early);
       early = undefined;
     }
     if (!early) {
@@ -1609,7 +1620,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     earlyChecks.delete(toolCallId);
     // What streamed in was written again, as a whole: its checks are of text that isn't there.
     if (early && (early.writer?.ids !== ids || written.unrecorded > 0)) {
-      early.stop.abort();
+      dropChecks(early);
       early = undefined;
     }
     if (written.unrecorded > 0 || ids.length !== blocks.length) return null;
@@ -1631,7 +1642,9 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           options.changed(toolCallId, { ...written.change, checking: count });
         },
       );
-      checked = mergedChecks(await early.done);
+      checked = mergedChecks(
+        (await Promise.all(early.running)).filter((each): each is WrittenCheck => each !== null),
+      );
     } catch (error) {
       // A check that fails never takes back what the call wrote: it stands, unchecked.
       console.error(
