@@ -39,10 +39,8 @@ export interface ViewerSelection {
   shown?: string;
 }
 
-/** How long a Mind just opened has to show its editor before the quote goes in. */
-const OPEN_WAIT_MS = 5000;
+const MIND_OPEN_WAIT_MS = 5000;
 
-/** Why words that weren't found where they were selected can't be cited, by the check's reason. */
 const REFUSED: Partial<Record<CitationCheckReason, MessageKey>> = {
   "too-many-pages": "viewer.selection.refused.pages",
   "no-text": "viewer.selection.refused.noText",
@@ -138,7 +136,7 @@ export async function addSelectionToNote(
       item: { kind: "mind", mindId },
       where: { in: "side" },
     });
-    const editor = await whenMindEditor(mindId, OPEN_WAIT_MS);
+    const editor = await whenMindEditor(mindId, MIND_OPEN_WAIT_MS);
     if (editor) putIn(editor, mindId, quote, false, selection.document);
   } catch (error) {
     useAppStore.getState().reportError(error);
