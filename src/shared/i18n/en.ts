@@ -3502,6 +3502,7 @@ export const en = {
   "error.connector.notInDirectory": "That Connector isn’t in the directory.",
   "error.examples.reading": "The example’s Documents are still being read. Try again in a moment.",
   "error.document.notFound": "There is no such Document.",
+  "sheet.noSavedValue": "No saved value",
   "error.checkRecord.format": "The check record can be saved as PDF or CSV.",
   "error.checkRecord.noPdf":
     "This copy of IncarnaMind can’t make PDFs. Save the check record as CSV instead.",

@@ -1308,12 +1308,12 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     async prepareQuickModel(answers, prepared) {
       const quick = chat.quickTasksModel(answers);
-      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
-        return prepared.model;
       // An Answer on this computer keeps its small calls there too.
-      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
-        return prepared.model;
-      return (await chat.prepareModel(quick, "chat", "off")).model;
+      const stayHere =
+        !quick ||
+        (prepared.provider.service === null && chat.describeModel(quick)?.service !== null);
+      // Even the Answers model is prepared again: as the Answer's it thinks, and that fills a small call.
+      return (await chat.prepareModel(stayHere ? answers : quick, "chat", "off")).model;
     },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
