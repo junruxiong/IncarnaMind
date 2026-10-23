@@ -12,8 +12,8 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>你的文件，你的 AI：写作、提问、核对、批量比较，都在一个地方。</b><br>
-  每一句话、每一个数字都对照你自己的文档核对过，用你选的 AI 模型。免费开源，在你自己的电脑上运行。
+  <b>别信 AI，点开出处看。</b><br>
+  每个回答都标出它来自哪一页，点一下，原文那一页就打开，引文高亮显示。免费开源，在你自己的电脑上运行。
 </p>
 
 <p align="center"><a href="https://tally.so/r/LZA5aG?ref=readme-zh"><img src="docs/images/notify-zh.svg" width="187" height="40" alt="alpha 上线时通知我"></a></p>

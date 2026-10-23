@@ -12,8 +12,8 @@
 <h1 align="center">IncarnaMind</h1>
 
 <p align="center">
-  <b>Your files, your AI: write, ask, check and compare in one place.</b><br>
-  Every sentence and figure checked against your own documents, with the AI model you choose. Free and open source, on your computer.
+  <b>Don't trust the AI. Click the source.</b><br>
+  Every answer shows the page it came from. Click it and the quote lights up. Free, open source, runs on your computer.
 </p>
 
 <p align="center"><a href="https://tally.so/r/rjN2jL?ref=readme"><img src="docs/images/notify-en.svg" width="278" height="40" alt="Get notified when the alpha opens"></a></p>
