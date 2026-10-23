@@ -224,6 +224,7 @@ import {
   meetingHelpInstructions,
   newestSaid,
   withFound,
+  withHelp,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
@@ -2112,17 +2113,22 @@ export function createAnswers(options: AnswersOptions) {
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            help
-              ? meetingHelpInstructions(help, {
-                  found: foundAhead,
-                  language: options.interfaceLanguage(),
-                  callLanguage,
-                })
-              : language,
+            help ? "" : language,
           ]
             .filter(Boolean)
             .join("\n\n"),
-        messages,
+        // A button's own instructions go with its Question: the instructions above stay the same
+        // for every button, so a call's presses share them in the provider's cache (#1634).
+        messages: help
+          ? withHelp(
+              messages,
+              meetingHelpInstructions(help, {
+                found: foundAhead,
+                language: options.interfaceLanguage(),
+                callLanguage,
+              }),
+            )
+          : messages,
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
