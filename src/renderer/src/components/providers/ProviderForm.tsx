@@ -398,6 +398,14 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? keyProviderName(kind, t, language) : "";
+  const badKeyLine =
+    catalog && catalog.endpoints.length > 1 && endpoint
+      ? t("providers.form.badKeyAt", {
+          host: siteOf(endpoint.baseUrl),
+          region: endpoint.label[words],
+          site,
+        })
+      : t("providers.form.badKey", { provider: providerName, site });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -725,9 +733,7 @@ export function ProviderForm({
                 <TestResult
                   result={test}
                   model={shownName(modelId)}
-                  {...(test.error.kind === "auth" && site
-                    ? { line: t("providers.form.badKey", { provider: providerName, site }) }
-                    : {})}
+                  {...(test.error.kind === "auth" && site ? { line: badKeyLine } : {})}
                   {...(test.error.kind === "data-retention" && {
                     action: {
                       label: t("answer.error.chooseModel"),

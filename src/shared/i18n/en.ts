@@ -1945,6 +1945,7 @@ export const en = {
   "providers.form.needsServer": "Start {provider} first.",
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
+  "providers.form.badKeyAt": "{host} ({region}) refused this key. Check it on {site}.",
 
   "providers.test.ok": "Connected: the provider answered.",
   "providers.test.auth": "The key was refused. Check that it is correct and still active.",
