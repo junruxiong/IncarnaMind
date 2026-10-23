@@ -948,6 +948,14 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   return (await done.getAttribute("title")) ?? "";
 }
 
+export async function examplesMenu(window: Page): Promise<Locator> {
+  const row = window.getByTestId("not-in-a-folder");
+  await pointAndClick(window, row.getByTestId("examples-menu"));
+  const menu = row.getByTestId("examples-actions");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
 /**
  * Opens a saved page in a window of its own, in a session with the network off that records
  * every request it is asked for (`requestsMade`), as a reader opening the file in a browser would.
