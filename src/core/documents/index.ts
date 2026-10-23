@@ -435,7 +435,6 @@ export interface DocumentsOptions {
   scansAtOnce?: number;
   /** The password kept for a locked PDF (./pdfPasswords, #763); undefined when none is. */
   pdfPassword?(documentId: string): Promise<string | undefined>;
-  /** Where how fast Documents are read here is kept (./readingSpeed). */
   readingSpeed: Pick<ReadingMeterOptions, "read" | "write">;
   linkedFolders: {
     watch: WatchFolder;

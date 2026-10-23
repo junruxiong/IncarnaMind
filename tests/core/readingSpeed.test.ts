@@ -83,12 +83,58 @@ describe("How long reading takes on this computer (#1506)", () => {
     expect(meter.seconds(files(3, "pdf", 40_000_000))).toBeCloseTo(3 * (0.04 + 80));
   });
 
-  test("files all of one size can't tell what a file costs from what a megabyte does: each costs what it took", () => {
+  test("files all of one size can't tell what a file costs from what a megabyte does: near that size each costs what it took", () => {
     const { meter, read } = startMeter();
     for (let index = 0; index < 3; index++) read("text", 4_000, 10);
 
     expect(meter.seconds(files(10, "text", 4_000))).toBeCloseTo(0.1);
-    expect(meter.seconds(files(10, "text", 400_000))).toBeCloseTo(0.1);
+    expect(meter.seconds(files(10, "text", 12_000))).toBeCloseTo(0.1);
+    expect(meter.seconds(files(10, "text", 1_500))).toBeCloseTo(0.1);
+  });
+
+  test("nothing is said for a file far from the sizes read: a line from big files says nothing about small ones (#1506)", () => {
+    // 1.5 MB files took 0.8 s each; 800 files of 2 KB took 1.4 s in all, not 640 s.
+    const big = startMeter();
+    for (let index = 0; index < 8; index++) big.read("markdown", 1_500_000, 800);
+    expect(big.meter.seconds(files(800, "markdown", 2_000))).toBeNull();
+    expect(big.meter.seconds(files(8, "markdown", 1_500_000))).toBeCloseTo(6.4);
+
+    // 2 KB files took 5 ms each; twelve of 1.5 MB took 6.7 s in all, not 0.06 s.
+    const small = startMeter();
+    for (let index = 0; index < 12; index++) small.read("markdown", 2_000, 5);
+    expect(small.meter.seconds(files(12, "markdown", 1_500_000))).toBeNull();
+    expect(small.meter.seconds(files(12, "markdown", 6_000))).toBeCloseTo(0.06);
+
+    // One such file among many makes the whole folder's time unknown, and so does a size just
+    // past the reach on either side.
+    expect(
+      small.meter.seconds([...files(100, "markdown", 2_000), ...files(1, "markdown", 1_500_000)]),
+    ).toBeNull();
+    expect(small.meter.seconds(files(1, "markdown", 9_000))).toBeNull();
+    expect(small.meter.seconds(files(1, "markdown", 400))).toBeNull();
+  });
+
+  test("a wide spread of sizes read is trusted as far past them as it spreads", () => {
+    const { meter, read } = startMeter();
+    // 60 files of 1 to 200 KB, at 5 ms a file and 3 s a megabyte.
+    for (let index = 0; index < 60; index++) {
+      const size = 1_000 + index * 3_400;
+      read("markdown", size, 5 + (3 * size) / 1000);
+    }
+
+    expect(meter.seconds(files(10, "markdown", 3_000_000))).toBeCloseTo(10 * (0.005 + 9), 1);
+    expect(meter.seconds(files(10, "markdown", 300))).toBeCloseTo(10 * (0.005 + 0.0009), 2);
+    expect(meter.seconds(files(1, "markdown", 500_000_000))).toBeNull();
+  });
+
+  test("an empty file has nothing to read, so it doesn't make the time unknown", () => {
+    const { meter, read } = startMeter();
+    for (let index = 0; index < 3; index++) read("markdown", 4_000, 10);
+
+    expect(
+      meter.seconds([...files(10, "markdown", 4_000), ...files(5, "markdown", 0)]),
+    ).toBeCloseTo(0.1);
+    expect(meter.seconds(files(5, "pdf", 0))).toBeNull();
   });
 
   test("a job on a worker new to its kind doesn't count: it starts the worker, or loads PDF.js", () => {

@@ -6,13 +6,14 @@
  * its processing job, and its embedding when embeddings are on (not its wait for its turn).
  * Only a job on a worker that has run its kind before counts (see `ProcessorHandlers.onStart`),
  * and only a file read as text: scanned pages or pictures take as long as they are many, which
- * no size tells. The line is this computer's, kept as a device value (docs/agents/portability.md,
- * rule 5), and starts again when the embedding model changes, since embedding is part of reading.
+ * no size tells. A file far outside the sizes read for its kind gets no time, since the line
+ * says nothing there. The line is this computer's, kept as a device value
+ * (docs/agents/portability.md, rule 5), and starts again when the embedding model changes,
+ * since embedding is part of reading.
  */
 import type { DocumentKind } from "../api";
 import { isRecord } from "../errors";
 
-/** The device value it is kept in. */
 export const READING_SPEED = "readingSpeed";
 
 const MEGABYTE = 1_000_000;
@@ -21,9 +22,17 @@ const MEGABYTE = 1_000_000;
 const KEEP_EVERY_MS = 5_000;
 
 /**
+ * A line is trusted this many times past the sizes it was fitted on, or as many as they
+ * spread if more. Files of nearly one size can't say how cost grows with size: a line from
+ * 1.5 MB files put 800 files of 2 KB at 435 s when they took 1.4 s.
+ */
+const REACH = 4;
+
+/**
  * One kind's Documents read here: how many, their mean size in megabytes and mean time in
  * seconds, and the sums of the squares of their sizes' distances from the mean and of the
- * products of both distances (Welford's), from which the line is fitted.
+ * products of both distances (Welford's), from which the line is fitted; and the smallest and
+ * largest sizes in megabytes, which bound where the line is trusted.
  */
 interface KindReadings {
   count: number;
@@ -31,6 +40,8 @@ interface KindReadings {
   seconds: number;
   sizeSquares: number;
   products: number;
+  smallest: number;
+  largest: number;
 }
 
 export interface ReadingSpeed {
@@ -39,7 +50,15 @@ export interface ReadingSpeed {
   kinds: Partial<Record<string, KindReadings>>;
 }
 
-const FIELDS = ["count", "megabytes", "seconds", "sizeSquares", "products"] as const;
+const FIELDS = [
+  "count",
+  "megabytes",
+  "seconds",
+  "sizeSquares",
+  "products",
+  "smallest",
+  "largest",
+] as const;
 
 const isKindReadings = (value: unknown): value is KindReadings =>
   isRecord(value) &&
@@ -47,7 +66,6 @@ const isKindReadings = (value: unknown): value is KindReadings =>
   typeof value.count === "number" &&
   value.count >= 1;
 
-/** What is kept, if it was read with this embedding model; nothing read otherwise. */
 function speedFor(stored: unknown, embedding: string): ReadingSpeed {
   const kinds: ReadingSpeed["kinds"] = {};
   if (isRecord(stored) && stored.embedding === embedding && isRecord(stored.kinds)) {
@@ -64,15 +82,17 @@ function withReading(
   bytes: number,
   seconds: number,
 ): ReadingSpeed {
+  const size = Math.max(bytes, 1) / MEGABYTE;
   const before = speed.kinds[kind] ?? {
     count: 0,
     megabytes: 0,
     seconds: 0,
     sizeSquares: 0,
     products: 0,
+    smallest: size,
+    largest: size,
   };
   const count = before.count + 1;
-  const size = bytes / MEGABYTE;
   const apart = size - before.megabytes;
   const megabytes = before.megabytes + apart / count;
   const mean = before.seconds + (seconds - before.seconds) / count;
@@ -82,6 +102,8 @@ function withReading(
     seconds: mean,
     sizeSquares: before.sizeSquares + apart * (size - megabytes),
     products: before.products + apart * (seconds - mean),
+    smallest: Math.min(before.smallest, size),
+    largest: Math.max(before.largest, size),
   };
   return { ...speed, kinds: { ...speed.kinds, [kind]: readings } };
 }
@@ -97,12 +119,16 @@ function line({ megabytes, seconds, sizeSquares, products }: KindReadings) {
   return { perFile: seconds - perMegabyte * megabytes, perMegabyte };
 }
 
+function covers({ smallest, largest }: KindReadings, megabytes: number): boolean {
+  const reach = Math.max(REACH, largest / smallest);
+  return megabytes >= smallest / reach && megabytes <= largest * reach;
+}
+
 export interface ReadingMeterOptions {
   /** Milliseconds, from a clock that only moves forward. */
   clock(): number;
   /** The embedding model Documents are embedded with now; "" while embeddings are off. */
   embedding(): string;
-  /** The device value, as kept, and keeping it. */
   read(): unknown;
   write(speed: ReadingSpeed): void;
   reportError(error: unknown): void;
@@ -165,7 +191,6 @@ export function createReadingMeter(options: ReadingMeterOptions) {
       else embedding.set(documentId, { kind, bytes, ms });
     },
 
-    /** It was embedded, in `ms`: it is read. */
     embedded(documentId: string, ms: number): void {
       const processed = embedding.get(documentId);
       embedding.delete(documentId);
@@ -174,7 +199,8 @@ export function createReadingMeter(options: ReadingMeterOptions) {
 
     /**
      * How long reading these files takes here, in seconds. Null while a kind among them
-     * hasn't been read here with the embedding model in use.
+     * hasn't been read here with the embedding model in use, or a file's size is far outside
+     * the sizes read for its kind.
      */
     seconds(files: Iterable<{ kind: DocumentKind; size: number }>): number | null {
       const { kinds } = speed();
@@ -182,13 +208,16 @@ export function createReadingMeter(options: ReadingMeterOptions) {
       for (const { kind, size } of files) {
         const readings = kinds[kind];
         if (!readings) return null;
+        // Below every range of sizes, with nothing to read; note apps leave many empty files.
+        if (size === 0) continue;
+        const megabytes = size / MEGABYTE;
+        if (!covers(readings, megabytes)) return null;
         const { perFile, perMegabyte } = line(readings);
-        total += perFile + (perMegabyte * size) / MEGABYTE;
+        total += perFile + perMegabyte * megabytes;
       }
       return total;
     },
 
-    /** Keeps what was measured since it was last kept. */
     close: keep,
   };
 }

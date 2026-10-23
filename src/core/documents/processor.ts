@@ -391,7 +391,6 @@ interface WorkerHandle {
   thread: Worker;
   /** False once it has died: its job is failed, and it takes no other. */
   alive: boolean;
-  /** The kinds of file it has run jobs for. */
   kinds: Set<DocumentKind>;
 }
 

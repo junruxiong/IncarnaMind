@@ -3568,7 +3568,7 @@ export interface LinkedFolderPreview {
   /**
    * Roughly how long reading them takes, in seconds, at the speed files of their kinds were
    * read on this computer. Null until files of each of their kinds have been read here, with
-   * the embedding model in use.
+   * the embedding model in use, and when a file's size is far from the sizes read.
    */
   estimatedSeconds: number | null;
   /** The layout it would get. */
