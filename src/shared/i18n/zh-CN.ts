@@ -1088,6 +1088,10 @@ export const zhCN = {
   "location.section.paragraph.one": "{section}，第 {range} 段",
   "location.section.paragraph.other": "{section}，第 {range} 段",
   "location.section.figure": "{section}，图 {number}",
+  "location.paragraph": "第 {range} 段",
+  "location.figure": "图 {number}",
+  "location.comment": "{author} 的批注",
+  "location.comment.anonymous": "批注",
   "location.lines.one": "第 {range} 行",
   "location.lines.other": "第 {range} 行",
 

@@ -30,7 +30,7 @@ import { shownRanges } from "../../shared/answerBlocks";
 import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import { parseQuotedWords } from "../../shared/citations";
 import {
-  englishLocation,
+  englishPlace,
   locationOf,
   parseRequestedLocation,
   quoteInUnits,
@@ -476,8 +476,8 @@ const pagesLabel = ({ pageFrom, pageTo }: PageRange) =>
 /** The English label of a Unit, as its mark in a Passage shows it. */
 function unitMark(unit: PageText): string | null {
   if (unit.kind === "cues") return null; // each cue is marked with its time instead (./cueMarks)
-  const location = unitLocation(unit);
-  return location ? `[${englishLocation(location)}]` : null;
+  const place = englishPlace(unitLocation(unit));
+  return place ? `[${place}]` : null;
 }
 
 /** The start of a stretch of text, long enough to find it again where it was laid out. */
@@ -922,15 +922,13 @@ export function createCitationSession(
   /** The English label of a record's cited Units, as a whole: "slide 4", "§ 2.1 Sensitivity". */
   const cutLocation = (record: Accepted): string | null => {
     if (record.range.pageFrom === null) return null;
-    const location = locationOf(citedText(record), null, record.requested);
-    return location ? englishLocation(location) : null;
+    return englishPlace(locationOf(citedText(record), null, record.requested));
   };
 
   /** The English label of a Passage's Units, as its `location` attribute shows them. */
   const passageLocation = (units: readonly PageText[]): string | null => {
     if ((units[0]?.kind ?? "page") === "page") return null;
-    const location = locationOf(units, null);
-    return location ? englishLocation(location) : null;
+    return englishPlace(locationOf(units, null));
   };
 
   /** Searches, and gives the model what it found: each Passage under the id it cites it by. */
