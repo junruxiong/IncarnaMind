@@ -656,6 +656,10 @@
     border-top: 6px solid #e8202a;
     border-left: 6px solid transparent;
   }
+  /* A formula with no saved result: said in the cell, quietly, not as a number. */
+  .viewer-grid td.viewer-cell--unsaved {
+    @apply text-ink-meta italic;
+  }
   /* Pictures and shapes over the cells, and a chart's placeholder. */
   .viewer-sheet-drawing {
     @apply absolute z-[1] max-w-none;
