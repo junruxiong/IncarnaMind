@@ -247,6 +247,8 @@ test("Style › in the page's ⋯ opens its choices beside it by pointer and by 
   await pageMenuButton(window).focus();
   await window.keyboard.press("Enter");
   await expect(menu).toBeVisible();
+  // Its counts come a moment later, and until a key or the pointer touches the menu it moves the focus back to its first item.
+  await expect(menu.getByTestId("page-counts")).toBeVisible();
   await style.focus();
   await window.keyboard.press("ArrowRight");
   await expect(choices).toBeVisible();
