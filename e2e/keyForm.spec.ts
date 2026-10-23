@@ -922,7 +922,15 @@ for (const { id, tongue, made } of [
       expect(await savedRegions(window, id)).toEqual([]);
 
       const before = (await hostsAsked(app)).length;
-      await pointAndClick(window, send);
+      if (tongue === "zh-CN") {
+        // By keyboard: the button is the next stop after Use this key, and Enter presses it.
+        await form.getByTestId("provider-use-key").focus();
+        await window.keyboard.press("Tab");
+        await expect(send).toBeFocused();
+        await window.keyboard.press("Enter");
+      } else {
+        await pointAndClick(window, send);
+      }
       await expect.poll(() => savedRegions(window, id)).toEqual([made]);
       await expect(regionOf(form)).toHaveCount(0);
       const after = (await hostsAsked(app)).slice(before);
