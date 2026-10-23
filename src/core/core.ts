@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
-import { optionsFor } from "../shared/exportOptions";
+import { hasCitationPlace, optionsFor } from "../shared/exportOptions";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import { holdsOnlyItsTitle } from "../shared/madeMind";
@@ -143,6 +143,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports, type ExportsDependencies } from "./exports";
+import { citationPlaceQuestion } from "./exports/citationPlaceQuestion";
 import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { markAiTextQuestion } from "./exports/markAiTextQuestion";
@@ -1275,6 +1276,26 @@ export function createCore(adapters: CoreAdapters): Core {
         }
       }
       if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
+      if (
+        hasCitationPlace(format) &&
+        settings.get().user.exportOptions.citationPlace === undefined
+      ) {
+        const { numbered, citations, citedDocuments } = mindExports.preview(mindId, { format });
+        if (numbered && citations > 0 && marking.asking) {
+          const ask = citationPlaceQuestion(settings.get().language, {
+            citations,
+            documents: citedDocuments,
+          });
+          const choice = ask.choiceOf(await marking.asking(ask.question));
+          if (choice === null)
+            throw new InvalidInputError({ key: "error.commands.citationPlaceClosed" });
+          const preferences = settings.get().user.exportOptions;
+          await api?.updateSettings({
+            user: { exportOptions: { ...preferences, citationPlace: choice } },
+          });
+          options = { ...options, citationPlace: choice };
+        }
+      }
       const { fileName, data, word } = await mindExports.export(mindId, options);
       // The window shows first what a Word file can't keep (#105); the assistant can't.
       if (word && word.notKept.length > 0) {
@@ -4150,6 +4171,8 @@ export function createCore(adapters: CoreAdapters): Core {
         fileName,
         fromWord: _,
         theirChanges: _waiting,
+        citedDocuments: _cited,
+        numbered: _numbered,
         data,
         word,
         ...counts
