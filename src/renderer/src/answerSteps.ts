@@ -23,7 +23,11 @@ export const CALCULATE = "calculate";
 
 /** What the steps are read from. */
 export interface StepsInput {
-  answer: Pick<ConversationAnswer, "text" | "citations" | "toolCalls" | "model" | "steps" | "read">;
+  answer: Pick<
+    ConversationAnswer,
+    "text" | "citations" | "toolCalls" | "model" | "steps" | "read"
+  > &
+    Partial<Pick<ConversationAnswer, "status">>;
   /**
    * The Mind in focus when the Question was asked; null when none was. Its
    * Answer read it (`answer.read`), unless it couldn't: say, an Answer written
@@ -78,6 +82,8 @@ export type StepRow =
   | { kind: "read-documents"; documents: ReadDocument[]; sources: StepSource[] }
   /** A search that failed, where it happened. */
   | { kind: "failed-search"; call: AnswerToolCall }
+  /** A search the User stopped the Answer in: it didn't fail. */
+  | { kind: "stopped-search"; call: AnswerToolCall }
   /** A Connector's Tool, Find sources or a Skill script. */
   | { kind: "call"; call: AnswerToolCall }
   /** A Skill, loaded by the model or chosen for the Question, with the files it read. */
@@ -168,7 +174,7 @@ function modelRow(answer: StepsInput["answer"], live: LiveStep | undefined): Ste
       model,
       summary: reasoning?.summary ?? "",
       seconds: seconds(reasoning?.ms ?? 0),
-      ...((live.kind === "thinking" || !reasoning) && { thinking: true as const }),
+      ...(live.kind === "thinking" && { thinking: true as const }),
     };
   }
   if (reasoning) {
@@ -277,10 +283,17 @@ const unansweredQuestion = (call: AnswerToolCall) =>
  * While the Answer is written (`live`: its step now), the rows are the same in
  * the same order, so each is added where it will stay: the model's from the
  * start, with the summary so far; every call as it starts; the Citations'
- * check only once it begins. The Mind read is there from the start too, even
- * where the folded line will say so once the Answer is written.
+ * check once it begins, and from then on until the Answer is written, even
+ * while a model that streams word by word has more text than Citations
+ * (`checking`: how many it counted when it last began). The Mind read is there
+ * from the start too, even where the folded line will say so once the Answer
+ * is written.
  */
-export function stepRows(input: StepsInput, live?: LiveStep): StepRow[] {
+export function stepRows(
+  input: StepsInput,
+  live?: LiveStep,
+  checking: number | null = null,
+): StepRow[] {
   const { answer } = input;
   const rows: StepRow[] = [];
   const first = modelRow(answer, live);
@@ -309,7 +322,9 @@ export function stepRows(input: StepsInput, live?: LiveStep): StepRow[] {
     }
     if (isSearch(call)) {
       if (call.status === "failed") {
-        rows.push({ kind: "failed-search", call });
+        // Stopping an Answer ends a search that was running; only a search that gave an error failed.
+        const stopped = answer.status === "stopped" && call.error === undefined;
+        rows.push({ kind: stopped ? "stopped-search" : "failed-search", call });
         joining = null;
         continue;
       }
@@ -357,9 +372,8 @@ export function stepRows(input: StepsInput, live?: LiveStep): StepRow[] {
   if (calculated > 0) rows.push({ kind: "calculated", count: calculated });
   const shown = shownCitations(answer);
   if (live) {
-    if (live.kind === "checking") {
-      rows.push({ kind: "check", count: live.count, notFound: 0, running: true });
-    }
+    const count = live.kind === "checking" ? live.count : checking;
+    if (count !== null) rows.push({ kind: "check", count, notFound: 0, running: true });
   } else if (shown.length > 0) {
     rows.push({
       kind: "check",

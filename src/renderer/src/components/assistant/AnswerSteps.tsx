@@ -106,7 +106,8 @@ export function AnswerSteps({
   // The live line and the folded one are two buttons: the one that replaces the other takes its focus.
   // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when the Answer starts or ends being written.
   useLayoutEffect(() => {
-    if (focusOnToggle.current) toggle.current?.focus();
+    // Without scrolling: the folded line is at the Answer's start, and the reader is at its end.
+    if (focusOnToggle.current) toggle.current?.focus({ preventScroll: true });
   }, [streaming]);
   const focus = {
     onFocus: () => {
@@ -117,8 +118,10 @@ export function AnswerSteps({
       if (event.currentTarget.isConnected) focusOnToggle.current = false;
     },
   };
+  const checking = useRef<number | null>(null);
   if (streaming) {
     const step = liveStep({ answer, phase, waitingForApproval });
+    if (step.kind === "checking") checking.current = step.count;
     return (
       <div className="answer-steps">
         <LiveLine
@@ -130,7 +133,7 @@ export function AnswerSteps({
         {wait && <AnswerWait answer={answer} usual={wait.usual} />}
         {open && (
           <Timeline
-            rows={stepRows({ answer, askedFrom, meeting, selection }, step)}
+            rows={stepRows({ answer, askedFrom, meeting, selection }, step, checking.current)}
             scope={scopeOf(0)}
             onRegenerate={onRegenerate}
           />
@@ -138,6 +141,7 @@ export function AnswerSteps({
       </div>
     );
   }
+  checking.current = null;
   if (answer.steps?.example) {
     return (
       <div className="answer-steps">
@@ -219,6 +223,7 @@ export function LiveLine({
       ? call.input.mind
       : askedFrom?.name || namedMind(t, call);
   };
+  const waitingSeconds = useSecondsOn(liveStepKey(shown));
   const summary = shown.kind === "thinking" ? shown.summary : "";
   const label = liveText(t, shown, scope, mindOf);
   const waiting = shown.kind === "waiting" || shown.kind === "consent";
@@ -247,7 +252,17 @@ export function LiveLine({
           data-testid="answer-steps-summary"
           className="answer-steps-text answer-steps-summary"
         >
-          {` · ${summary}`}
+          {`· ${summary}`}
+        </span>
+      )}
+      {/* A step that takes over two seconds counts them, so the line is never still while it works. */}
+      {!waiting && waitingSeconds >= 2 && (
+        <span
+          aria-hidden="true"
+          data-testid="answer-steps-elapsed"
+          className="answer-steps-elapsed"
+        >
+          {t("steps.live.seconds", { seconds: waitingSeconds })}
         </span>
       )}
       {toggle && (
@@ -267,6 +282,18 @@ export function LiveLine({
       )}
     </p>
   );
+}
+
+/** Whole seconds the step with this key has been on the line, counted each second. */
+function useSecondsOn(key: string): number {
+  const since = useRef({ key, at: Date.now() });
+  const [, tick] = useState(0);
+  if (since.current.key !== key) since.current = { key, at: Date.now() };
+  useEffect(() => {
+    const timer = setInterval(() => tick((count) => count + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return Math.floor((Date.now() - since.current.at) / 1000);
 }
 
 /** The step to show (see `holdSteps`). */
@@ -532,7 +559,7 @@ function StepItem({
       return (
         <Step kind={row.kind} icon={<SparkLineIcon />} running={row.thinking}>
           <p className="answer-step-title" title={shown.id}>
-            {row.thinking
+            {row.thinking || !row.summary
               ? t("steps.live.thinking")
               : t("steps.thought", { model: shown.name, seconds: row.seconds })}
           </p>
@@ -578,6 +605,14 @@ function StepItem({
       return <ReadDocumentsStep row={row} />;
     case "search":
       return <SearchStep row={row} scope={scope} />;
+    case "stopped-search":
+      return (
+        <Step kind={row.kind} icon={<SearchIcon />}>
+          <p className="answer-step-title">
+            {t("steps.search.stopped", { scope, query: field(row.call, "query") })}
+          </p>
+        </Step>
+      );
     case "failed-search":
       return (
         <Step kind={row.kind} icon={<CloseLineIcon />}>
@@ -589,6 +624,7 @@ function StepItem({
         <li
           data-testid="answer-step"
           data-step={row.kind}
+          data-running={row.call.status === "running" || undefined}
           className="answer-step answer-step--call"
         >
           <CallRow call={row.call} />
@@ -599,6 +635,7 @@ function StepItem({
         <li
           data-testid="answer-step"
           data-step={row.kind}
+          data-running={row.use?.status === "running" || undefined}
           className="answer-step answer-step--call"
         >
           <SkillRow name={row.name} use={row.use} reads={row.reads} />

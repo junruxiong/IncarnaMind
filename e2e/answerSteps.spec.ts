@@ -826,6 +826,7 @@ test("a Connector call waiting for approval: the line says so, its card waits ou
 interface StepsFrame {
   rows: { step: string | null; running: boolean; title: string | null; reasoning: string | null }[];
   summary: string | null;
+  elapsed: string | null;
 }
 
 /** The open steps and the live line's summary, each time they change, from now on. */
@@ -848,9 +849,11 @@ async function watchSteps(window: Page): Promise<() => Promise<StepsFrame[]>> {
       }));
       const summary =
         assistant?.querySelector('[data-testid="answer-steps-summary"]')?.textContent ?? null;
+      const elapsed =
+        assistant?.querySelector('[data-testid="answer-steps-elapsed"]')?.textContent ?? null;
       const last = frames.at(-1);
-      if (last && JSON.stringify(last) === JSON.stringify({ rows, summary })) return;
-      frames.push({ rows, summary });
+      if (last && JSON.stringify(last) === JSON.stringify({ rows, summary, elapsed })) return;
+      frames.push({ rows, summary, elapsed });
     };
     new MutationObserver(record).observe(document.body, {
       subtree: true,
@@ -889,7 +892,6 @@ test("the steps open while the Answer is written: the thinking row grows with it
     "data-step",
     "reasoning",
   );
-  await expect(timeline.getByTestId("answer-step").first()).toHaveAttribute("data-running", "true");
   await expect(
     timeline.locator('[data-testid="answer-connector-call"][data-status="running"]'),
   ).toBeVisible();
@@ -913,6 +915,10 @@ test("the steps open while the Answer is written: the thinking row grows with it
   expect(kinds.at(-1)).toEqual(
     expect.arrayContaining(["reasoning", "read", "call", "search", "check"]),
   );
+  // The model's row pulses while it thinks (the scripted model reasons before its search), and
+  // the line counts the seconds of a step that takes over two: the call takes three.
+  expect(opened.some((frame) => frame.rows[0]?.running)).toBe(true);
+  expect(seen.some((frame) => /^\d+s$/.test(frame.elapsed ?? ""))).toBe(true);
   // The call is a row while it runs, and the same row once it is done.
   const callAt = (frame: StepsFrame) => frame.rows.findIndex((row) => row.step === "call");
   const running = opened.find((frame) =>
@@ -942,7 +948,7 @@ test("the live line shows the latest of the summary beside the step, out of the 
   const toggle = answer.getByTestId("answer-steps");
   await expect(answer.getByTestId("answer-steps-summary")).toContainText("Answer slowly");
   await expect(live).toHaveAttribute("data-step", "thinking");
-  await expect(live).toContainText("Thinking · ");
+  await expect(live).toContainText("Thinking·");
   await expect(answer.getByTestId("answer-steps-summary")).toHaveAttribute("aria-hidden", "true");
   await expect(live).toHaveAttribute("role", "status");
   await screenshot(window, "steps-live-summary-en");
@@ -982,7 +988,7 @@ test("in Chinese, the live line and the thinking row say so, and the summary is 
 
   await askSlowly(window, "春潮什么时候出现？ Answer slowly.");
   const answer = assistantAnswers(window).last();
-  await expect(answer.getByTestId("answer-steps-live")).toContainText("正在思考 · ");
+  await expect(answer.getByTestId("answer-steps-live")).toContainText("正在思考·");
   await pointAndClick(window, answer.getByTestId("answer-steps"));
   await expect(answer.getByTestId("answer-timeline")).toBeVisible();
   await screenshot(window, "steps-open-running-zh");
@@ -996,5 +1002,44 @@ test("in Chinese, the live line and the thinking row say so, and the summary is 
   await expect(
     answer.getByTestId("answer-timeline").getByTestId("answer-step").first(),
   ).toContainText("思考了");
+  await app.close();
+});
+
+test("a long Answer written with its steps opened stays where its reader is: at the foot", async () => {
+  const { app, window } = await start();
+  await core(window).mind("Lit review: tides");
+  await setWindowSize(app, window, 1440, 760);
+  await window.evaluate(() => {
+    const scroller = document.querySelector('[data-testid="assistant-log"]')?.parentElement;
+    const jumps: number[] = [];
+    (globalThis as unknown as { jumps: number[] }).jumps = jumps;
+    let before = scroller?.scrollTop ?? 0;
+    scroller?.addEventListener("scroll", () => {
+      jumps.push(before - scroller.scrollTop);
+      before = scroller.scrollTop;
+    });
+  });
+
+  await askSlowly(window, "What do tides do with forty citations");
+  const answer = assistantAnswers(window).last();
+  // A click gives the button the focus, which goes to the folded line when the Answer is written.
+  await pointAndClick(window, answer.getByTestId("answer-steps"));
+  await expect(answer.getByTestId("answer-timeline")).toBeVisible();
+  await expect(answer).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+  await expect(answer.getByTestId("answer-steps")).toBeFocused();
+
+  const thread = await window.evaluate(() => {
+    const scroller = document.querySelector('[data-testid="assistant-log"]')?.parentElement;
+    return {
+      fromFoot:
+        (scroller?.scrollHeight ?? 0) - (scroller?.scrollTop ?? 0) - (scroller?.clientHeight ?? 0),
+      overflow: (scroller?.scrollHeight ?? 0) - (scroller?.clientHeight ?? 0),
+      jumps: (globalThis as unknown as { jumps: number[] }).jumps,
+    };
+  });
+  // It overflowed, so there was a foot to be taken from, and the Answer's end is in view.
+  expect(thread.overflow).toBeGreaterThan(200);
+  expect(thread.fromFoot).toBeLessThanOrEqual(2);
+  expect(Math.max(...thread.jumps)).toBeLessThan(100);
   await app.close();
 });

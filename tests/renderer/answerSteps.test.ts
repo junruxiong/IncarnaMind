@@ -983,4 +983,36 @@ describe("the steps while the Answer is written", () => {
     }
     expect(before).toEqual(["reasoning", "read", "search", "call", "search", "check"]);
   });
+  // protects=the model's row pulses only while the model is thinking, so a provider with no summary shows no dot beside the search or the check that runs; fails_when=it keeps its dot for the whole run; no_claim=none beyond protects.
+  test("the model's row is marked running only while the step is thinking", () => {
+    const answer = input({ steps: { ...STEPS, finishedAt: null } });
+    const [row] = stepRows(answer, { kind: "searching" });
+    expect(row).toEqual({ kind: "reasoning", model: "claude-sonnet-5-5", summary: "", seconds: 1 });
+    const [thinkingRow] = stepRows(answer, thinking(""));
+    expect(thinkingRow).toMatchObject({ thinking: true });
+  });
+
+  // protects=the Citations' check row, once shown, stays until the Answer is written, whatever the step goes back to while a word-by-word stream has more markers than Citations; fails_when=it disappears when the step turns to writing again; no_claim=how the component remembers the count.
+  test("the check row stays once it has begun", () => {
+    const answer = input({ steps: { ...STEPS, finishedAt: null } });
+    const kindsOf = (live: LiveStep, checking: number | null) =>
+      stepRows(answer, live, checking).map((row) => row.kind);
+    expect(kindsOf({ kind: "writing" }, null)).not.toContain("check");
+    expect(kindsOf({ kind: "checking", count: 3 }, null)).toContain("check");
+    expect(kindsOf({ kind: "writing" }, 3)).toContain("check");
+    const [, row] = stepRows(answer, { kind: "writing" }, 3);
+    expect(row).toEqual({ kind: "check", count: 3, notFound: 0, running: true });
+  });
+
+  // protects=a search the User stopped the Answer in is a stopped search, not a failed one; one that gave an error, or one in an Answer that wasn't stopped, still fails; fails_when=Stop leaves "Couldn't search"; no_claim=none beyond protects.
+  test("a search that Stop ended did not fail", () => {
+    const ended = search("s1", "heat", { status: "failed", resultCount: null });
+    const rowsFor = (status: "stopped" | "done", call: AnswerToolCall) =>
+      stepRows(input({ toolCalls: [call], status })).map((row) => row.kind);
+    expect(rowsFor("stopped", ended)).toContain("stopped-search");
+    expect(rowsFor("stopped", ended)).not.toContain("failed-search");
+    const refused = { ...ended, error: { kind: "auth" as const, message: "refused" } };
+    expect(rowsFor("stopped", refused)).toContain("failed-search");
+    expect(rowsFor("done", ended)).toContain("failed-search");
+  });
 });
