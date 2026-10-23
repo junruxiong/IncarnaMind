@@ -49,6 +49,7 @@ import { askedFor, waitsForUser as heldForUser } from "../../shared/askedChanges
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
+import { holdsNothing } from "../../shared/madeMind";
 import { linkTableSources } from "../../shared/markdownTables";
 import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
@@ -161,7 +162,6 @@ import {
   contentHash,
   createElement,
   findBlock,
-  holdsNothing,
   isEdited,
   type NodeJSON,
   syncContent,
