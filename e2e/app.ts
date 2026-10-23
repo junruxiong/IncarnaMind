@@ -2219,24 +2219,20 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
 
 /**
  * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
- * narrows, 10px a press and 50px with Shift. It presses until the width is `width`, which must
- * be a whole number of presses away, and focuses the line before each press, so a press that
- * lands elsewhere is made again rather than counted.
+ * narrows, 10px a press and 50px with Shift. It presses them all without waiting, so `width` must
+ * be a whole number of presses away.
  */
 export async function sizeAssistant(window: Page, width: number): Promise<void> {
   const assistant = window.getByTestId("assistant");
   const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
-  for (let presses = 0; presses < 80; presses++) {
-    const now = await widthNow();
-    if (now === width) return;
-    const key = width > now ? "ArrowLeft" : "ArrowRight";
-    await window.getByTestId("assistant-resize").focus();
-    await window.keyboard.press(Math.abs(width - now) >= 50 ? `Shift+${key}` : key);
-    await expect
-      .poll(widthNow, { timeout: 2000 })
-      .not.toBe(now)
-      .catch(() => undefined);
+  const now = await widthNow();
+  const key = width > now ? "ArrowLeft" : "ArrowRight";
+  const distance = Math.abs(width - now);
+  await window.getByTestId("assistant-resize").focus();
+  for (let press = 0; press < Math.floor(distance / 50); press++) {
+    await window.keyboard.press(`Shift+${key}`);
   }
+  for (let press = 0; press < (distance % 50) / 10; press++) await window.keyboard.press(key);
   await expect.poll(widthNow).toBe(width);
 }
 
@@ -2284,12 +2280,14 @@ export const assistantAnswers = (window: Page) =>
 /**
  * Asks a Question as a person does: ⌘J, the words, Enter. It is asked in the
  * assistant's conversation (#201); resolves with its Answer there once it is
- * written (the scripted model's, with `fakeChat`).
+ * written (the scripted model's, with `fakeChat`). The scripted model streams a word every
+ * 60 ms, so a wide table takes about 7 s on a quiet computer, and a loaded runner took more than
+ * twice the old 15 s ceiling (#1651).
  */
 export async function askInAssistant(
   window: Page,
   question: string,
-  { timeout = 15_000 }: { timeout?: number } = {},
+  { timeout = 45_000 }: { timeout?: number } = {},
 ): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();
