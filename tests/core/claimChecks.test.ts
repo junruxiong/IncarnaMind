@@ -637,6 +637,116 @@ describe("One claim check", () => {
     });
   });
 
+  // protects=a sentence found unsupported only for its general word is Contradicted by its nearest line when the strict judgement and the one that asks whose detail it is both find another value, citing that line, in English and Chinese; anything less keeps the amber card; fails_when=the line still shows as "different", one judgement alone decides, or the Passage's own party pays the extra requests; no_claim=how a real model judges it (eval/repeats README, #1708).
+  describe("a sentence found unsupported for its general word (#1708)", () => {
+    const PORTS = "Ports publish the times of high water every week.";
+    const YEARLY = "Harbours publish the times of high water every year.";
+    const CONFLICT: GeneratedReply = {
+      text: "Sentence: every week\nQuote: every year\nJudgement: conflict",
+    };
+    const SAME_PARTY: GeneratedReply = {
+      text: "Party: same\nSentence: every week\nQuote: every year\nJudgement: conflict",
+    };
+    const wider = (
+      party: GeneratedReply,
+      strict: GeneratedReply = CONFLICT,
+      scope = "ports, wider",
+    ): Plan => ({
+      verdict: "unsupported",
+      says: `Scope: ${scope}\nTides speaks only of harbours.`,
+      judgement: "conflict",
+      strict,
+      party,
+    });
+    const asked = (model: ReturnType<typeof checkingModel>, words: string) =>
+      model.doGenerateCalls.filter((call) => JSON.stringify(call.prompt).includes(words)).length;
+
+    test("is Contradicted, citing the nearest line, when both judgements find another value", async () => {
+      const model = checkingModel({ [PORTS]: wider(SAME_PARTY) });
+      const { core, client, check } = await mindWith([PORTS], model);
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]).toMatchObject({
+        shown: { state: "contradicted" },
+        check: { says: null, evidence: { documentName: "Tides", quote: YEARLY, check: "found" } },
+      });
+      expect(asked(model, "Reply in exactly three lines")).toBe(1);
+      expect(asked(model, "Party: same or other")).toBe(1);
+    });
+
+    test.each<{ name: string; party: GeneratedReply; strict?: GeneratedReply }>([
+      {
+        name: "another party's value",
+        party: {
+          text: "Party: other\nSentence: every week\nQuote: every year\nJudgement: conflict",
+        },
+      },
+      {
+        name: "the strict judgement finding no other value",
+        party: SAME_PARTY,
+        strict: { text: "Sentence: every week\nQuote: not stated\nJudgement: neither" },
+      },
+      {
+        name: "no Party line",
+        party: { text: "Sentence: every week\nQuote: every year\nJudgement: conflict" },
+      },
+      { name: "a judgement that fails", party: { error: { status: 500, message: "Overloaded" } } },
+    ])("keeps the line that says something different with $name", async ({ party, strict }) => {
+      const { core, client, check } = await mindWith(
+        [PORTS],
+        checkingModel({ [PORTS]: wider(party, strict) }),
+      );
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]).toMatchObject({
+        shown: { state: "unsupported" },
+        check: { evidence: { quote: YEARLY, check: "found" } },
+      });
+    });
+
+    test("with the Passage's own party, asks nothing more than the nearest line's judgement", async () => {
+      const model = checkingModel({ [PORTS]: wider(SAME_PARTY, CONFLICT, "none, same") });
+      const { core, client, check } = await mindWith([PORTS], model);
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
+      expect(asked(model, "Party: same or other")).toBe(0);
+      expect(asked(model, "Reply in exactly three lines")).toBe(0);
+    });
+
+    test("in Chinese, a general word for 乙方 with another figure is Contradicted", async () => {
+      const line = "第四条　带薪年休假：乙方每年享有带薪年休假10天，法定节假日另计。";
+      const contract = { name: "劳动合同.md", contents: line };
+      const holiday = "员工每年有15天带薪年休假。";
+      const judged = (word: string) =>
+        `Sentence: 15 days of paid annual leave a year\nQuote: 10 days of paid annual leave a year\nJudgement: ${word}`;
+      const { core, client, check } = await mindWith(
+        [holiday],
+        checkingModel({
+          [holiday]: {
+            verdict: "unsupported",
+            says: "Scope: 员工, wider\n合同只规定了乙方一人的年休假。",
+            judgement: "conflict",
+            strict: { text: judged("conflict") },
+            party: { text: `**Party:** same\n${judged("conflict")}` },
+          },
+        }),
+        [contract],
+      );
+      await core.updateSettings({ user: { language: "zh-CN" } });
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]).toMatchObject({
+        shown: { state: "contradicted" },
+        check: { evidence: { quote: expect.stringContaining("乙方每年享有带薪年休假10天") } },
+      });
+    });
+  });
+
   test("checkClaim is the same check, for a claim outside a Mind", async () => {
     const { core, documents } = await setUpWithDocuments(checkingModel(), [TIDES]);
     const tides = documents[0] as Document;

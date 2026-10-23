@@ -71,11 +71,13 @@ import {
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
   NEAREST_INSTRUCTIONS,
+  PARTY_INSTRUCTIONS,
   partInstructions,
   type ReadVerdict,
   readEvidence,
   readJudgement,
   readPart,
+  readParty,
   readsAsRefusal,
   readVerdict,
   STRICT_INSTRUCTIONS,
@@ -384,9 +386,12 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const unsupported = async (
       why: UnsupportedReason = { reason: null, covered: null, uncovered: null },
       found: Citation | null = null,
-      skipNearest = false,
+      judgedNearest?: Citation | null,
     ): Promise<ClaimCheckResult> => {
-      const nearest = skipNearest ? null : await nearestDifferent(request, session, signal);
+      const nearest =
+        judgedNearest === undefined
+          ? await nearestDifferent(request, session, signal)
+          : judgedNearest;
       if (signal.aborted) return notChecked("stopped");
       // A card that quotes the Passage covering part of the sentence never says it found nothing.
       // A sentence's own Citations, a court decision no Document holds, or only the User's own
@@ -420,11 +425,30 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       // A part covered stands only for a claim whose own topic a Passage is about: the reply's own
       // field says so, so a neighbouring topic's line is never shown as part of the claim.
       const onTopic = verdict.topic !== "not found";
-      return unsupported({
+      const why = {
         reason: verdict.says,
         covered: onTopic ? verdict.covered : null,
         uncovered: onTopic ? verdict.uncovered : null,
-      });
+      };
+      if (verdict.scope !== "wider") return unsupported(why);
+      // A general word for the Passage's party is judged on that party (DESIGN.md › Checks): the
+      // check called "员工每年有15天带薪年休假" unsupported, all employees against one contract,
+      // though the contract's line gives 10 days (#1708).
+      const nearest = await nearestDifferent(request, session, signal);
+      if (signal.aborted) return notChecked("stopped");
+      if (nearest && (await statesAnotherValue(request, nearest, session, signal))) {
+        return {
+          verdict: "contradicted",
+          evidence: nearest,
+          says: null,
+          unsupported: null,
+          calculation: null,
+          ...citedCase(nearest),
+          ...facts(),
+        };
+      }
+      if (signal.aborted) return notChecked("stopped");
+      return unsupported(why, null, nearest);
     }
     const evidence =
       decidingCitation(session.finalCitation) ??
@@ -468,9 +492,8 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         const part = await parts(evidence);
         if (signal.aborted) return notChecked("stopped");
         if (!part.covered || !part.uncovered) return unsupported();
-        // A judgement has just compared this very quote with the sentence.
-        const skipNearest = true;
-        return unsupported({ reason: verdict.says, ...part }, evidence, skipNearest);
+        // A judgement has just compared this very quote with the sentence: no nearest line.
+        return unsupported({ reason: verdict.says, ...part }, evidence, null);
       };
       const first = await compare(request, evidence, session, signal, CONFIRM_INSTRUCTIONS);
       if (signal.aborted) return notChecked("stopped");
@@ -657,9 +680,10 @@ async function opinionsOf(
  * For a sentence found unsupported: the nearest line of what the Run read, as
  * a Citation whose quote the check found, when judged alone it states another
  * value for the very thing the sentence says (30 days of leave against the
- * Document's 27). Never "contradicted": the verdict stays unsupported, and the
- * card shows what the Document says. Null when nothing read is near enough, or
- * the nearest line doesn't differ.
+ * Document's 27). The verdict stays unsupported, and the card shows what the
+ * Document says, unless the sentence was found unsupported for its general word
+ * and `statesAnotherValue` upholds the line. Null when nothing read is near
+ * enough, or the nearest line doesn't differ.
  */
 async function nearestDifferent(
   request: ClaimCheckRequest,
@@ -684,6 +708,33 @@ async function nearestDifferent(
     return null;
   }
   return readJudgement(judged.reply) === "conflict" ? citation : null;
+}
+
+// Both requests must find another value for the very detail, the second of the line's own party:
+// either alone let near misses through on Claude Haiku 5.5, the strict one another person's
+// figure, the other an added detail (#1708).
+async function statesAnotherValue(
+  request: ClaimCheckRequest,
+  line: Citation,
+  session: ReturnType<typeof createCitationSession>,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const [strict, party] = await Promise.all([
+    compare(request, line, session, signal, STRICT_INSTRUCTIONS),
+    compare(request, line, session, signal, PARTY_INSTRUCTIONS),
+  ]);
+  const unjudged = (error: ProviderError) => {
+    if (!signal.aborted)
+      console.error(`A nearest line's value couldn't be judged: ${error.message}`);
+    return false;
+  };
+  if ("failed" in strict) return unjudged(strict.failed);
+  if ("failed" in party) return unjudged(party.failed);
+  return (
+    readJudgement(strict.reply) === "conflict" &&
+    readJudgement(party.reply) === "conflict" &&
+    readParty(party.reply) === "same"
+  );
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));

@@ -172,16 +172,24 @@ export const DOCUMENTS: readonly RepeatDocument[] = [
  * doesn't. The controls tell a general word for the agreement's term ("Staff"
  * for "the Employee") from a plain paraphrase. The conflicts are genuine
  * contradictions of the agreement, of a kind each, so a change to a verdict or
- * a judgement is measured against the conflicts it loses (#1647).
+ * a judgement is measured against the conflicts it loses (#1647). The near
+ * misses give a figure or a detail of another person or role than the
+ * agreement's, or add one to its own, so a nearest line is never taken for
+ * their contradiction (#1708).
  */
-const conflicts = (list: readonly (readonly [string, string, number?])[]): RepeatSentence[] =>
-  list.map(([key, text, knownMiss]) => ({
-    key,
-    kind: "conflict",
-    expected: "contradicted",
-    text,
-    ...(knownMiss !== undefined && { knownMiss }),
-  }));
+const sentencesOf =
+  (kind: RepeatSentence["kind"], expected: Expected) =>
+  (list: readonly (readonly [string, string, number?])[]): RepeatSentence[] =>
+    list.map(([key, text, knownMiss]) => ({
+      key,
+      kind,
+      expected,
+      text,
+      ...(knownMiss !== undefined && { knownMiss }),
+    }));
+
+const conflicts = sentencesOf("conflict", "contradicted");
+const nearMisses = sentencesOf("near-miss", "unsupported");
 
 export const SETS: readonly RepeatSet[] = [
   {
@@ -384,6 +392,7 @@ export const SETS: readonly RepeatSet[] = [
       ],
       ["entitlement-off", "The Employee gets no paid holiday beyond public holidays."],
       ["unlimited", "The Employee may take unlimited paid holiday."],
+      ["period", "In 2026 the Employee was entitled to 25 days of paid holiday."],
     ]),
   },
   {
@@ -414,6 +423,38 @@ export const SETS: readonly RepeatSet[] = [
       ["party-office", "乙方可提前24小时通知甲方在居家工作日到岗。"],
       ["entitlement-off", "乙方不享有带薪年休假。"],
       ["unlimited", "乙方的带薪年休假不限天数。"],
+      ["period", "2026年乙方享有带薪年休假15天。"],
+    ]),
+  },
+  {
+    id: "en-near-misses",
+    language: "en",
+    mind: "Other people and details",
+    sentences: nearMisses([
+      ["staff-days", "Staff may work from home on Mondays and Fridays."],
+      [
+        "staff-condition",
+        "Staff may carry over up to 5 unused days into the next year if their manager agrees.",
+        1718,
+      ],
+      ["role-home", "Managers may work from home three days a week.", 1718],
+      ["role-holiday", "Managers are entitled to 30 days of paid holiday per year."],
+      ["person-holiday", "The Director of People is entitled to 30 days of paid holiday per year."],
+      ["person-home", "The Director of People may work from home three days a week.", 1718],
+    ]),
+  },
+  {
+    id: "zh-near-misses",
+    language: "zh-CN",
+    mind: "他人与细节",
+    sentences: nearMisses([
+      ["staff-days", "员工每周可在家工作两天，具体为周一和周五。", 1718],
+      ["staff-detail", "员工的工资于每月最后一个工作日通过银行转账发放。"],
+      ["role-home", "经理每周可在家工作三天。", 1718],
+      ["role-holiday", "经理每年享有带薪年休假15天。", 1718],
+      ["person-holiday", "人力资源总监每年享有带薪年休假15天。"],
+      ["person-home", "人力资源总监每周可在家工作三天。", 1718],
+      ["added-detail", "乙方月工资为人民币一万八千元，通过银行转账发放。"],
     ]),
   },
 ];

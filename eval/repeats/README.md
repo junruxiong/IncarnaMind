@@ -19,13 +19,14 @@ The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core
 
 ## The sets
 
-An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and six Minds:
+An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and eight Minds:
 
 | Set | Sentences |
 |---|---|
 | `en`, `zh` | The three sentences of #1608 (notice as a paraphrase; holiday with a wrong figure; "Staff" for "the Employee"), the agreement's own words, a car allowance it doesn't mention, and a near miss that names days it doesn't |
 | `en-control`, `zh-control` | The home-working clause four ways: a paraphrase about the same Employee, the Employee by name, "Staff" (员工) and "Employees" (职工) |
-| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped; in both, a duty for a permission and the reverse ("must" for "may", 须 for 可) in several sentences, and more parties reversed (who keeps whose secrets, who may pay in lieu of notice, who pays the social insurance, who may call whom in) |
+| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped; in both, a duty for a permission and the reverse ("must" for "may", 须 for 可) in several sentences, and more parties reversed (who keeps whose secrets, who may pay in lieu of notice, who pays the social insurance, who may call whom in); and a figure for another year ("In 2026 … 25 days"), which still contradicts the agreement's yearly figure |
+| `en-near-misses`, `zh-near-misses` | Near misses, each expected not Contradicted: a figure or a detail of another person or role than the agreement's (the Director of People, 人力资源总监, Managers, 经理), and "Staff" (员工) with a detail the agreement doesn't give (named days, a condition, bank transfer) |
 
 ## Running it
 
@@ -44,7 +45,7 @@ npm run eval:repeats
 
 **Cost and time:** ten checks of the first four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5. The two conflict Minds add about 9 minutes and $0.25 on Haiku 5.5, and roughly $4 on Sonnet 5.5 (from the other sets' ratio, not measured), so run them there with fewer checks.
 
-**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today: the Chinese negation the claims leave out (#1682).
+**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today: the Chinese negation the claims leave out (#1682), and near misses about another person or role that the check's first verdict calls contradicted (#1718).
 
 ## Results
 

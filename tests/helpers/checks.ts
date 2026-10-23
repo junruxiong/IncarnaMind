@@ -23,6 +23,8 @@ export interface Plan {
   judgement?: "conflict" | "same" | "neither";
   /** Its reply to the strict judgement, a contradiction's second; `judgement` when absent. */
   strict?: GeneratedReply;
+  /** Its reply to the judgement that also asks whose detail a nearest line states; `strict` when absent. */
+  party?: GeneratedReply;
   /** Its reply when asked for the parts of a sentence it called contradicted that the strict judgement didn't uphold. */
   part?: string;
   /**
@@ -62,6 +64,9 @@ function plannedNumbers(prompt: string, plans: Record<string, Plan>): number[] {
 
 /** The strict judgement's instructions, which ask for the sentence's detail and the quote's before the word. */
 export const isStrict = (call: { system: string }) => call.system.includes("Judgement: one word");
+
+/** The strict judgement's lines after one on whose detail the quote states. */
+export const isParty = (call: { system: string }) => call.system.includes("Party: same or other");
 
 /** A check Run's instructions (src/core/answers/checks/prompt.ts). */
 export const isCheckRun = (call: ModelCall) => call.system.startsWith("You check one sentence");
@@ -129,6 +134,7 @@ export const checkGenerate =
     }
     if (call.system.startsWith("Compare a sentence")) {
       const plan = plans[SENTENCE.exec(call.prompt)?.[1] ?? ""];
+      if (plan?.party && isParty(call)) return plan.party;
       if (plan?.strict && isStrict(call)) return plan.strict;
       return { text: plan?.judgement ?? "conflict" };
     }
