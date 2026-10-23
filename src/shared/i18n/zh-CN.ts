@@ -2269,7 +2269,7 @@ export const zhCN = {
     "有文档可搜索时下载一次内置排序模型；如果这台电脑能用 GPU，还会下载它的 GPU 版本。",
   "privacy.traffic.transcription-model": "下载语音模型",
   "privacy.traffic.transcription-model.tip":
-    "会议的语音模型只在第一次转写会议时下载一次。你说的内容不会发送出去。",
+    "会议的语音模型，以及区分说话人的模型，只在第一次录制或转写会议时下载一次。你说的内容不会发送出去。",
   "privacy.traffic.ollama-pull": "下载本地模型",
   "privacy.traffic.ollama-pull.tip": "当你选择本地模型时，Ollama 会从它的模型库下载这个模型。",
   "privacy.traffic.chatgpt-sign-in": "使用 ChatGPT 登录",

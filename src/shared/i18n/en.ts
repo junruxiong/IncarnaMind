@@ -2358,7 +2358,7 @@ export const en = {
     "Downloads the built-in ordering model once, when there are Documents to search, and its GPU version if your computer can use it.",
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.tip":
-    "The speech model for meetings is downloaded once, the first time a meeting is transcribed. Nothing you say is sent.",
+    "The speech model for meetings, and the models that tell speakers apart, are downloaded once, the first time a meeting is recorded or transcribed. Nothing you say is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.tip":
     "When you choose a local model, Ollama downloads it from its library.",

@@ -47,7 +47,7 @@ Choosing the chat model's provider (in first-run setup, in Settings → Models, 
 These are listed in Settings → Privacy under "Other network traffic".
 
 - **Update checks** (`update-check`) go to GitHub Releases once at startup in a packaged app. On by default; turn them off in Settings → Privacy.
-- **Model downloads**: the search model (`embedding-model`), the result-ordering model (`reranking-model`), the text recognition model (`text-recognition-model`, 21 MB) and the speech model (`transcription-model`) come from huggingface.co, once, when a feature first needs them. Ollama pulls (`ollama-pull`) come from Ollama's registry, when you pick local models.
+- **Model downloads**: the search model (`embedding-model`), the result-ordering model (`reranking-model`), the text recognition model (`text-recognition-model`, 21 MB) and the speech model with the two models that tell a Meeting's speakers apart (`transcription-model`; the speaker models are about 30 MB) come from huggingface.co, once, when a feature first needs them: the speech and speaker models when you first record a Meeting. Each is a plain download of a fixed file: nothing of yours is sent. Ollama pulls (`ollama-pull`) come from Ollama's registry, when you pick local models.
 - **Sign-ins**: ChatGPT (`chatgpt-sign-in`), a Claude account (`claude-sign-in`, experimental, off unless you choose it) and GitHub for Copilot (`copilot-sign-in`), and keeping them renewed. A Claude account sign-in goes to Anthropic's sign-in pages and token service. A GitHub sign-in goes to github.com: the ID of the app signing you in, then, while you approve on GitHub's page, the device code GitHub gave it, and later the refresh token that renews the sign-in. Once you've approved, your GitHub token goes once to api.github.com to read your account's name, which Settings → Models shows and IncarnaMind forgets when you sign out. Questions asked with your Copilot plan, and the request for the models your plan offers, go to api.githubcopilot.com with your sign-in's token, under your account and your plan's limits. On the experimental way, your GitHub token also goes to api.github.com, which trades it for a short-lived Copilot token and says which plan you have. Settings → Privacy lists each address a sign-in reaches.
 - **Remote Connectors** (`remote-connectors`): connecting to each remote Connector that is on, and signing in to it: its server, and the authorization server it names. The Tool calls, which carry your content, are the Connectors flow above.
 - **Usage data** (`usage-data`): only if you agree; see [Usage data](#usage-data). A test build for invited testers sends until you turn it off.
@@ -66,7 +66,7 @@ Only if you tick "Keep the page as it looks" when you add it, or turn it on in S
 What local mode does not stop:
 
 - **Update checks** to GitHub at startup, unless you turned them off.
-- **Model downloads** from huggingface.co and Ollama pulls, when you ask for a model.
+- **Model downloads** from huggingface.co and Ollama pulls. They send nothing of yours, so local mode doesn't stop them; the speaker models download when you first record a Meeting, without asking.
 - **A Connector on this computer** keeps working, and can reach the network itself. Only one whose sign-in is with a server on another computer is paused: its sign-in isn't renewed or started, its Tools aren't offered, and it goes on from where it was once the setting is off. A remote Connector whose server isn't on your computer is paused entirely, its sign-in included.
 - **Adding a web page by address** (see [Web pages](#web-pages)).
 
@@ -98,7 +98,7 @@ For a reviewer: each file in `src/core` and `src/main` that can send to the netw
 | `src/core/providers/jev.ts` | TypeSafe Jev | Automatic Tags, Document organization |
 | `src/core/providers/embeddings.ts`, `src/core/embedding/download.ts`, `src/core/embedding/model.ts` | A cloud embedding provider; the built-in search model's download | Document search; model downloads |
 | `src/core/providers/rerank.ts`, `src/core/reranking/model.ts` | Cohere or Voyage AI; the built-in reranking model's download | Reranking; model downloads |
-| `src/core/documents/scan/model.ts`, `src/core/transcription/model.ts` | The text recognition and speech models' downloads | Model downloads |
+| `src/core/documents/scan/model.ts`, `src/core/transcription/model.ts`, `src/core/transcription/speakerModel.ts` | The text recognition, speech and speaker models' downloads | Model downloads |
 | `src/core/transcription/cloud/` | Soniox or OpenAI realtime | Meeting transcription |
 | `src/core/connectors/` | Remote Connectors, their sign-in and the MCP Registry | Connectors, Connector search, Remote Connectors |
 | `src/core/agents/` | A socket on this computer that the agents you connect reach; no network | Your AI agents |
