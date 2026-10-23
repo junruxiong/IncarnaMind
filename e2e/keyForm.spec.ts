@@ -215,6 +215,20 @@ for (const { value, next, catalogId } of [
       // Change opens the list again, on the new provider's default.
       await pointAndClick(window, form.getByTestId("provider-model-change"));
       await expect(picker).toHaveValue(defaultModel(catalogId));
+
+      // A model typed under "Another model…" belongs to the provider it was typed for.
+      await picker.selectOption({ index: (await picker.locator("option").count()) - 1 });
+      const typed = form.getByTestId("provider-model-text");
+      await typed.fill("a-model-of-the-first-provider");
+      const third = form.getByRole("radio", {
+        name: value === "en" ? "Google" : "Kimi",
+        exact: true,
+      });
+      await pointAndClick(window, third.locator("xpath=ancestor::label"));
+      await expect(third).toBeChecked();
+      await expect(line).toBeVisible();
+      await expect(typed).toHaveCount(0);
+      await expect(picker).toHaveCount(0);
     } finally {
       await app.close();
     }

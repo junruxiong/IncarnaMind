@@ -18,7 +18,6 @@ import {
   fieldAccepts,
   fieldUrl,
   isPreset,
-  KEY_PROVIDERS,
   keyProviderGroups,
   kindOfCatalogId,
   untestedForCitations,
@@ -62,9 +61,6 @@ type CatalogId = string;
  * for a server. The User can type any model their account has.
  */
 const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles.answers ?? "";
-
-const isSuggestion = (model: string) =>
-  KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
 /** The providers shown as one row of choices, in the order the interface's language puts first; the rest are under "More…". */
 const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
@@ -312,9 +308,8 @@ export function ProviderForm({
     if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
     setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
-    setModelId((current) =>
-      current === "" || isSuggestion(current) ? suggestedModel(next) : current,
-    );
+    setModelId(suggestedModel(next));
+    setOtherModel(false);
     setModelOpen(false);
     setTest(null);
     setError(null);
