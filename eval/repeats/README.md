@@ -74,6 +74,7 @@ The scope cases on this version, where a check from a Mind searches the Search s
 - The one miss is Haiku's partly-supported card on the Chinese notice paraphrase, with the agreement alone in hand: it took the sentence as wider than the agreement's two parties ("Not covered: 适用于所有劳动者").
 - A first run on this change before the check's newer reply wording was merged in gave 0 of 20 in every case, the Chinese one with 5 others included.
 - Spend at the app's own count: $1.57 for both runs (Haiku $0.27, Sonnet $1.30).
+- After main's second, strict judgement of a contradiction (#1647) was merged in, Haiku 5.5 ran the scoped cases again, 10 checks each: 0 of 20 false Unsupported and 0 of 20 false Supported in English and in Chinese, with 5 and with 20 others, the agreement alone handed to every check, and 8 of 20 false Unsupported for the same Mind in no Folder with no scope. $0.11.
 
 ### 2026-10-23: a contradiction needs a second, strict judgement (#1647)
 
