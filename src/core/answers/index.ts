@@ -1834,11 +1834,22 @@ export function createAnswers(options: AnswersOptions) {
       const focusedEmpty =
         minds !== undefined && focusedId !== null && minds.read(focusedId, holdsNothing);
       let documentNames: string[] | undefined;
+      let rewriting: Promise<PreparedChatModel> | undefined;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
+              rewriting: () => {
+                rewriting ??= options.prepareModel(model, "off").catch((error: unknown) => {
+                  console.warn(
+                    `edit_mind's rewrite couldn't be asked of ${prepared.provider.kind}/${prepared.modelId} without thinking, so it thinks:`,
+                    error,
+                  );
+                  return prepared;
+                });
+                return rewriting;
+              },
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),

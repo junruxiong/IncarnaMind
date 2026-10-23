@@ -83,6 +83,11 @@ export interface Expected {
   language?: "en" | "zh-CN";
   /** It asks for a figure the Documents' numbers give: a Calculated figure shows a result matching this, and the reply never says it couldn't calculate (#1444). */
   figure?: RegExp;
+  /**
+   * The words what it writes into a Mind must use for a thing, and must not: a translation's own
+   * term ("spring tides" is 大潮, never 春潮), which Kimi K2.6 lost with thinking off (#1635).
+   */
+  terms?: readonly { want: string; not: readonly string[] }[];
 }
 
 export interface RequestOutcome {
@@ -138,7 +143,8 @@ export type RequestFailure =
   | { kind: "date-not-in-text"; dates: string[] }
   | { kind: "wrong-language"; wanted: "en" | "zh-CN"; share: number }
   | { kind: "no-figure"; wanted: string; shown: string[] }
-  | { kind: "gave-up"; said: string };
+  | { kind: "gave-up"; said: string }
+  | { kind: "term"; want: string; found: string[] };
 
 const QUOTED = /“[^”]*”|"[^"]*"|「[^」]*」|『[^』]*』/g;
 const CITATION_MARKER = /\[\^\d+\]/g;
@@ -508,6 +514,13 @@ export function requestFailures(outcome: RequestOutcome): RequestFailure[] {
     const gaveUp = givesUpOnCalculating(answer.text);
     if (gaveUp) failures.push({ kind: "gave-up", said: gaveUp });
   }
+  for (const term of expected.terms ?? []) {
+    const text = inMinds.join("\n\n");
+    const found = term.not.filter((word) => text.includes(word));
+    if (!text.includes(term.want) || found.length > 0) {
+      failures.push({ kind: "term", want: term.want, found });
+    }
+  }
   return failures;
 }
 
@@ -554,6 +567,8 @@ export function failureLine(failure: RequestFailure): string {
       return `has no Calculated figure matching /${failure.wanted}/ (figures: ${failure.shown.length > 0 ? failure.shown.join(", ") : "none"})`;
     case "gave-up":
       return `says it couldn't calculate what its Citations give: “${failure.said}”`;
+    case "term":
+      return `doesn't write “${failure.want}” for it${failure.found.length > 0 ? `, but ${failure.found.map((word) => `“${word}”`).join(", ")}` : ""}`;
     case "wrong-language":
       return `is not written in ${failure.wanted === "en" ? "English" : "Chinese"}, the Question's language (${Math.round(failure.share * 100)}% of its letters are Chinese characters)`;
   }
