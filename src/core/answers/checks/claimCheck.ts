@@ -435,20 +435,20 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ? null
       : unstatedUnit([evidence, ...foundCitations(session.finalCitation, evidence)]);
     if (unit && verdict.verdict !== "contradicted") return unsupported(unit, evidence);
+    // The reply's own parts, else the model is asked for them once: a part too long to be a
+    // phrase left Claude Sonnet 5.5's "Employees…" Supported (#1647).
+    const parts = async (quoted: Citation) =>
+      verdict.covered && verdict.uncovered
+        ? { covered: verdict.covered, uncovered: verdict.uncovered }
+        : await partOf(request, quoted, session, signal, deps.language());
     // A general word for the Passage's own party is backed for that party only: the wider group
     // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
     // its own, so the verdict doesn't rest on the model weighing it.
-    if (
-      verdict.verdict === "supported" &&
-      verdict.scope === "wider" &&
-      verdict.covered &&
-      verdict.uncovered &&
-      !byCalculation
-    ) {
-      return unsupported(
-        { reason: verdict.says, covered: verdict.covered, uncovered: verdict.uncovered },
-        evidence,
-      );
+    if (verdict.verdict === "supported" && verdict.scope === "wider" && !byCalculation) {
+      const part = await parts(evidence);
+      if (signal.aborted) return notChecked("stopped");
+      if (part.covered && part.uncovered)
+        return unsupported({ reason: verdict.says, ...part }, evidence);
     }
     if (verdict.verdict === "contradicted") {
       const first = await compare(request, evidence, session, signal, CONFIRM_INSTRUCTIONS);
@@ -483,10 +483,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         if (byCalculation) return byCalculation;
         if (unit) return unsupported(unit, evidence);
         if (verdict.topic === "not found") return unsupported();
-        const part =
-          verdict.covered && verdict.uncovered
-            ? { covered: verdict.covered, uncovered: verdict.uncovered }
-            : await partOf(request, evidence, session, signal, deps.language());
+        const part = await parts(evidence);
         if (signal.aborted) return notChecked("stopped");
         if (!part.covered || !part.uncovered) return unsupported();
         // The strict judgement has just found no conflict in this very quote.

@@ -1219,17 +1219,39 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     });
   });
 
-  test("stays supported when the reply names a wider group but not the parts", async () => {
-    const { core, client, check } = await mindWith(
-      [STAFF],
+  test("asks once for the parts when the reply names a wider group but none it can show", async () => {
+    const wider = (part: string) =>
       checkingModel({
-        [STAFF]: { verdict: "supported", quote: MOON, says: "Scope: wider\nTides says so." },
-      }),
-    );
+        [STAFF]: {
+          verdict: "supported",
+          quote: MOON,
+          says: "Scope: Staff, wider\nTides says so.",
+          judgement: "same",
+          part,
+        },
+      });
+    const asked = (model: ReturnType<typeof checkingModel>) =>
+      model.doGenerateCalls.filter((call) =>
+        JSON.stringify(call.prompt).includes("says more than words quoted"),
+      ).length;
 
+    const model = wider("Covered: spring tides at new and full moon\nNot covered: the staff");
+    const { core, client, check } = await mindWith([STAFF], model);
     await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toMatchObject({
+      covered: "spring tides at new and full moon",
+      uncovered: "the staff",
+      quoted: { quote: MOON, check: "found" },
+    });
+    expect(asked(model)).toBe(1);
 
-    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+    const none = wider("I can't say.");
+    const again = await mindWith([STAFF], none);
+    await again.check();
+    expect((await shownChecks(again.core, again.client))[0]?.shown).toEqual({
+      state: "supported",
+    });
+    expect(asked(none)).toBe(1);
   });
 
   test("a sentence with its own Citations asks for no quote: its card shows them", async () => {
