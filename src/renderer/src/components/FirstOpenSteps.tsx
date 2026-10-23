@@ -19,6 +19,9 @@ import { UnreadFilesLine } from "./UnreadFilesLine";
 import { buttonStyle } from "./ui";
 
 type StepKey = "citation" | "question" | "files";
+type StepState = "open" | "later" | "done";
+
+const STEPS: readonly StepKey[] = ["citation", "question", "files"];
 
 const NEXT: readonly { id: CommandId; label: MessageKey }[] = [
   { id: "comparison.start", label: "firstOpen.next.compare" },
@@ -26,13 +29,27 @@ const NEXT: readonly { id: CommandId; label: MessageKey }[] = [
   { id: "mind.export", label: "firstOpen.next.export" },
 ];
 
-// Step 2's button and the line after it wrap in the narrowest window (900 px, English), the tallest
-// state at any width; the card keeps that height so the page never moves (e2e/welcomeCard.spec.ts).
-const CARD_HEIGHT = "min-h-[219px]";
+// Each state the card can be in. They are laid out unseen in the live card's cell, so the tallest
+// sets its height at whatever width the page has, and the page doesn't move as the steps tick.
+const STATES: readonly { current: StepKey | undefined; modelReady: boolean }[] = [
+  { current: "citation", modelReady: false },
+  { current: "question", modelReady: false },
+  { current: "files", modelReady: false },
+  { current: undefined, modelReady: false },
+  { current: undefined, modelReady: true },
+];
+
+const stateAt = (current: StepKey | undefined, key: StepKey): StepState => {
+  if (current === undefined) return "done";
+  const after = STEPS.indexOf(key) - STEPS.indexOf(current);
+  return after < 0 ? "done" : after === 0 ? "open" : "later";
+};
+
+const CARD_PADDING = "px-3.5 pt-3.5 pb-2.5";
 
 const HERE: CommandContext = { selection: [], focus: null, surface: "mind" };
 
-function Mark({ number, state }: { number: number; state: "open" | "later" | "done" }) {
+function Mark({ number, state }: { number: number; state: StepState }) {
   if (state === "done") {
     return (
       <span
@@ -59,22 +76,22 @@ function Step({
   step,
   number,
   state,
+  live,
   children,
 }: {
   step: StepKey;
   number: number;
-  state: "open" | "later" | "done";
+  state: StepState;
+  live: boolean;
   children?: ReactNode;
 }) {
   const t = useT();
   const tone = state === "open" ? "font-semibold text-ink" : "text-ink-meta";
+  const marks = live
+    ? { "data-testid": "first-open-step", "data-step": step, "data-state": state }
+    : {};
   return (
-    <li
-      data-testid="first-open-step"
-      data-step={step}
-      data-state={state}
-      className="flex flex-col gap-1"
-    >
+    <li {...marks} className="flex flex-col gap-1">
       <div className="flex items-center gap-2.5 text-[14px] leading-5">
         <Mark number={number} state={state} />
         <span className={tone}>
@@ -118,145 +135,167 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
     question: progress.askedOwn || progress.askedReady,
     files: progress.indexed,
   };
-  const order: StepKey[] = ["citation", "question", "files"];
-  const current = order.find((key) => !done[key]);
-  const stateOf = (key: StepKey): "open" | "later" | "done" =>
+  const current = STEPS.find((key) => !done[key]);
+  const liveState = (key: StepKey): StepState =>
     done[key] ? "done" : key === current ? "open" : "later";
-  const allDone = current === undefined;
-  // Done means a first checked Answer of one's own can come: the ready Question needs no model (#1027).
-  const setUp = allDone && modelReady;
   const chooseModel = () => {
     openModelSetup();
     revealAssistant();
     if (useAppStore.getState().layout?.assistant.folded) void placeAssistant({ folded: false });
   };
 
-  return (
-    <section
-      aria-labelledby={`first-open-${mindId}`}
-      data-testid="first-open-steps"
-      className={`mb-6 ${CARD_HEIGHT} rounded-[10px] bg-sheet px-3.5 pt-3.5 pb-2.5 font-sans shadow-[inset_0_0_0_1px_var(--color-rule)]`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <h2 id={`first-open-${mindId}`} className="text-[16px] leading-6 font-semibold text-ink">
-          {t(setUp ? "firstOpen.done.title" : "firstOpen.title")}
-        </h2>
-        <button
-          type="button"
-          data-testid="first-open-hide"
-          aria-label={t("firstOpen.hide")}
-          title={t("firstOpen.hide")}
-          onClick={() => updateGettingStarted({ hidden: true })}
-          className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
-        >
-          <CloseLineIcon strokeWidth={2.5} className="size-3" />
-        </button>
-      </div>
-      <ol className={`flex flex-col gap-3 ${allDone ? "pt-2" : ""}`}>
-        <Step step="citation" number={1} state={stateOf("citation")}>
-          <p className="text-[13px] leading-5 text-ink-secondary">
-            {t("firstOpen.step.citation.body")}
-          </p>
-        </Step>
-        <Step step="question" number={2} state={stateOf("question")}>
-          {ready ? (
-            <>
-              <p className="text-[13px] leading-5 text-ink-secondary">
-                {t("firstOpen.step.question.body")}
-              </p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <button
-                  type="button"
-                  data-testid="first-open-ready"
-                  onClick={() => {
-                    focusNext.current = true;
-                    void askReadyQuestion();
-                  }}
-                  className={buttonStyle("secondary", "sm")}
-                >
-                  {t("firstOpen.step.question.ready", { question: ready })}
-                </button>
-                <span className="text-[13px] leading-5 text-ink-meta">
-                  <OwnQuestion message="firstOpen.step.question.own" />
-                </span>
-              </div>
-            </>
-          ) : (
-            <p className="text-[13px] leading-5 text-ink-secondary">
-              <OwnQuestion message="firstOpen.step.question.ownOnly" />
-            </p>
-          )}
-        </Step>
-        <Step step="files" number={3} state={stateOf("files")}>
-          {unread.length > 0 ? (
-            <UnreadFilesLine files={unread} testId="first-open-unread" />
-          ) : (
-            <p className="text-[13px] leading-5 text-ink-secondary">
-              {t("firstOpen.step.files.body")}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <button
-              ref={addFiles}
-              type="button"
-              data-testid="first-open-add-files"
-              onClick={() => void pickDocuments()}
-              className={buttonStyle("primary", "sm")}
-            >
-              {t("startGuide.documents.addFiles")}
-            </button>
-            <button
-              type="button"
-              data-testid="first-open-link-folder"
-              onClick={() => void addLinkedFolder()}
-              className={buttonStyle("secondary", "sm")}
-            >
-              {t("startGuide.documents.linkFolder")}
-            </button>
-          </div>
-          {skipped.length > 0 && (
-            <ProblemLine testId="first-open-skipped">
-              {t("documents.skipped", { names: skipped.join(", ") })}
-            </ProblemLine>
-          )}
-        </Step>
-      </ol>
-      {allDone && !modelReady && (
-        <div className="flex flex-col items-start gap-2 pt-3">
-          <p className="text-[13px] leading-5 text-ink-secondary">{t("firstOpen.model.body")}</p>
+  const layer = (stateOf: (key: StepKey) => StepState, hasModel: boolean, live: boolean) => {
+    const allDone = STEPS.every((key) => stateOf(key) === "done");
+    // Done means a first checked Answer of one's own can come: the ready Question needs no model (#1027).
+    const setUp = allDone && hasModel;
+    const only = (testId: string) => (live ? testId : undefined);
+    return (
+      <>
+        <div className="flex items-start justify-between gap-2">
+          <h2
+            id={live ? `first-open-${mindId}` : undefined}
+            className="text-[16px] leading-6 font-semibold text-ink"
+          >
+            {t(setUp ? "firstOpen.done.title" : "firstOpen.title")}
+          </h2>
           <button
             type="button"
-            data-testid="first-open-choose-model"
-            onClick={chooseModel}
-            className={buttonStyle("primary", "sm")}
+            data-testid={only("first-open-hide")}
+            aria-label={t("firstOpen.hide")}
+            title={t("firstOpen.hide")}
+            onClick={() => updateGettingStarted({ hidden: true })}
+            className="inline-flex size-[22px] items-center justify-center rounded-md text-ink-meta hover:bg-chip hover:text-ink focus-visible:outline-offset-0"
           >
-            {t("firstOpen.model.choose")}
+            <CloseLineIcon strokeWidth={2.5} className="size-3" />
           </button>
         </div>
-      )}
-      {setUp && (
-        <p className="pt-3 text-[13px] leading-5 text-ink-secondary">
-          {t("firstOpen.next.lead")}{" "}
-          {NEXT.flatMap(({ id, label }) => {
-            const command = commands.get(id);
-            return command && offered(command, HERE) ? [{ id, label }] : [];
-          }).map(({ id, label }, index) => (
-            <span key={id}>
-              {index > 0 && " · "}
+        <ol className={`flex flex-col gap-3 ${allDone ? "pt-2" : ""}`}>
+          <Step step="citation" number={1} state={stateOf("citation")} live={live}>
+            <p className="text-[13px] leading-5 text-ink-secondary">
+              {t("firstOpen.step.citation.body")}
+            </p>
+          </Step>
+          <Step step="question" number={2} state={stateOf("question")} live={live}>
+            {ready ? (
+              <>
+                <p className="text-[13px] leading-5 text-ink-secondary">
+                  {t("firstOpen.step.question.body")}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <button
+                    type="button"
+                    data-testid={only("first-open-ready")}
+                    onClick={() => {
+                      focusNext.current = true;
+                      void askReadyQuestion();
+                    }}
+                    className={buttonStyle("secondary", "sm")}
+                  >
+                    {t("firstOpen.step.question.ready", { question: ready })}
+                  </button>
+                  <span className="text-[13px] leading-5 text-ink-meta">
+                    <OwnQuestion message="firstOpen.step.question.own" />
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                <OwnQuestion message="firstOpen.step.question.ownOnly" />
+              </p>
+            )}
+          </Step>
+          <Step step="files" number={3} state={stateOf("files")} live={live}>
+            {live && unread.length > 0 ? (
+              <UnreadFilesLine files={unread} testId="first-open-unread" />
+            ) : (
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.files.body")}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                ref={live ? addFiles : undefined}
+                type="button"
+                data-testid={only("first-open-add-files")}
+                onClick={() => void pickDocuments()}
+                className={buttonStyle("primary", "sm")}
+              >
+                {t("startGuide.documents.addFiles")}
+              </button>
               <button
                 type="button"
-                data-testid="first-open-next"
-                data-command={id}
-                onClick={() => void commands.run(id)}
-                className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+                data-testid={only("first-open-link-folder")}
+                onClick={() => void addLinkedFolder()}
+                className={buttonStyle("secondary", "sm")}
               >
-                {t(label)}
+                {t("startGuide.documents.linkFolder")}
               </button>
-            </span>
-          ))}
-        </p>
-      )}
-    </section>
+            </div>
+            {live && skipped.length > 0 && (
+              <ProblemLine testId="first-open-skipped">
+                {t("documents.skipped", { names: skipped.join(", ") })}
+              </ProblemLine>
+            )}
+          </Step>
+        </ol>
+        {allDone && !hasModel && (
+          <div className="flex flex-col items-start gap-2 pt-3">
+            <p className="text-[13px] leading-5 text-ink-secondary">{t("firstOpen.model.body")}</p>
+            <button
+              type="button"
+              data-testid={only("first-open-choose-model")}
+              onClick={chooseModel}
+              className={buttonStyle("primary", "sm")}
+            >
+              {t("firstOpen.model.choose")}
+            </button>
+          </div>
+        )}
+        {setUp && (
+          <p className="pt-3 text-[13px] leading-5 text-ink-secondary">
+            {t("firstOpen.next.lead")}{" "}
+            {NEXT.flatMap(({ id, label }) => {
+              const command = commands.get(id);
+              return command && offered(command, HERE) ? [{ id, label }] : [];
+            }).map(({ id, label }, index) => (
+              <span key={id}>
+                {index > 0 && " · "}
+                <button
+                  type="button"
+                  data-testid={only("first-open-next")}
+                  data-command={live ? id : undefined}
+                  onClick={() => void commands.run(id)}
+                  className="rounded-sm text-accent-strong underline-offset-2 hover:underline focus-visible:outline-offset-0"
+                >
+                  {t(label)}
+                </button>
+              </span>
+            ))}
+          </p>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <div className="mb-6 grid grid-cols-1 font-sans">
+      <section
+        aria-labelledby={`first-open-${mindId}`}
+        data-testid="first-open-steps"
+        className={`col-start-1 row-start-1 ${CARD_PADDING} rounded-[10px] bg-sheet shadow-[inset_0_0_0_1px_var(--color-rule)]`}
+      >
+        {layer(liveState, modelReady, true)}
+      </section>
+      {STATES.map(({ current: at, modelReady: hasModel }) => (
+        <div
+          key={`${at}-${hasModel}`}
+          aria-hidden="true"
+          className={`pointer-events-none invisible col-start-1 row-start-1 ${CARD_PADDING}`}
+        >
+          {layer((key) => stateAt(at, key), hasModel, false)}
+        </div>
+      ))}
+    </div>
   );
 }
 

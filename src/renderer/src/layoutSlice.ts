@@ -111,9 +111,15 @@ export function createLayoutSlice(
 }
 
 /** Follows the core's word on this window's layout, e.g. when a deleted Mind's tab closes. */
-export function followLayout(set: Set): void {
-  core.on("layout.changed", ({ windowId, layout }) => {
-    if (windowId === WINDOW_ID) set({ layout });
+export function followLayout(set: Set, report: (error: unknown) => void): void {
+  core.on("layout.changed", ({ windowId }) => {
+    if (windowId !== WINDOW_ID) return;
+    // The event's layout can be older than moves shown since, and can reach the window after
+    // their answers: the core's layout read now has them all, unless one comes later.
+    const asked = placings;
+    core.getLayout(WINDOW_ID).then((layout) => {
+      if (placings === asked) set({ layout });
+    }, report);
   });
 }
 

@@ -7408,6 +7408,8 @@ export interface ExportPreferences {
   "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+  /** Where Word and PDF put a Numbered Mind's Citations. Absent until the User has chosen; footnotes meanwhile. */
+  citationPlace?: CitationPlace;
 }
 
 export interface SharePagePreferences {
@@ -7422,6 +7424,11 @@ export interface SharePagePreferences {
  * as if every one were accepted. A Word file keeps them as tracked changes.
  */
 export type TheirChangesShown = "shown" | "accepted";
+
+/** Where a Word or PDF export puts the Citations of a Mind in the Numbered style: a footnote each, or a list at the end. */
+export const CITATION_PLACES = ["footnotes", "list"] as const;
+
+export type CitationPlace = (typeof CITATION_PLACES)[number];
 
 /** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
 export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
@@ -7465,6 +7472,12 @@ export interface ExportMindOptions {
   /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
   /**
+   * Word and PDF, for a Mind in the Numbered style (another style decides for itself): a footnote
+   * for each Citation, or a list of the Documents cited at the end, with `[1]` markers in the text.
+   * Absent: footnotes.
+   */
+  citationPlace?: CitationPlace;
+  /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
    * claim is unsupported or contradicted), and a sentence checked
    * Contradicted, Unsupported or Needs re-check, gets a comment by
@@ -7490,6 +7503,10 @@ export interface MindExportPreview {
    * when several cite the same page.
    */
   citations: number;
+  /** The Documents those Citations cite, each counted once. */
+  citedDocuments: number;
+  /** Whether the Mind's citation style is Numbered, the one whose Citations go where the User chooses. */
+  numbered: boolean;
   /**
    * Of those, the ones not shown as "Quote found": the quote wasn't found on
    * the cited pages, or it can't be checked (the pages have no text, or the
@@ -7556,7 +7573,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord" | "theirChanges"
+      "fileName" | "fromWord" | "theirChanges" | "citedDocuments" | "numbered"
     > &
       Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
@@ -8029,9 +8046,11 @@ export type TranscriptState =
  * - "download": the speech-to-text model couldn't be downloaded.
  * - "engine": it couldn't start, or stopped again and again.
  * - "save": the WebVTT file couldn't be saved, or no Output location was chosen.
+ * - "speakers": saved, but the speaker pass (#138) couldn't run: its lines keep the labels of
+ *   where they came from. Trying again runs the pass again while the audio is kept.
  */
 export interface TranscriptProblem {
-  kind: "download" | "engine" | "save";
+  kind: "download" | "engine" | "save" | "speakers";
   message: string;
 }
 
@@ -8065,6 +8084,8 @@ export interface MeetingTranscript {
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
   savedDefaulted: boolean;
+  /** Saved, its speakers are being told apart after the call (#138): their labels may still change. */
+  separating: boolean;
   problem: TranscriptProblem | null;
 }
 
