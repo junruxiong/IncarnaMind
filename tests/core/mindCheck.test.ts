@@ -457,6 +457,46 @@ describe("Check this Mind", () => {
     expect({ finds: finds.length, runs: runsIn(checks).length }).toEqual(sent);
   });
 
+  // protects=a check holds only while the Documents it rests on are in its scope, and while no Document has joined it (#1669); fails_when=a Document moved out of the Folder, a Mind moved to another Folder, or a Document filed in since still reads as nothing changed; no_claim=the card's words.
+  test("a source Document moved out of the Folder, or the Mind moved to another, changes the checks; a Document filed in since is the added ones' to check, not nothing changed", async () => {
+    const { core, mindId, folderId, clock } = await setUp();
+    await core.checkMind(request(mindId, "all"));
+    const unchanged = { kind: "unchanged", since: "2026-10-02T14:20:00.000Z" };
+    expect(await core.planMindCheck(mindId, "changed")).toEqual(unchanged);
+
+    const [tides] = (await core.listDocuments()).filter((each) => each.name === "Tides");
+    if (!tides) throw new Error("The Tides Document isn't there.");
+    await core.moveToFolder({ documentIds: [tides.id], folderId: null });
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({
+      kind: "ready",
+      sentences: 1,
+      findsClaims: false,
+    });
+    await core.moveToFolder({ documentIds: [tides.id], folderId });
+    expect(await core.planMindCheck(mindId, "changed")).toEqual(unchanged);
+
+    const elsewhere = await core.createLibraryGroup({ name: "Elsewhere", description: "" });
+    await core.moveToFolder({ mindIds: [mindId], folderId: elsewhere.id });
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({
+      kind: "ready",
+      sentences: 3,
+    });
+    await core.moveToFolder({ mindIds: [mindId], folderId });
+    expect(await core.planMindCheck(mindId, "changed")).toEqual(unchanged);
+
+    clock.advance(60_000);
+    const sources = await createTempDataFolder();
+    const [seabirds] = await addAndProcess(core, [
+      await writeSourceFile(sources, "Seabirds.md", `# Seabirds\n\n${PENGUINS}\n`),
+    ]);
+    await core.moveToFolder({ documentIds: [seabirds?.id ?? ""], folderId });
+    expect(await core.planMindCheck(mindId, "changed")).toMatchObject({ kind: "unchanged" });
+    expect(await core.planMindCheck(mindId, "added")).toMatchObject({
+      kind: "ready",
+      sentences: 1,
+    });
+  });
+
   test("with no check dated, the last whole-Mind check stands in for the date; a Mind with no check says nothing to check", async () => {
     const { core, client, mindId } = await setUp();
     await core.checkMind(request(mindId, "all"));

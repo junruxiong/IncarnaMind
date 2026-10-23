@@ -87,10 +87,6 @@ export function MindCheckAsk({ mindId }: { mindId: string }) {
   );
 }
 
-/**
- * What Check this Mind says when nothing changed: the marks on the page stand, no model was
- * asked, and "Check every sentence again" checks them all for real.
- */
 export function MindUnchanged({ mindId, since }: { mindId: string; since: string | null }) {
   const t = useT();
   const language = useLanguage();

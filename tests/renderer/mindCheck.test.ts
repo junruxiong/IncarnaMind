@@ -98,28 +98,44 @@ describe("Asking before checking against Documents added since", () => {
 
 describe("Check this Mind", () => {
   const SINCE = "2026-10-02T14:20:00.000Z";
+  const unchanged: MindCheckPlan = { kind: "unchanged", since: SINCE };
 
   test("when nothing changed it asks no model and opens the card on the line that says so", async () => {
-    bridge.planMindCheck.mockResolvedValue({ kind: "unchanged", since: SINCE });
+    bridge.planMindCheck.mockResolvedValue(unchanged);
     const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
     const { setCheckCardOpen, setCheckProblem, setCheckRunning } = await import(
       "../../src/renderer/src/checks"
     );
     await startCheckThisMind("mind");
-    expect(bridge.planMindCheck.mock.calls).toEqual([["mind", "changed", false]]);
+    expect(bridge.planMindCheck.mock.calls).toEqual([
+      ["mind", "changed", false],
+      ["mind", "added", false],
+    ]);
     expect(bridge.findMindClaims).not.toHaveBeenCalled();
     expect(bridge.estimateRun).not.toHaveBeenCalled();
     expect(bridge.checkMind).not.toHaveBeenCalled();
     expect(setCheckRunning).not.toHaveBeenCalled();
     expect(setCheckProblem).not.toHaveBeenCalled();
-    expect(useMindCheck.getState().unchanged.mind).toEqual({ since: SINCE });
+    expect(useMindCheck.getState().unchanged.mind).toBe(true);
     expect(setCheckCardOpen).toHaveBeenCalledWith("tab", true);
+  });
+
+  test("with nothing changed but Documents added since, it asks about those instead of saying nothing changed", async () => {
+    bridge.planMindCheck.mockImplementation(async (_mind, mode) =>
+      mode === "changed" ? unchanged : plan,
+    );
+    const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    await startCheckThisMind("mind");
+    expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
+    expect(useMindCheck.getState().asking.mind).toMatchObject({ mode: "added", count: 1 });
+    expect(bridge.checkMind).not.toHaveBeenCalled();
   });
 
   test("what changed is checked as before, and the line goes", async () => {
     const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
-    useMindCheck.setState({ unchanged: { mind: { since: SINCE } } });
+    useMindCheck.setState({ unchanged: { mind: true } });
     await startCheckThisMind("mind");
+    expect(bridge.planMindCheck.mock.calls).toEqual([["mind", "changed", false]]);
     expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "changed" }));
     expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
   });
@@ -133,13 +149,28 @@ describe("Check this Mind", () => {
     expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
     expect(bridge.checkMind).not.toHaveBeenCalled();
   });
+});
 
-  test("Check every sentence again checks for real, and the line goes", async () => {
-    const { startMindCheck, useMindCheck } = await import("../../src/renderer/src/mindCheck");
-    useMindCheck.setState({ unchanged: { mind: { since: SINCE } } });
+describe("Check every sentence again", () => {
+  test("on a model billed per token asks first with the estimate, and the line goes; agreed, it checks for real", async () => {
+    const { startMindCheck, useMindCheck, checkMind } = await import(
+      "../../src/renderer/src/mindCheck"
+    );
+    useMindCheck.setState({ unchanged: { mind: true } });
     await startMindCheck("mind", "all");
     expect(bridge.planMindCheck).toHaveBeenCalledWith("mind", "all", false);
-    expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "all" }));
+    expect(bridge.checkMind).not.toHaveBeenCalled();
     expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
+    expect(useMindCheck.getState().asking.mind).toMatchObject({ mode: "all", count: 1 });
+    await checkMind("mind", "all");
+    expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "all" }));
+  });
+
+  test.each(["free", "plan"] as const)("on a known %s model it checks at once", async (billing) => {
+    bridge.estimateRun.mockResolvedValue({ billing });
+    const { startMindCheck, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    await startMindCheck("mind", "all");
+    expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "all" }));
+    expect(useMindCheck.getState().asking.mind).toBeUndefined();
   });
 });

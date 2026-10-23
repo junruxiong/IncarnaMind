@@ -22,7 +22,7 @@
  *    next run doesn't send them again.
  */
 import { randomUUID } from "node:crypto";
-import { addedCouldChange, claimCheckShown } from "../../../shared/claimChecks";
+import { addedCouldChange, claimCheckShown, restsOn } from "../../../shared/claimChecks";
 import { readMindCheck, sentenceKey, writeMindCheck } from "../../../shared/mindCheck";
 import { mindModelOf } from "../../../shared/mindModel";
 import { isClaim } from "../../../shared/sentences";
@@ -246,6 +246,19 @@ export function createMindCheck(options: MindCheckOptions) {
       const fresh: SelectedSentence[] = [];
       const again: SelectedSentence[] = [];
       const held: string[] = [];
+      const inScope = new Map<boolean, ReadonlySet<string> | null>();
+      const leftScope = (check: ClaimCheckAttributes) => {
+        const { widened: everyDocument } = check.scope;
+        if (!inScope.has(everyDocument)) {
+          const ids = options.scopeOf(mindId, everyDocument).check.scope.documentIds;
+          inScope.set(everyDocument, ids && new Set(ids));
+        }
+        const ids = inScope.get(everyDocument);
+        return (
+          !!ids &&
+          restsOn(check).some((cited) => cited.documentId !== null && !ids.has(cited.documentId))
+        );
+      };
       for (const sentence of sentences) {
         const mark = markOf(sentence);
         if (added) {
@@ -258,15 +271,16 @@ export function createMindCheck(options: MindCheckOptions) {
           if (!skipped.has(sentenceKey(sentence.text))) fresh.push(sentence);
           continue;
         }
-        const { state } = claimCheckShown(mark.check, { text: sentence.text, versions, folderId });
-        if (state === "needs-recheck" || state === "not-checked") again.push(sentence);
-        else if (state !== "kept" && state !== "checking") held.push(mark.check.checkedAt);
+        const shown = claimCheckShown(mark.check, { text: sentence.text, versions, folderId });
+        if (shown.state === "needs-recheck") again.push(sentence);
+        else if (shown.state === "kept" || shown.state === "checking") continue;
+        else if (shown.state === "not-checked" || leftScope(mark.check)) again.push(sentence);
+        else held.push(mark.check.checkedAt);
       }
       return { fresh, again, keys, skipped, widened, held };
     });
   }
 
-  /** When the oldest check that still holds was made, else the last whole-Mind check; null when neither says. */
   function unchangedSince(mindId: string, held: readonly string[]): string | null {
     const oldest = held.filter((at) => at !== "").sort()[0];
     return oldest ?? content.readSettings(mindId, readMindCheck)?.at ?? null;
@@ -274,12 +288,11 @@ export function createMindCheck(options: MindCheckOptions) {
 
   function plan(mindId: string, mode: CheckMindMode, allDocuments: boolean): MindCheckPlan {
     const sent = sending(mindId, mode);
-    const { fresh, again, held } = sent;
-    if (fresh.length + again.length === 0) {
-      return held.length > 0
-        ? { kind: "unchanged", since: unchangedSince(mindId, held) }
-        : { kind: "nothing" };
+    if (sent.fresh.length + sent.again.length === 0 && sent.held.length > 0) {
+      return { kind: "unchanged", since: unchangedSince(mindId, sent.held) };
     }
+    const { fresh, again } = sent;
+    if (fresh.length + again.length === 0) return { kind: "nothing" };
     const { searchable, folderId } = options.scopeOf(mindId, everywhere(allDocuments, sent));
     if (searchable === 0) return { kind: "no-documents", folderId };
     return {

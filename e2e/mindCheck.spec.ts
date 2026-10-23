@@ -176,7 +176,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   // tooltip says how many that is.
   const again = (await checkCard(window)).getByTestId("badge-check-mind");
   await expect(again).toHaveText("Check this Mind");
-  await expect(again).toHaveAttribute("title", "1 changed sentence");
+  await expect(again).toHaveAttribute("title", "1 sentence to check");
   await pointAndClick(window, again);
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(11);
@@ -272,7 +272,7 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   await expect(last).toContainText("worth building. The harbour office opens");
   const all = (await checkCard(window)).getByTestId("badge-check-mind");
   await expect(all).toHaveText("核对此 Mind");
-  await expect(all).toHaveAttribute("title", "1 句有改动");
+  await expect(all).toHaveAttribute("title", "1 句待核对");
   await pointAndClick(window, all);
   await expect(ask).toContainText("要对照这个文件夹中的文档，核对这个 Mind 中的这条说法吗？");
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
@@ -367,7 +367,7 @@ test("Check this Mind with nothing changed sends nothing: the marks stay and the
   const editedCard = await checkCard(window);
   await expect(editedCard.getByTestId("badge-check-mind")).toHaveAttribute(
     "title",
-    "1 changed sentence",
+    "1 sentence to check",
   );
   await slideSelect(window, first, "Puffins");
   await window.keyboard.type("Penguins");
@@ -386,5 +386,91 @@ test("Check this Mind with nothing changed sends nothing: the marks stay and the
   expect(lineBox.x).toBeGreaterThanOrEqual(cardBox.x);
   expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
   await screenshot(window, "mind-check-unchanged-zh-narrow");
+  await app.close();
+});
+
+test("the line that says nothing changed goes when a Document is edited, moved out of the Folder or deleted, or the Mind is moved out of it", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await writeFile(
+    join(sources, "Garden.pdf"),
+    buildPdf([{ lines: ["Garden notes", "Roses like a sunny wall and rich soil."] }]),
+  );
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf"), join(sources, "Garden.pdf")]);
+  await harbourNotes(window);
+  const inFolder = (documents: string[], mind: boolean, folder: "Harbours" | null) =>
+    window.evaluate(
+      async ([names, withMind, name]) => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const ids = (await core.listDocuments())
+          .filter((each) => names.includes(each.name))
+          .map((each) => each.id);
+        const minds = withMind
+          ? (await core.listMinds()).filter((each) => each.title === "Harbour notes")
+          : [];
+        const { groups } = await core.getLibrary();
+        const folderId = name
+          ? (
+              groups.find((each) => each.name === name) ??
+              (await core.createLibraryGroup({ name, description: "" }))
+            ).id
+          : null;
+        await core.moveToFolder({
+          documentIds: ids,
+          mindIds: minds.map((each) => each.id),
+          folderId,
+        });
+      },
+      [documents, mind, folder] as const,
+    );
+  await inFolder(["Tides", "Garden"], true, "Harbours");
+
+  const card = await checkCard(window);
+  const check = card.getByTestId("badge-check-mind");
+  const unchanged = card.getByTestId("mind-check-unchanged");
+  await pointAndClick(window, check);
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  await expect(card.getByTestId("health-checked-all")).toBeVisible();
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
+
+  // Each change leaves checks to make, so the line goes and the button says how many; checking them brings it back.
+  const checkedAgain = async () => {
+    await pointAndClick(window, check);
+    await expect(check).toHaveAttribute("title", "Nothing changed", { timeout: 20_000 });
+    await pointAndClick(window, check);
+    await expect(unchanged).toBeVisible();
+  };
+  await pointAndClick(window, check);
+  await expect(unchanged).toBeVisible();
+
+  await writeFile(
+    join(sources, "Tides.pdf"),
+    buildPdf([
+      { lines: ["Harbour times", "Harbours publish the times of high water every 6 months."] },
+    ]),
+  );
+  await expect(unchanged).toHaveCount(0, { timeout: 30_000 });
+  await expect(check).toHaveAttribute("title", /sentences? to check$/);
+  await checkedAgain();
+
+  await inFolder(["Tides"], false, null);
+  await expect(unchanged).toHaveCount(0);
+  await expect(check).toHaveAttribute("title", /sentences? to check$/);
+  await checkedAgain();
+
+  await inFolder([], true, null);
+  await expect(unchanged).toHaveCount(0);
+  await expect(check).toHaveAttribute("title", /sentences? to check$/);
+  await checkedAgain();
+
+  await window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await core.deleteDocuments((await core.listDocuments()).map((each) => each.id));
+  });
+  await expect(unchanged).toHaveCount(0);
+  await expect(check).not.toHaveAttribute("title", "Nothing changed");
   await app.close();
 });

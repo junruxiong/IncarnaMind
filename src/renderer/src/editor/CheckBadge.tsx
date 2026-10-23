@@ -18,7 +18,7 @@ import { checkClaims, stopVerify } from "../verify";
 import { useWatchAddedDocuments } from "./AddedDocumentsLine";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionAsk, ContradictionLine } from "./ContradictionLine";
-import { changedTitle, useChangedSentences } from "./changedSentences";
+import { checkTitle, useCheckThisMindPlan } from "./changedSentences";
 import { shownClaims } from "./claimChecks";
 import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
@@ -160,20 +160,22 @@ function CheckActions({
 }) {
   const t = useT();
   const running = useChecks((state) => state.running[mindId] !== undefined);
-  const changed = useChangedSentences(doc, mindId, running);
+  const planned = useCheckThisMindPlan(doc, mindId, running);
   const askingContradictions = useContradictions((state) => state.asking[mindId] !== undefined);
   const unchanged = useMindCheck((state) => state.unchanged[mindId]);
   if (askingMind) return <MindCheckAsk mindId={mindId} />;
   if (askingContradictions) return <ContradictionAsk doc={doc} mindId={mindId} />;
   return (
     <>
-      {unchanged && changed === 0 && <MindUnchanged mindId={mindId} since={unchanged.since} />}
+      {unchanged && planned?.plan.kind === "unchanged" && (
+        <MindUnchanged mindId={mindId} since={planned.plan.since} />
+      )}
       <div className="check-card-actions">
         <button
           type="button"
           data-testid="badge-check-mind"
           disabled={running}
-          title={changed === null ? undefined : changedTitle(t, changed)}
+          title={planned === null ? undefined : checkTitle(t, planned.plan)}
           className={buttonStyle("primary", "sm")}
           onClick={() => void startCheckThisMind(mindId)}
         >
