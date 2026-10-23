@@ -350,6 +350,7 @@ console.log(
   ),
 );
 
+const line = thresholdFor(devClean, 0.99) ?? 0.5;
 console.log("\n## Pairs a quote cannot settle alone\n");
 console.log(
   table(
@@ -358,9 +359,9 @@ console.log(
       "Pairs",
       "SUPPORTS",
       "Mean score of SUPPORTS",
-      "SUPPORTS at or above 0.63",
+      `SUPPORTS at or above ${line.toFixed(2)}`,
       "Mean score of the rest",
-      "The rest at or above 0.63",
+      `The rest at or above ${line.toFixed(2)}`,
     ],
     (["table-row", "calculated", "needs-context"] as const).flatMap((caveat) => {
       const list = chosen.filter((each) => each.pair.caveat === caveat);
@@ -372,7 +373,7 @@ console.log(
           ? "n/a"
           : fixed(items.reduce((sum, each) => sum + each.score, 0) / items.length, 2);
       const above = (items: readonly Row[]) =>
-        `${items.filter((each) => each.score >= 0.63).length} of ${items.length}`;
+        `${items.filter((each) => each.score >= line).length} of ${items.length}`;
       return [[caveat, list.length, yes.length, mean(yes), above(yes), mean(no), above(no)]];
     }),
   ),
@@ -398,11 +399,11 @@ if (args.values.noise) {
     return Math.max(...values) - Math.min(...values);
   });
   const flips = shared.filter((id) => {
-    const sides = new Set(runs.map((each) => (each.get(id) ?? 0) >= 0.63));
+    const sides = new Set(runs.map((each) => (each.get(id) ?? 0) >= line));
     return sides.size > 1;
   });
   console.log(
-    `\n## Noise: the same ${shared.length} requests asked ${runs.length} times\n\nThe answers are not repeatable. The spread between the highest and lowest of a pair's answers: mean ${fixed(spread.reduce((a, b) => a + b, 0) / spread.length)}, 90th percentile ${fixed(quantile(spread, 0.9))}, largest ${fixed(Math.max(...spread))}; identical in ${spread.filter((each) => each === 0).length} pairs. ${flips.length} pairs fell on both sides of 0.63 (${flips.map((id) => `${id} ${runs.map((each) => (each.get(id) ?? 0).toFixed(2)).join("/")}`).join("; ") || "none"}).`,
+    `\n## Noise: the same ${shared.length} requests asked ${runs.length} times\n\nThe answers are not repeatable. The spread between the highest and lowest of a pair's answers: mean ${fixed(spread.reduce((a, b) => a + b, 0) / spread.length)}, 90th percentile ${fixed(quantile(spread, 0.9))}, largest ${fixed(Math.max(...spread))}; identical in ${spread.filter((each) => each === 0).length} pairs. ${flips.length} pairs fell on both sides of ${line.toFixed(2)} (${flips.map((id) => `${id} ${runs.map((each) => (each.get(id) ?? 0).toFixed(2)).join("/")}`).join("; ") || "none"}).`,
   );
 }
 
