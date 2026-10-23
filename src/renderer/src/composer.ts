@@ -44,6 +44,53 @@ const EMPTY_DRAFT: Draft = { text: "", scope: null, skill: null, pastes: [] };
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isStrings = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((each) => typeof each === "string");
+
+function isDraft(value: unknown): value is Draft {
+  if (!isObject(value)) return false;
+  const { text, scope, skill, pastes } = value;
+  const validScope =
+    scope === null ||
+    (isObject(scope) &&
+      isStrings(scope.folderIds) &&
+      isStrings(scope.tagIds) &&
+      isStrings(scope.documentIds));
+  return (
+    typeof text === "string" &&
+    validScope &&
+    (skill === null || typeof skill === "string") &&
+    Array.isArray(pastes) &&
+    pastes.every(
+      (paste) => isObject(paste) && typeof paste.id === "string" && typeof paste.text === "string",
+    )
+  );
+}
+
+/** The drafts a reload left, as far as they read: one that doesn't is dropped, never fixed. */
+export function draftsFrom(value: unknown): Record<string, Draft> {
+  const drafts: Record<string, Draft> = {};
+  if (!isObject(value)) return drafts;
+  for (const [mindId, draft] of Object.entries(value)) {
+    if (isDraft(draft)) drafts[mindId] = draft;
+  }
+  return drafts;
+}
+
+/**
+ * The drafts as they are after a reload put back what it left: what the app already put in a
+ * composer at its start (a Question that waited for Continue) wins over what the reload left.
+ */
+export function withReloaded(
+  now: Readonly<Record<string, Draft>>,
+  left: unknown,
+): Record<string, Draft> {
+  return { ...draftsFrom(left), ...now };
+}
+
 interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */
   drafts: Readonly<Record<string, Draft>>;

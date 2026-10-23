@@ -154,7 +154,7 @@ import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
-import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
+import { CLASSIFICATION_FLOW_SENDS, createLibrary, SCAN_IMAGES_FLOW_SENDS } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
 import {
@@ -2270,9 +2270,17 @@ export function createCore(adapters: CoreAdapters): Core {
           return supportsLibraryImages(classifier.modelId) && classifier.usePageImages === true;
         case "jev":
           return false;
-        case "chat":
-          return chat.readsImages(classifier.choice) || chat.imageModel(classifier.choice) !== null;
+        case "chat": {
+          const reader = chat.imageModel(classifier.choice);
+          return reader !== null && scanImagesAllowed(reader);
+        }
       }
+    },
+    pagesWaitFor: (classifier) => {
+      if (classifier.kind !== "chat") return null;
+      const reader = chat.imageModel(classifier.choice);
+      const service = reader && chat.describeModel(reader)?.service;
+      return service && !scanImagesAllowed(reader) ? service : null;
     },
     async pageImages(id, contentHash, signal) {
       try {
@@ -2322,15 +2330,15 @@ export function createCore(adapters: CoreAdapters): Core {
       const prepared = await chat.prepareModel(choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
-      // prepareModel got consent for everything the classification flow sends, page images included.
-      const images = readsImages(prepared.capabilities);
+      // A scan's page images go only where the User allowed them (the "scan-images" flow).
+      const images = readsImages(prepared.capabilities) && scanImagesAllowed(choice);
       let chosen: GroupClassifier = {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
         model: { id: choice.modelId, images, reason: "selected" as const },
       };
       // A scan goes to the image model when this one can't read its pages.
-      const imageModel = images ? null : chat.imageModel(choice);
-      if (imageModel) {
+      const imageModel = readsImages(prepared.capabilities) ? null : chat.imageModel(choice);
+      if (imageModel && scanImagesAllowed(imageModel)) {
         chosen = withPageReader(chosen, async () => {
           const reader = await chat.prepareModel(imageModel, "classification");
           return {
@@ -2343,6 +2351,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return plan ? pacedBy(chosen, plan.run) : chosen;
     },
   });
+  function scanImagesAllowed(reader: ChatModelChoice): boolean {
+    const service = chat.describeModel(reader)?.service;
+    return !service || consent.allows("scan-images", service);
+  }
   /** The services Organize sends to: its model's, and the image model's for the scans it can't read. */
   const classificationServices = async (): Promise<ExternalService[]> => {
     const classifier = organizeModelOf(library.settings());
@@ -2359,6 +2371,18 @@ export function createCore(adapters: CoreAdapters): Core {
     sends: CLASSIFICATION_FLOW_SENDS,
     background: true,
     services: classificationServices,
+  });
+  // The page images of a scan with no text, a flow of their own that choosing a provider doesn't allow.
+  consent.registry.register({
+    id: "scan-images",
+    sends: SCAN_IMAGES_FLOW_SENDS,
+    background: true,
+    services: async () => {
+      const classifier = organizeModelOf(library.settings());
+      const reader = classifier?.kind === "chat" ? chat.imageModel(classifier.choice) : null;
+      const service = reader && chat.describeModel(reader)?.service;
+      return service ? [service] : [];
+    },
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();

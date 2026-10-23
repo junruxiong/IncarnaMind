@@ -44,6 +44,7 @@ import {
 } from "../../../shared/charts";
 import type { PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
+import { holdsNothing } from "../../../shared/madeMind";
 import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   changedParagraphs,
@@ -55,7 +56,6 @@ import {
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import {
   createElement,
-  holdsNothing,
   type NodeJSON,
   nodeOf,
   syncContent,
@@ -177,6 +177,11 @@ export interface MindToolsOptions {
   minds: MindsForTools;
   /** The model the Answer is written with: edits are made on it too. */
   prepared: PreparedChatModel;
+  /**
+   * The same model asked to skip thinking, for edit_mind's rewrites: one thinks for a minute
+   * before rewriting a paragraph as asked (Kimi K2.6, #1635). Without it, `prepared`.
+   */
+  rewriting?(): Promise<PreparedChatModel>;
   /** The Mind the Question was asked from, and the Blocks the User selected in it; null: none. */
   focused: { mindId: string; blockIds: readonly string[] } | null;
   /** Where a new Mind goes: the Folder of the Question's Search scope when that is one Folder. */
@@ -1816,7 +1821,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         mindId: mind.id,
         ...stretch,
         instruction,
-        prepared: options.prepared,
+        prepared: (await options.rewriting?.()) ?? options.prepared,
         signal,
         beforeWriting: () => minds.checkpoint(mind.id),
         written: (request, proposals) =>

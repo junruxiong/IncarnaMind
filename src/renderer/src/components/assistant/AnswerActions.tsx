@@ -7,7 +7,13 @@ import { useT } from "../../i18n";
 import { saidInLine } from "../../lineNames";
 import { useAppStore } from "../../store";
 import { useAnswerLine, useUndo } from "../../undo";
-import { CheckLineIcon, ChevronDownLineIcon, CopyLineIcon, PlusLineIcon } from "../lineIcons";
+import {
+  CheckLineIcon,
+  ChevronDownLineIcon,
+  CopyLineIcon,
+  MindLineIcon,
+  PlusLineIcon,
+} from "../lineIcons";
 import { useGoesBy } from "../UndoLine";
 
 /** How long "Copied" says so. */
@@ -15,7 +21,7 @@ const COPIED_MS = 1500;
 
 /**
  * Under an Answer in the assistant (#201, #391; DESIGN.md, Answer): only
- * "Copy · Add to note ▾", after "Stopped" for one stopped; on hover or focus,
+ * "Copy · Add to note ▾ · New Mind" (#1559), after "Stopped" for one stopped; on hover or focus,
  * and always on the newest. Its model, scope and searches are in its steps.
  * While it is written, Stop is the composer's and the wait line's, not here.
  * Once added, "Added to “{Mind}” · Undo" (⌘Z too), while that can be taken
@@ -28,6 +34,7 @@ export function AnswerActions({
   focusedMindName,
   onAdd,
   onPick,
+  onNewMind,
 }: {
   answer: ConversationAnswer;
   streaming: boolean;
@@ -37,6 +44,8 @@ export function AnswerActions({
   focusedMindName: string | null;
   onAdd(): void;
   onPick(anchor: HTMLElement): void;
+  /** The Answer as it is, in the empty Mind in front, else in a new Mind (`AddTarget` "new"). */
+  onNewMind(): void;
 }) {
   const t = useT();
   const pick = useRef<HTMLButtonElement>(null);
@@ -157,6 +166,18 @@ export function AnswerActions({
               <ChevronDownLineIcon className="size-3" />
             </button>
           </span>
+          <button
+            type="button"
+            data-testid="answer-new-mind"
+            aria-label={t("answer.newMind.label")}
+            title={t("answer.newMind.label")}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onNewMind}
+            className="assistant-answer-action"
+          >
+            <MindLineIcon className="size-3.5" />
+            {t("answer.newMind")}
+          </button>
         </>
       )}
     </div>

@@ -49,6 +49,7 @@ import { askedFor, waitsForUser as heldForUser } from "../../shared/askedChanges
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
+import { holdsNothing } from "../../shared/madeMind";
 import { linkTableSources } from "../../shared/markdownTables";
 import type { MeetingHelpKind } from "../../shared/meetingHelp";
 import {
@@ -161,7 +162,6 @@ import {
   contentHash,
   createElement,
   findBlock,
-  holdsNothing,
   isEdited,
   type NodeJSON,
   syncContent,
@@ -227,6 +227,7 @@ import {
   meetingHelpInstructions,
   newestSaid,
   withFound,
+  withHelp,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
@@ -1832,11 +1833,22 @@ export function createAnswers(options: AnswersOptions) {
       const focusedEmpty =
         minds !== undefined && focusedId !== null && minds.read(focusedId, holdsNothing);
       let documentNames: string[] | undefined;
+      let rewriting: Promise<PreparedChatModel> | undefined;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
+              rewriting: () => {
+                rewriting ??= options.prepareModel(model, "off").catch((error: unknown) => {
+                  console.warn(
+                    `edit_mind's rewrite couldn't be asked of ${prepared.provider.kind}/${prepared.modelId} without thinking, so it thinks:`,
+                    error,
+                  );
+                  return prepared;
+                });
+                return rewriting;
+              },
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
               language: answerLanguage(context.question),
@@ -2128,17 +2140,22 @@ export function createAnswers(options: AnswersOptions) {
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            help
-              ? meetingHelpInstructions(help, {
-                  found: foundAhead,
-                  language: options.interfaceLanguage(),
-                  callLanguage,
-                })
-              : language,
+            help ? "" : language,
           ]
             .filter(Boolean)
             .join("\n\n"),
-        messages,
+        // A button's own instructions go with its Question: the instructions above stay the same
+        // for every button, so a call's presses share them in the provider's cache (#1634).
+        messages: help
+          ? withHelp(
+              messages,
+              meetingHelpInstructions(help, {
+                found: foundAhead,
+                language: options.interfaceLanguage(),
+                callLanguage,
+              }),
+            )
+          : messages,
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,

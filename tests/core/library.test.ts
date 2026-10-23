@@ -380,7 +380,7 @@ describe("Library groups", () => {
       flow: {
         id: "classification",
         service: { id: "https://api.openai.com", name: "OpenAI" },
-        sends: ["groups", "tags", "document-excerpts", "page-images"],
+        sends: ["groups", "tags", "document-excerpts"],
       },
       consent: "accepted",
       decidedAt: expect.any(String),
