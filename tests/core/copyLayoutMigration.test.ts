@@ -61,7 +61,7 @@ function mindContent(): Uint8Array {
 /**
  * A data folder as the copy layout left it (before migration 21): one ready
  * Document copied into documents/ under its hash, filed in an in-app Folder,
- * with a Tag, and a Mind citing it. `more` adds to it in the same layout.
+ * with a Tag, and a Mind citing it. `more` adds to it first, in the same layout.
  */
 async function copyLayoutDataFolder(more?: (db: Database) => void): Promise<string> {
   const dataDir = await createTempDataFolder();
@@ -73,6 +73,7 @@ async function copyLayoutDataFolder(more?: (db: Database) => void): Promise<stri
       db,
       migrations.filter((migration) => migration.version < 21),
     );
+    more?.(db);
     db.run(
       `INSERT INTO folders (id, parent_id, name, created_at, updated_at) VALUES (?, NULL, 'Ocean', ?, ?)`,
       [FOLDER, AT, AT],
@@ -114,7 +115,6 @@ async function copyLayoutDataFolder(more?: (db: Database) => void): Promise<stri
        VALUES ('old-update', ?, ?, ?, ?)`,
       [MIND, mindContent(), AT, AT],
     );
-    more?.(db);
   } finally {
     db.close();
   }
@@ -235,21 +235,24 @@ describe("Migration 21: from copies in the data folder to Documents in place", {
 });
 
 /** A Document the copy layout deleted at `deletedAt`, which removed its copy unless another had it. */
-const deletedEarlier = (id: string, contentHash: string, deletedAt: string) => (db: Database) =>
-  db.run(
-    `INSERT INTO documents (id, content_hash, name, kind, size, status, processing_version,
+const deletedEarlier =
+  (id: string, contentHash: string, deletedAt: string, kind = "markdown") =>
+  (db: Database) =>
+    db.run(
+      `INSERT INTO documents (id, content_hash, name, kind, size, status, processing_version,
        tagging_status, created_at, updated_at, deleted_at)
-     VALUES (?, ?, 'Old tide notes', 'markdown', ?, 'ready', ?, 'tagged', ?, ?, ?)`,
-    [
-      id,
-      contentHash,
-      Buffer.byteLength(NOTES),
-      BigInt(PROCESSING_VERSION),
-      deletedAt,
-      deletedAt,
-      deletedAt,
-    ],
-  );
+     VALUES (?, ?, 'Old tide notes', ?, ?, 'ready', ?, 'tagged', ?, ?, ?)`,
+      [
+        id,
+        contentHash,
+        kind,
+        Buffer.byteLength(NOTES),
+        BigInt(PROCESSING_VERSION),
+        deletedAt,
+        deletedAt,
+        deletedAt,
+      ],
+    );
 
 const OLD_DOCUMENT = "3d1c9b7a-5e2f-4a8b-9c6d-7e0f1a2b3c4d";
 
@@ -351,6 +354,20 @@ describe("A copied Document in Recently deleted (#1432)", { timeout: 30_000 }, (
       { id: OLD_DOCUMENT, path: copyIn(dataDir), purged: 1 },
       { id: DOCUMENT, path: copyIn(dataDir), purged: 0 },
     ]);
+    await core.deletePermanently([{ kind: "document", id: OLD_DOCUMENT }]);
+    expect(existsSync(copyIn(dataDir))).toBe(true);
+    expect(await opened(core)).toBe(NOTES);
+  });
+
+  test("a copy a live Document of another kind has stays its own, also when the other is deleted for good", async () => {
+    // The same bytes deleted as a text file before the upgrade, then added again as Markdown.
+    const dataDir = await copyLayoutDataFolder(
+      deletedEarlier(OLD_DOCUMENT, HASH, new Date(Date.now() - DAY).toISOString(), "text"),
+    );
+
+    const core = startCore(dataDir);
+
+    expect(await opened(core)).toBe(NOTES);
     await core.deletePermanently([{ kind: "document", id: OLD_DOCUMENT }]);
     expect(existsSync(copyIn(dataDir))).toBe(true);
     expect(await opened(core)).toBe(NOTES);

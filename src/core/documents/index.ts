@@ -1321,15 +1321,20 @@ export function createDocuments(options: DocumentsOptions) {
   // Startup: Documents copied into the data folder by the old layout (before
   // ADR-0010) are files kept there, until the User links their originals.
   // Each copy gets its kind's extension, so another app can open it. One
-  // deleted then can still be restored, so it gets its path too.
-  for (const row of db.all<{ id: string; content_hash: string; kind: string }>(
-    "SELECT id, content_hash, kind FROM documents WHERE path IS NULL AND purged_at IS NULL",
+  // deleted then can still be restored, so it gets its path too, after the live
+  // ones and without renaming: its copy went with the delete, unless a live one
+  // with the same content, maybe of another kind, still has it.
+  for (const row of db.all<{ id: string; content_hash: string; kind: string; deleted: number }>(
+    `SELECT id, content_hash, kind, deleted_at IS NOT NULL AS deleted FROM documents
+     WHERE path IS NULL AND purged_at IS NULL ORDER BY deleted`,
   )) {
     const bare = join(legacyFolder, row.content_hash);
     const extension = DOCUMENT_EXTENSIONS[row.kind as DocumentKind]?.[0];
     const named = extension ? `${bare}.${extension}` : bare;
     try {
-      if (named !== bare && !existsSync(named) && existsSync(bare)) renameSync(bare, named);
+      if (!row.deleted && named !== bare && !existsSync(named) && existsSync(bare)) {
+        renameSync(bare, named);
+      }
     } catch (error) {
       reportError(error);
     }
