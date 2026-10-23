@@ -634,6 +634,7 @@ export const en = {
   "claim.mark.label": "Sentence check: {state}",
   "claim.card.label": "Sentence check: {state}. {sentence}",
   "claim.addAsCitation": "Add as Citation",
+  "claim.alreadyCited": "Already cited",
   "claim.calculated.title": "Calculated from your Documents",
   "claim.calculated.stated": "The sentence says {stated}.",
   "claim.calculated.inputs": "Worked out from",
