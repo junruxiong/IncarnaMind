@@ -27,7 +27,8 @@
  * chart (#1091); "Make a bar chart of rent by lease" does the same with each unit's
  * monthly rent, so Use all can draw it again from every lease.
  * "Write a short summary of this agreement" (为这份协议写一份简短摘要) calls
- * add_to_mind with it, for the Mind in focus.
+ * add_to_mind with it, for the Mind in focus. "Write a short summary of this document"
+ * (为这份文件写一份简短摘要) does too, "Written from" the first Document on screen (#1334).
  * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
  * answers that no Mind is open when that Mind has no name, as models did (#1212).
  * "Say you added the risks" (说你加了风险部分) claims a write and makes none.
@@ -108,6 +109,9 @@ const SUMMARY = [
 
 /** The newcomer's first request (#1174): a short summary of "this agreement", written into the Mind in focus. */
 const SUMMARY_HERE = /\bwrite a short summary of this agreement\b|为这份协议写一份简短摘要/i;
+
+const SUMMARY_OF_THIS = /\bwrite a short summary of this document\b|为这份文件写一份简短摘要/i;
+const ON_SCREEN = /^On screen now: "([^"]+)"/m;
 
 /** A request to change the Mind so it has a table: "…, with a table" (加上表格). */
 const WITH_A_TABLE = /\bwith a table\b|加上?表格/i;
@@ -210,6 +214,14 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     if (made === undefined)
       return { tool: "create_mind", input: { title: "Summary", content: SUMMARY } };
     return { text: firstSentence(made) };
+  }
+  if (SUMMARY_OF_THIS.test(question)) {
+    const added = lastResult(prompt, "add_to_mind");
+    if (added !== undefined) return { text: firstSentence(added) };
+    const shown = ON_SCREEN.exec(lastUserText(prompt))?.[1];
+    return shown
+      ? { tool: "add_to_mind", input: { content: `Written from ${shown}.` } }
+      : { text: "Which Document do you mean?" };
   }
   if (SUMMARY_HERE.test(question)) {
     const added = lastResult(prompt, "add_to_mind");
