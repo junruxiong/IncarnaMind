@@ -21,3 +21,8 @@ export function inStep<T>(step: string, work: () => T): T {
 }
 
 export const flowNow = (): FlowTag | null => current.getStore() ?? null;
+
+/** Runs `work` in no flow: work started from within one, but not for it, isn't its. */
+export function outsideFlows<T>(work: () => T): T {
+  return current.exit(work);
+}
