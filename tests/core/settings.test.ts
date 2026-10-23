@@ -249,6 +249,24 @@ describe("Settings", () => {
     after.close();
   });
 
+  test("where Word and PDF put the Citations is not answered until the User answers, and each answer is kept (#1600)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    expect((await before.getSettings()).user.exportOptions.citationPlace).toBeUndefined();
+
+    for (const answer of ["list", "footnotes"] as const) {
+      const saved = await before.updateSettings({
+        user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: answer } },
+      });
+      expect(saved.user.exportOptions.citationPlace).toBe(answer);
+    }
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).user.exportOptions.citationPlace).toBe("footnotes");
+    after.close();
+  });
+
   test.each([
     { saved: true, read: null, name: "on is not an answer, so the question is asked once" },
     { saved: false, read: "leave", name: "off was a choice not to mark" },
@@ -477,6 +495,10 @@ describe("Settings", () => {
           },
         },
       },
+    },
+    {
+      name: "a place for Citations that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: "margin" } } },
     },
     {
       name: "a way to show someone's changes that isn't one",

@@ -35,6 +35,7 @@
     "eval:references": "vitest run --config eval/references/vitest.config.ts",
     "eval:ocr": "vitest run --config eval/ocr/vitest.config.ts",
     "eval:transcription": "vitest run --config eval/transcription/vitest.config.ts",
+    "eval:speakers": "vitest run --config eval/speakers/vitest.config.ts",
     "eval:score": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON eval/score.ts",
     "catalog:update": "node --import ./scripts/tsResolve.mjs scripts/catalogModels.ts",
     "styles:pack": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/tsResolve.mjs scripts/citationStylePack.ts",
