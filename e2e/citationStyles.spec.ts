@@ -129,7 +129,11 @@ async function chooseStyle(window: Page, search: string, label: string): Promise
   await window.keyboard.type(search);
   // Results can still be re-ranked after the first match shows ("IEEE Access" above "IEEE"), so the
   // style is picked by its exact name rather than by Enter on whatever is first at that moment.
-  await picker.getByTestId("citation-style-option-label").getByText(label, { exact: true }).first().click();
+  await picker
+    .getByTestId("citation-style-option-label")
+    .getByText(label, { exact: true })
+    .first()
+    .click();
   await expect(picker).toBeHidden();
 }
 
