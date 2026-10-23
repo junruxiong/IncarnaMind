@@ -30,6 +30,7 @@
  * add_to_mind with it, for the Mind in focus.
  * "Write a brief summary" (写一份简要总结) adds one to the Mind in <mind>, but
  * answers that no Mind is open when that Mind has no name, as models did (#1212).
+ * "Say you added the risks" (说你加了风险部分) claims a write and makes none.
  */
 
 import { answerReply, CITED_ANSWER } from "./answers";
@@ -132,8 +133,26 @@ const firstSentence = (result: string) => /^[^.。]*[.。]?/u.exec(result)?.[0] 
  * The scripted assistant's choice with the Minds' Tools (see the top of this
  * file): a Tool call, the reply once it has returned, or null to answer.
  */
+/** "Say you added the risks" (说你加了风险部分): a reply that claims a write no call made (#1559). */
+const CLAIMS_A_WRITE = /^say you added the risks|^说你加了风险部分/i;
+
 export function mindsReply(prompt: Prompt, asked: string, names: readonly string[]): Reply | null {
   if (!names.includes("edit_mind")) return null;
+  // Claims a write and makes none, asked again too, so the app then says nothing was written.
+  const original = userText(
+    prompt.findLast(
+      (message) => message.role === "user" && !userText(message).includes("<tool-record>"),
+    ),
+  )
+    .split("\n\n")
+    .at(-1);
+  if (original && CLAIMS_A_WRITE.test(original)) {
+    return {
+      text: /\p{Script=Han}/u.test(original)
+        ? "我已经把风险部分加进了“Q3 review”。"
+        : "I've added a risks section to “Q3 review”.",
+    };
+  }
   // Asked "slowly", only its pace changes.
   const question = asked.replace(/\s+slowly$/i, "");
   const paragraphs = paragraphsReply(prompt, question);
@@ -169,7 +188,7 @@ export function mindsReply(prompt: Prompt, asked: string, names: readonly string
     const names = [...listed.matchAll(/^- (.+)$/gm)].map((line) => line[1]).sort();
     const content = `Written from ${names.join(", ")}.`;
     // An empty Mind is filled; any other gets a new one beside it.
-    return systemOf(prompt).includes("write it there with add_to_mind")
+    return systemOf(prompt).includes("The Mind in <mind> is open and still empty")
       ? { tool: "add_to_mind", input: { content } }
       : { tool: "create_mind", input: { title: "Summary", content } };
   }

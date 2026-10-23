@@ -112,6 +112,10 @@ function deleteFrom(row: HTMLElement | null, documentId: string): void {
 /** Clicks on these, inside a row, are theirs, not the row's. */
 const OWN_CLICKS = "button:not([data-row-main]), input, a, [role=menu], [role=dialog]";
 
+/** Where a modifier-click is still its own: a field, a link, a menu or the open Cite as panel. */
+const KEEPS_MODIFIER_CLICKS =
+  "input, textarea, select, a, [role=menu], [role=dialog], [data-cite-panel]";
+
 /**
  * A Document's row on the Library page: its name (with the kind's icon, a
  * problem's word, and "Suggested" while Organize's Folder waits), its Tags, its
@@ -201,6 +205,15 @@ export const LibraryRow = memo(function LibraryRow({
       {...peek.rowProps}
       {...objectMenu.rowProps}
       onKeyDown={onKeyDown}
+      // ⌘-, Ctrl- and Shift-click only change the selection, wherever in the row they land, a chip
+      // or the Tags included: nothing else opens (interaction rule 6, #1509).
+      onClickCapture={(event) => {
+        if (!(event.metaKey || event.ctrlKey || event.shiftKey)) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || target.closest(KEEPS_MODIFIER_CLICKS)) return;
+        event.stopPropagation();
+        select.onClick(event);
+      }}
       onClick={(event) => {
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest(OWN_CLICKS) || target?.closest("[data-row-cell=tags]")) return;
@@ -341,7 +354,7 @@ export const LibraryRow = memo(function LibraryRow({
         </span>
       </div>
       {citing && doc.reference && (
-        <div id={citePanelId} className="min-w-0 pr-1.5 pb-3 pl-14">
+        <div id={citePanelId} data-cite-panel="" className="min-w-0 pr-1.5 pb-3 pl-14">
           <CiteAsPanel
             document={doc}
             record={doc.reference}

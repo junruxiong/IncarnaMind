@@ -575,14 +575,24 @@ export type CaptureState = "recording" | "denied" | "unavailable" | "ended";
 
 /** Where a capture delivers what it hears. */
 export interface AudioSink {
-  /** Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit. */
-  audio(source: AudioSource, samples: Int16Array): void;
+  /**
+   * Samples from one source, in the order captured: `MEETING_SAMPLE_RATE` mono, signed 16-bit.
+   * `capturedAt` is when the last of them was captured, in ms since the epoch on the clock `now`
+   * reads; without it they count as captured as they arrive. Microphone samples captured while
+   * the User had it paused are dropped, however late they arrive.
+   */
+  audio(source: AudioSource, samples: Int16Array, capturedAt?: number): void;
   /** A source started, couldn't start, or stopped. */
   state(source: AudioSource, state: CaptureState): void;
 }
 
 /** One recording in progress, from `AudioCapture.start`. */
 export interface CaptureSession {
+  /**
+   * Stops the microphone at its source, or starts it again; the computer's sound goes on. A
+   * microphone that is off isn't open, so no samples come from it.
+   */
+  setMicrophone(on: boolean): void;
   /** Stops capturing. Resolves once the last samples have reached the sink. */
   stop(): Promise<void>;
 }
@@ -719,6 +729,36 @@ export interface EngineSwitch {
   from: TranscriptionEngine;
   to: TranscriptionEngine;
   reason: EngineSwitchReason;
+}
+
+/** The speaker models' downloaded files (#138), absolute paths, as the core hands them to a `SpeakerSeparator`. */
+export interface SpeakerModelFiles {
+  /** Finds where each voice speaks: pyannote's segmentation model. */
+  segmentation: string;
+  /** Tells voices apart: a speaker embedding model. */
+  embedding: string;
+  threads: number;
+}
+
+/** Where one voice speaks, in the Meeting's time. Voices are numbered from 0 in the order first heard. */
+export interface VoiceTurn {
+  startMs: number;
+  endMs: number;
+  voice: number;
+}
+
+/**
+ * Tells the voices in one source's recording apart after the call (#138), off the core's
+ * thread and at low priority: the desktop app runs it in a utility process of its own
+ * (src/main/speakerSeparator.ts); tests pass a fake. `parts` are the source's WAV files
+ * (16-bit PCM, mono, `MEETING_SAMPLE_RATE`), each with where it starts in the Meeting's time.
+ * Rejects if the models can't load or the audio can't be read.
+ */
+export interface SpeakerSeparator {
+  separate(request: {
+    parts: readonly { path: string; offsetMs: number }[];
+    model: SpeakerModelFiles;
+  }): Promise<VoiceTurn[]>;
 }
 
 /**
@@ -858,6 +898,11 @@ export interface CoreAdapters {
    * pinned Hugging Face revisions; tests give no files for a fake that needs none.
    */
   textRecognitionModelSource?: EmbeddingModelSource;
+  /**
+   * How many scans are read at once (#1502): what the computer can bear, as the host works it
+   * out with `scansAtOnce` (src/core/documents/processor.ts). Absent: one.
+   */
+  scansAtOnce?: number;
   /**
    * Where the built-in reranking model's files come from. Defaults to the
    * pinned Hugging Face revision; tests give no files for a fake that needs none.
@@ -1028,6 +1073,13 @@ export interface CoreAdapters {
    * that aren't about transcripts): Meetings record without a Transcript.
    */
   transcriber?: Transcriber;
+  /**
+   * Tells a Meeting's speakers apart after the call (see `SpeakerSeparator`). Absent (tests
+   * that aren't about it): lines keep the labels of where they came from.
+   */
+  speakerSeparator?: SpeakerSeparator;
+  /** Where the speaker models are downloaded from. Defaults to the pinned Hugging Face revisions. */
+  speakerModelSource?: { segmentation: EmbeddingModelSource; embedding: EmbeddingModelSource };
   /**
    * Where the speech-to-text model and Silero VAD are downloaded from.
    * Defaults to the pinned Hugging Face revisions; tests give no files for a

@@ -17,12 +17,13 @@ import {
   type ClaimCheckAction,
   type ProviderError,
 } from "../../core/api";
-import { mindModelOf } from "../../shared/mindModel";
 import { core } from "./core";
+import { alreadyCitedBy } from "./editor/alreadyCited";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
 import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
 import { resolveProposalsIn } from "./editWithAi";
+import { modelInUseOf } from "./modelInUse";
 
 /** Why a check gave no marks, or what it left out, for the check badge's card. */
 export type CheckProblem =
@@ -147,7 +148,7 @@ export async function checkSentences(
       ...(more.length > 0 && { more: more.map(({ from, to }) => ({ from, to })) }),
       action,
       allDocuments,
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = {
@@ -250,14 +251,15 @@ const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hang
 /**
  * Adds the Passage a check found as the sentence's Citation, at its end,
  * before its closing punctuation, and takes the check's mark off: the
- * Citation's own check stands for it now. One step for ⌘Z.
+ * Citation's own check stands for it now. One step for ⌘Z. A sentence that
+ * already cites those words gets no second Citation.
  */
 export function addAsCitation(editor: Editor, claim: ShownClaim): boolean {
   const evidence = claim.check.evidence;
   const { state } = editor;
   const type = state.schema.nodes[CITATION_NODE];
   const mark = state.schema.marks[CLAIM_CHECK_MARK];
-  if (!evidence || !type || !mark) return false;
+  if (!evidence || !type || !mark || alreadyCitedBy(state, claim)) return false;
   const words = state.doc.textBetween(claim.sentence.from, claim.sentence.to, "\n", "￼");
   const closing = CLOSING.exec(words)?.[0].length ?? 0;
   const at = claim.sentence.to - closing;

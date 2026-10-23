@@ -20,7 +20,7 @@ import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import { ASKED_AGAIN } from "../../eval/everyday/reasks";
 import type { AnswerToolCall } from "../../src/core";
-import { askAgainNote, askToWriteNote } from "../../src/core/answers/claimedChanges";
+import { askAgainNote } from "../../src/core/answers/claimedChanges";
 import { scriptedModel } from "../helpers/models";
 
 const PAPERS = [
@@ -199,11 +199,11 @@ describe("The everyday request guards", () => {
     expect(failures).toEqual([{ kind: "no-citations" }]);
   });
 
-  // protects=a Question answered by cited text written into a Mind has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
-  test("a Question answered in a Mind, cited there, has its Citations", () => {
+  // protects=a request that may go either way, answered by cited text written into a Mind, has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
+  test("a request either way, answered in a Mind and cited there, has its Citations", () => {
     const failures = requestFailures(
       outcome({
-        expected: { write: false, cite: true, coverAll: false },
+        expected: { write: false, cite: true, coverAll: false, either: true },
         answer: {
           text: "The summaries are ready.",
           citations: [],
@@ -213,6 +213,30 @@ describe("The everyday request guards", () => {
       }),
     );
     expect(failures).toEqual([]);
+  });
+
+  // protects=a Question that changes a Mind fails, and a piece that lands elsewhere than its case says fails (#1559); fails_when=either passes; no_claim=none beyond protects.
+  test("a Question that changes a Mind, and a piece in the wrong place, fail", () => {
+    const answer = { text: "Done.", citations: [], toolCalls: [created], steps: null };
+    expect(
+      requestFailures(
+        outcome({ expected: { write: false, cite: false, coverAll: false }, answer }),
+      ),
+    ).toEqual([{ kind: "changed-unasked" }]);
+    expect(
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, into: "asked-from" },
+          answer,
+          askedFrom: "page",
+        }),
+      ),
+    ).toEqual([{ kind: "wrong-place", wanted: "asked-from" }]);
+    expect(
+      requestFailures(
+        outcome({ expected: { write: true, cite: false, coverAll: false, into: "new" }, answer }),
+      ),
+    ).toEqual([]);
   });
 
   // protects=a Document in scope counts as covered only when cited or named as left out, not merely named; fails_when=a name alone passes; no_claim=none beyond protects.
@@ -501,9 +525,8 @@ describe("An earlier try the User never saw", () => {
     expect(says("我上一条回复说引文已经换了，这是错的。", false)).toEqual([]);
   });
 
-  // protects=the mark the evaluation counts the app's asks by is in both notes the app asks with; fails_when=a note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.
-  test("both notes the app asks again with carry the mark the evaluation watches for", () => {
-    expect(askToWriteNote([], () => null)).toContain(ASKED_AGAIN);
+  // protects=the mark the evaluation counts the app's asks by is in the note the app asks with; fails_when=the note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.
+  test("the note the app asks again with carries the mark the evaluation watches for", () => {
     expect(askAgainNote(["added"], [], () => null)).toContain(ASKED_AGAIN);
   });
 });
@@ -532,6 +555,45 @@ describe("The Question's language (#892, #1273)", () => {
       "The contract says “合同期限为三年，自起始日期算起。” which is three years from the start date.";
     expect(chineseShare(quoting)).toBe(0);
     expect(summary(quoting, "en")).toEqual([]);
+  });
+});
+
+describe("A figure the numbers give is calculated (#1444)", () => {
+  const asked = (text: string, shown: string[]) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false, figure: /11\.73亿美元/ },
+        answer: {
+          text,
+          citations: [citation("reserves", 1)],
+          toolCalls: [],
+          steps: null,
+          figures: shown.map((each) => ({ shown: each })),
+        },
+        scoped: [{ id: "reserves", name: "官方储备资产（2026年）" }],
+        citedInMinds: [],
+      }),
+    );
+
+  // protects=an Answer that gives both cited figures and says it couldn't work out their difference fails twice, for the missing figure and for giving up; fails_when=it passes; no_claim=the figure's value.
+  test("an Answer with no figure that gives up on the difference fails", () => {
+    const failures = asked(
+      "9月末为34002.51亿美元[^1]。我没能算出两者的差额，所以这里不给具体数字。",
+      [],
+    );
+    expect(failures).toEqual([
+      { kind: "no-figure", wanted: "11\\.73亿美元", shown: [] },
+      { kind: "gave-up", said: "我没能算出两者的差额，所以这里不给具体数字。" },
+    ]);
+  });
+
+  test("an English Answer that says it couldn't calculate it fails; one with the figure passes", () => {
+    expect(
+      asked("I couldn't calculate the change, so I haven't worked out the difference.", [])
+        .map((each) => each.kind)
+        .sort(),
+    ).toEqual(["gave-up", "no-figure"]);
+    expect(asked("增加了11.73亿美元。", ["11.73亿美元"])).toEqual([]);
   });
 });
 
