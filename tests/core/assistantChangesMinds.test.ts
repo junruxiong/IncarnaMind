@@ -93,7 +93,7 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     ]);
     expect(mindCalls(answer)[0]?.status).toBe("done");
     expect(answer.text).toBe("Shortened the summary in “Q3 review”: dropped two fillers.");
-    expect(lastResult(model)).toMatch(/^Proposed 2 changes in “Q3 review” \(from 11 to 9 words\)/);
+    expect(lastResult(model)).toMatch(/^Changed 2 places in “Q3 review” \(from 11 to 9 words\)/);
   });
 
   // protects=edit_mind's rewrite is asked of the Answer's model with thinking off, as its quick calls are: a rewrite as asked needs no reasoning first, and Kimi K2.6 thought for a minute on one (#1635); fails_when=the rewrite goes to the Answer's thinking model; no_claim=how well a real model rewrites without thinking, which the everyday evaluation measures.

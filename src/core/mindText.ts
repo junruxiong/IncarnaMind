@@ -129,9 +129,13 @@ export type FailedSentence = { id: string } & (
       check: "unsupported";
       folder: string | null;
       nearest: { quote: string; source: string } | null;
+      covers: { covered: string; uncovered: string; quote: string; source: string } | null;
+      /** What the sentence's own Citations support and don't, as its card says. */
+      citations: { count: number; covered: string; uncovered: string } | null;
     }
+  | { check: "own-workings" }
   | { check: "needs-recheck"; why: RecheckReason }
-  | { check: "cited-case-unchecked" }
+  | { check: "cited-case-unchecked"; unsupported: boolean }
 );
 
 /** Part of a change still waiting to be accepted (a Proposal), read for review (#107). */
