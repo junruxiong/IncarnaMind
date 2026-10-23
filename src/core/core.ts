@@ -66,6 +66,8 @@ import {
   type AddDocumentsResult,
   type ChatModelChoice,
   type ChatProviderKind,
+  type CheckRecordFailure,
+  type CheckRecordFormat,
   type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
@@ -85,6 +87,7 @@ import {
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type SavedFile,
   type ScannedQuoteInput,
   type SearchScope,
   type Task,
@@ -145,6 +148,7 @@ import {
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
+  TranslatableError,
 } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
@@ -4365,9 +4369,33 @@ export function createCore(adapters: CoreAdapters): Core {
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
-    saveCheckRecord: async (mindId, format) => {
-      const { fileName, data } = await checkRecord.file(mindId, format);
-      return saveExport(fileName, data);
+    saveCheckRecord: async (mindId) => {
+      const saved: { format: CheckRecordFormat; file: SavedFile }[] = [];
+      const failures: CheckRecordFailure[] = [];
+      let firstError: unknown;
+      for (const { format, make } of await checkRecord.files(mindId)) {
+        try {
+          const { fileName, data } = await make();
+          const result = await saveExport(fileName, data);
+          if (result.status !== "saved") return result;
+          saved.push({ format, file: result.file });
+        } catch (error) {
+          firstError ??= error;
+          failures.push({
+            format,
+            message: error instanceof Error ? error.message : String(error),
+            wording: error instanceof TranslatableError ? error.wording : null,
+          });
+        }
+      }
+      const [first] = saved;
+      if (!first) throw firstError;
+      return {
+        status: "saved",
+        file: first.file,
+        withCsv: first.format === "pdf" && saved.some((each) => each.format === "csv"),
+        failures,
+      };
     },
     saveComparisonExport: async (input) => {
       const ref: Record<string, unknown> = isRecord(input) ? input : {};
