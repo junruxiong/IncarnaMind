@@ -517,7 +517,10 @@ export function createMeetingFill(options: MeetingFillOptions) {
             problem: { kind: "stopped", message: "" },
             blocks: [],
           });
-        } else if (meetings.get(meetingId).transcript?.state === "saved") start(meetingId);
+        } else {
+          const transcript = meetings.get(meetingId).transcript;
+          if (transcript?.state === "saved" && !transcript.separating) start(meetingId);
+        }
       }
     },
 
