@@ -21,6 +21,7 @@ import {
   splitNumber,
   waitingChanges,
 } from "../../src/renderer/src/editor/theirChanges";
+import { authorShown, filterOf, shownIn } from "../../src/renderer/src/reviewPane";
 import { decideProposals, pendingProposals } from "../../src/shared/proposals";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import type { MindClient } from "../helpers/mindClient";
@@ -125,6 +126,32 @@ describe("the reviewing pane's cards", () => {
   test("a file with no changes or comments has nothing to review", async () => {
     const client = await imported(wordFile({ body: paragraph("1. A clause nobody changed.") }));
     expect(itemsOf(client)).toEqual([]);
+  });
+});
+
+describe("which cards a pane shows", () => {
+  const cards = [
+    { kind: "change", author: "Dana Kim", state: "accepted" },
+    { kind: "change", author: "Luis Ortega", state: "accepted" },
+    { kind: "comment", author: "Dana Kim" },
+    { kind: "change", author: "Dana Kim", state: "waiting" },
+  ] as const;
+
+  test("Unresolved once anything is decided, unless the User picked; decided cards leave it, comments stay", () => {
+    expect(filterOf(undefined, cards)).toBe("unresolved");
+    expect(filterOf({ filter: "all" }, cards)).toBe("all");
+    expect(filterOf(undefined, [cards[2], cards[3]])).toBe("all");
+    expect(shownIn(cards, { filter: "unresolved", who: null })).toEqual([cards[2], cards[3]]);
+    expect(shownIn(cards, { filter: "all", who: "Luis Ortega" })).toEqual([cards[1]]);
+  });
+
+  test("an author with nothing in the filter shown is no choice there: everyone shows", () => {
+    expect(authorShown(cards, { filter: "unresolved", who: "Luis Ortega" })).toBeNull();
+    expect(shownIn(cards, { filter: "unresolved", who: "Luis Ortega" })).toEqual([
+      cards[2],
+      cards[3],
+    ]);
+    expect(authorShown(cards, { filter: "all", who: "Luis Ortega" })).toBe("Luis Ortega");
   });
 });
 

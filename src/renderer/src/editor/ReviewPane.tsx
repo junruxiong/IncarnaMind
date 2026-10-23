@@ -1,6 +1,9 @@
-import type { Editor } from "@tiptap/core";
+import { type Editor, isMacOS } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { Fragment, type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import type { ShortcutKeys } from "../../../shared/commands";
+import { keysHere } from "../commands/keymap";
+import { keysOn, pressed } from "../commands/keys";
 import {
   ChatLineIcon,
   CheckLineIcon,
@@ -9,6 +12,7 @@ import {
   MoreLineIcon,
 } from "../components/lineIcons";
 import {
+  buttonStyle,
   iconButtonClass,
   menuClass,
   menuItemClass,
@@ -19,9 +23,18 @@ import {
 import { usePopoverMenu } from "../components/usePopoverMenu";
 import { resolveProposalsIn } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
-import { authorKey, type ReviewFilter, useReviewPanes } from "../reviewPane";
-import { editorDoc, pendingIn } from "./proposalReview";
-import { type PickedRange, pickInMind, scrollMindTo } from "./reviewPick";
+import {
+  authorKey,
+  authorShown,
+  filterOf,
+  isDecided,
+  type ReviewFilter,
+  type ReviewPaneState,
+  shownIn,
+  useReviewPanes,
+} from "../reviewPane";
+import { pendingIn } from "./proposalReview";
+import { decideSelected, itemsOf, selectCard, washSelected } from "./reviewActions";
 import {
   type ChangeItem,
   type CommentItem,
@@ -29,7 +42,6 @@ import {
   initialsOf,
   madeByLine,
   type ReviewItem,
-  reviewItemsIn,
   waitingChanges,
 } from "./theirChanges";
 
@@ -41,17 +53,19 @@ const withoutPlace = ({ from: _from, to: _to, ...rest }: ReviewItem): Shown => r
 const cardIn = (list: HTMLElement | null, id: string) =>
   list?.querySelector<HTMLButtonElement>(`[data-review-id="${CSS.escape(id)}"]`) ?? null;
 
-const itemsOf = (editor: Editor) => reviewItemsIn(editor.state.doc, editorDoc(editor));
+const ACCEPT_KEYS = "CmdOrCtrl+Enter";
+const REJECT_KEYS = "CmdOrCtrl+Backspace";
 
-const decided = (item: Shown) =>
-  item.kind === "change" && (item.state === "accepted" || item.state === "rejected");
+const pressedKeys = (keys: ShortcutKeys, event: KeyboardEvent<Element>) =>
+  pressed(keysOn(keys, isMacOS()), event.nativeEvent, isMacOS());
 
 /**
  * Someone else's changes and comments from the Word file, beside the Mind
  * inside its tab (#697, the board Final-10-Redlines): a card each in the
  * Mind's order; All · Unresolved and a menu of who made them; the selected
- * card opens to the whole change, and its change is washed in the text and
- * scrolled to. A change or comment clicked in the text selects its card.
+ * card opens to the whole change, with Accept and Reject (⌘↵, ⌘⌫), and its
+ * change is washed in the text and scrolled to. A change or comment clicked
+ * in the text selects its card.
  */
 export function ReviewPane({
   editor,
@@ -68,50 +82,54 @@ export function ReviewPane({
     editor,
     selector: ({ editor: current }) => itemsOf(current).map(withoutPlace),
   });
-  const anyDecided = items.some(decided);
-  const filter: ReviewFilter = pane?.filter ?? (anyDecided ? "unresolved" : "all");
-  const who = pane?.who ?? null;
-  const update = (patch: Parameters<ReturnType<typeof useReviewPanes.getState>["update"]>[1]) =>
+  const filter = filterOf(pane, items);
+  const who = authorShown(items, pane);
+  const update = (patch: Partial<ReviewPaneState>) =>
     useReviewPanes.getState().update(mindId, patch);
 
   // The default is kept once the pane opens, so deciding a change doesn't switch the list under the User.
   useEffect(() => {
     if (pane && pane.filter === null) {
-      useReviewPanes.getState().update(mindId, { filter: anyDecided ? "unresolved" : "all" });
+      useReviewPanes.getState().update(mindId, { filter: filterOf(pane, items) });
     }
-  }, [pane, anyDecided, mindId]);
+  }, [pane, items, mindId]);
 
-  const inFilter = (item: Shown) => filter === "all" || !decided(item);
-  const shown = items.filter(
-    (item) => inFilter(item) && (who === null || authorKey(item.author) === who),
-  );
+  const shown = shownIn(items, pane);
   const selected = shown.some((item) => item.id === pane?.selected)
     ? (pane?.selected ?? null)
     : null;
 
   const list = useRef<HTMLUListElement>(null);
-  const cardButton = (id: string) => cardIn(list.current, id);
+  const closeButton = useRef<HTMLButtonElement>(null);
 
-  const select = (id: string, from: "pane" | "mind") => {
-    update({ selected: id });
-    const item = itemsOf(editor).find((each) => each.id === id);
-    if (!item) return;
-    pickInMind(editor, pickedRanges(editor, item));
-    if (from === "pane") scrollMindTo(editor, item.from);
+  const focusCard = (id: string | null) => {
+    // Once the list has drawn the card selected next, which may be new.
+    requestAnimationFrame(() => {
+      const button = id ? cardIn(list.current, id) : null;
+      const target =
+        button ?? list.current?.querySelector("[data-review-id]") ?? closeButton.current;
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+      button?.scrollIntoView({ block: "nearest" });
+    });
   };
 
   const opened = pane?.opened ?? 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is what asks for it.
   useLayoutEffect(() => {
     const { from } = editor.state.selection;
-    const atCursor = itemsOf(editor).find(
-      (each) =>
-        each.kind === "change" && each.state === "waiting" && each.from <= from && from <= each.to,
-    );
-    if (atCursor && atCursor.id !== selected) update({ selected: atCursor.id });
+    const atCursor = pane?.selected
+      ? undefined
+      : itemsOf(editor).find(
+          (each) =>
+            each.kind === "change" &&
+            each.state === "waiting" &&
+            each.from <= from &&
+            from <= each.to,
+        );
+    if (atCursor) update({ selected: atCursor.id });
     const target =
-      (atCursor ? cardButton(atCursor.id) : null) ??
-      (selected ? cardButton(selected) : null) ??
+      (atCursor ? cardIn(list.current, atCursor.id) : null) ??
+      (selected ? cardIn(list.current, selected) : null) ??
       list.current?.querySelector<HTMLButtonElement>("[data-review-id]") ??
       null;
     target?.focus({ preventScroll: true });
@@ -119,11 +137,8 @@ export function ReviewPane({
   }, [opened]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: new `items` mean the change may have moved: washed again where it is.
-  useEffect(() => {
-    const item = selected ? itemsOf(editor).find((each) => each.id === selected) : undefined;
-    pickInMind(editor, item ? pickedRanges(editor, item) : []);
-  }, [editor, selected, items]);
-  useEffect(() => () => pickInMind(editor, []), [editor]);
+  useEffect(() => washSelected(editor, selected), [editor, selected, items]);
+  useEffect(() => () => washSelected(editor, null), [editor]);
 
   useEffect(() => {
     const showCard = (id: string) => {
@@ -163,8 +178,17 @@ export function ReviewPane({
     if (!editor.isDestroyed) editor.commands.focus(null, { scrollIntoView: false });
   };
 
+  const decide = (outcome: "accept" | "reject") => {
+    focusCard(decideSelected(editor, mindId, outcome));
+  };
+
   const onListKey = (event: KeyboardEvent<HTMLUListElement>) => {
     if (event.nativeEvent.isComposing) return;
+    if (pressedKeys(ACCEPT_KEYS, event) || pressedKeys(REJECT_KEYS, event)) {
+      event.preventDefault();
+      decide(pressedKeys(ACCEPT_KEYS, event) ? "accept" : "reject");
+      return;
+    }
     const at = shown.findIndex((item) => item.id === selected);
     const next =
       event.key === "ArrowDown"
@@ -178,8 +202,8 @@ export function ReviewPane({
               : undefined;
     if (!next) return;
     event.preventDefault();
-    select(next.id, "pane");
-    const button = cardButton(next.id);
+    selectCard(editor, mindId, next.id, { scroll: true });
+    const button = cardIn(list.current, next.id);
     button?.focus({ preventScroll: true });
     button?.scrollIntoView({ block: "nearest" });
   };
@@ -204,12 +228,13 @@ export function ReviewPane({
           onChange={(next) => update({ filter: next })}
         />
         <AuthorMenu
-          items={items.filter(inFilter)}
+          items={items.filter((item) => filter === "all" || !isDecided(item))}
           who={who}
           onChange={(next) => update({ who: next })}
         />
         <PaneMenu editor={editor} mindId={mindId} />
         <button
+          ref={closeButton}
           type="button"
           data-testid="review-close"
           aria-label={t("review.close")}
@@ -238,39 +263,14 @@ export function ReviewPane({
               item={item}
               selected={item.id === selected}
               tabbable={selected ? item.id === selected : index === 0}
-              onSelect={() => select(item.id, "pane")}
+              onSelect={() => selectCard(editor, mindId, item.id, { scroll: true })}
+              onDecide={decide}
             />
           ))}
         </ul>
       )}
     </aside>
   );
-}
-
-function pickedRanges(editor: Editor, item: ReviewItem): PickedRange[] {
-  if (item.kind === "comment" || item.state === "kept") {
-    return [{ from: item.from, to: item.to, node: true }];
-  }
-  if (item.state === "waiting") {
-    const proposal = pendingIn(editor.state).find((each) => each.id === item.id);
-    return (
-      proposal?.ranges.map((range) =>
-        range.node
-          ? { from: range.from, to: range.to, node: true }
-          : { from: range.from, to: range.to },
-      ) ?? []
-    );
-  }
-  if (item.state !== "accepted") return [];
-  const added = item.excerpt
-    .filter((part) => part.kind === "insert")
-    .map((part) => part.text)
-    .join("");
-  const size = editor.state.doc.content.size;
-  const to = Math.min(item.from + added.length, size);
-  return added !== "" && editor.state.doc.textBetween(item.from, to) === added
-    ? [{ from: item.from, to }]
-    : [];
 }
 
 function FilterSwitch({
@@ -498,11 +498,13 @@ function Card({
   selected,
   tabbable,
   onSelect,
+  onDecide,
 }: {
   item: Shown;
   selected: boolean;
   tabbable: boolean;
   onSelect(): void;
+  onDecide(outcome: "accept" | "reject"): void;
 }) {
   const t = useT();
   const language = useLanguage();
@@ -618,6 +620,41 @@ function Card({
           )}
         </span>
       </button>
+      {selected && item.state === "waiting" && (
+        <div className="review-card-actions">
+          <button
+            type="button"
+            data-testid="review-accept"
+            aria-disabled={item.outOfDate || undefined}
+            aria-keyshortcuts={isMacOS() ? "Meta+Enter" : "Control+Enter"}
+            title={
+              item.outOfDate
+                ? t("proposal.cantAccept.theirs")
+                : `${t("proposal.accept")} (${keysHere(ACCEPT_KEYS)})`
+            }
+            onClick={(event) => {
+              if (event.detail <= 1 && !item.outOfDate) onDecide("accept");
+            }}
+            className={`${buttonStyle("secondary", "sm")} aria-disabled:cursor-default aria-disabled:opacity-50`}
+          >
+            <CheckLineIcon className="size-3" />
+            {t("proposal.accept")}
+          </button>
+          <button
+            type="button"
+            data-testid="review-reject"
+            aria-keyshortcuts={isMacOS() ? "Meta+Backspace" : "Control+Backspace"}
+            title={`${t("proposal.reject")} (${keysHere(REJECT_KEYS)})`}
+            onClick={(event) => {
+              if (event.detail <= 1) onDecide("reject");
+            }}
+            className={buttonStyle("secondary", "sm")}
+          >
+            <CloseLineIcon className="size-3" />
+            {t("proposal.reject")}
+          </button>
+        </div>
+      )}
     </li>
   );
 }
@@ -646,7 +683,7 @@ export function ReviewFold({ editor, mindId }: { editor: Editor; mindId: string 
       }}
       className="review-fold"
     >
-      {t("review.fold", { count })}
+      {count > 0 ? t("review.fold", { count }) : t("review.fold.none")}
     </button>
   );
 }

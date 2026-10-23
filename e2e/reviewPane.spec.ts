@@ -240,6 +240,102 @@ test("the reviewing pane lists their changes and comments in order, follows the 
   await app.close();
 });
 
+test("Accept and Reject on the selected card act at once with Undo, from the mouse, ⌘↵ and ⌘⌫ in the pane and ⌘K, one by one or all of one person's", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  await importFile(window, app, "Supply agreement v5.docx", supplyRedline());
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
+  await pointAndClick(window, window.getByTestId("their-changes-review"));
+  const pane = window.getByTestId("review-pane");
+  const editor = window.getByTestId("mind-editor");
+  const cards = cardsOf(pane);
+  const supply = cards.nth(0);
+  const notice = cards.nth(1);
+
+  // Only the selected card has Accept and Reject.
+  await pointAndClick(window, supply.getByRole("button").first());
+  await expect(pane.getByTestId("review-accept")).toHaveCount(1);
+  await expect(supply.getByTestId("review-accept")).toHaveText("Accept");
+  await expect(supply.getByTestId("review-reject")).toHaveText("Reject");
+  await screenshot(window, "review-card-selected");
+
+  // Accept acts at once: the words are the Mind's, the card says so, and the next change is selected.
+  await pointAndClick(window, supply.getByTestId("review-accept"));
+  await expect(supply).toHaveAttribute("data-state", "accepted");
+  await expect(supply.getByTestId("review-status")).toHaveText("Accepted");
+  await expect(editor.locator("ins.proposal-theirs", { hasText: "and Gdańsk" })).toHaveCount(0);
+  await expect(editor.locator("p", { hasText: "1.2 Northwind" })).toContainText(
+    "Leeds and Gdańsk and delivers",
+  );
+  await expect(notice).toHaveAttribute("data-selected", "true");
+  await expect(notice.locator("[data-review-id]")).toBeFocused();
+  // ⌘Z, with the focus in the pane, puts it back, waiting.
+  await expect(window.getByTestId("undo-message")).toHaveText("Accepted 1 change");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(supply).toHaveAttribute("data-state", "waiting");
+  await expect(editor.locator("ins.proposal-theirs", { hasText: "and Gdańsk" })).toHaveCount(1);
+
+  // ⌘⌫ in the pane rejects the selected change; ⌘Z there takes it back.
+  await notice.locator("[data-review-id]").focus();
+  await window.keyboard.press("ControlOrMeta+Backspace");
+  await expect(notice).toHaveAttribute("data-state", "rejected");
+  await expect(editor.locator("p", { hasText: "1.3 Northwind" })).toContainText(
+    "Northwind gives 90 days’ notice",
+  );
+  await expect(cards.nth(2)).toHaveAttribute("data-selected", "true");
+  await expect(cards.nth(2).locator("[data-review-id]")).toBeFocused();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  // ⌘↵ accepts it.
+  await window.keyboard.press("ArrowUp");
+  await expect(notice).toHaveAttribute("data-selected", "true");
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(notice).toHaveAttribute("data-state", "accepted");
+
+  // From ⌘K: Next change, then all of Dana Kim's at once.
+  const palette = async (label: string) => {
+    await window.keyboard.press("ControlOrMeta+k");
+    await expect(window.getByTestId("palette-search")).toBeFocused();
+    await window.keyboard.type(label);
+    await pointAndClick(
+      window,
+      window.getByTestId("palette-item").filter({ hasText: label }).first(),
+    );
+  };
+  await palette("Next change");
+  await expect(cards.nth(4)).toHaveAttribute("data-selected", "true");
+  await palette("Accept all changes from Luis Ortega");
+  await expect(cards.nth(4)).toHaveAttribute("data-state", "accepted");
+  await expect(pane.locator('[data-testid="review-change"][data-state="waiting"]')).toHaveCount(5);
+
+  // In Unresolved, a card decided leaves; the last leaves nothing to review.
+  await pointAndClick(window, pane.getByTestId("review-filter-unresolved").locator(".."));
+  await expect(pane.locator('[data-testid="review-change"]')).toHaveCount(5);
+  await pointAndClick(window, pane.getByTestId("review-author-menu"));
+  await pointAndClick(window, window.getByTestId("review-author").filter({ hasText: "Dana Kim" }));
+  await setLanguage(window, "zh-CN");
+  await pointAndClick(window, cards.first().locator("[data-review-id]"));
+  await expect(cards.first().getByTestId("review-accept")).toHaveText("接受");
+  await expect(cards.first().getByTestId("review-reject")).toHaveText("拒绝");
+  await screenshot(window, "review-card-selected-zh");
+  for (let left = 5; left > 0; left--) {
+    await expect(pane.locator('[data-testid="review-change"]')).toHaveCount(left);
+    await window.keyboard.press("ControlOrMeta+Enter");
+  }
+  // Dana's comments stay, and the first takes the focus.
+  await expect(pane.locator('[data-testid="review-change"]')).toHaveCount(0);
+  await expect(pane.getByTestId("review-comment")).toHaveCount(2);
+  await expect(
+    pane.getByTestId("review-comment").first().locator("[data-review-id]"),
+  ).toBeFocused();
+  await window.keyboard.press("Escape");
+  await expect(pane).toHaveCount(0);
+  await expect(window.getByTestId("their-changes-line")).toHaveCount(0);
+  await app.close();
+});
+
 test("a Word file without anyone's changes or comments offers no review", async () => {
   const { app, window } = await launchApp(dataDir, { home });
   await setWindowSize(app, window, 1440, 900);
