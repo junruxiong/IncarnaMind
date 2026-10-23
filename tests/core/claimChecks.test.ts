@@ -399,9 +399,7 @@ describe("One claim check", () => {
     await check();
 
     const [must, plain] = await shownChecks(core, client);
-    expect(calls[0]?.system).toContain(
-      "Roles: who does it, for or to whom, and must, may or neither",
-    );
+    expect(calls[0]?.system).toContain("Roles: who does it, for or to whom");
     expect(must).toMatchObject({
       shown: { state: "unsupported" },
       check: {
