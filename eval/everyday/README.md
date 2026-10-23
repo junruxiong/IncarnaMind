@@ -22,6 +22,7 @@
 - **Only the text's dates** (#1173), for the contracts and minutes: every date the reply gives is one the Documents' text writes (`dates.ts`), at the precision it gives ("12 March 2024", "March 2024", "2024"). A date in a sentence that names it as the file's ("file created on …", "文件创建于 …") is allowed. Each file's own dates (a PDF's creation date, a text file's modified day) are none of its text's, so a date from them fails the request. The report gives, per model and language, how many Answers give a date not in the text, and how many of the summaries' sentences outside headings carry a Citation.
 - **In the Question's language** (#892, #1273), for the contracts and minutes, which are in the set in English and in Chinese: a reply to an English Question is written in English, and one to a Chinese Question in Chinese, whatever language the Passages are in. Words in quotation marks and Citation markers are left out of the count; a reply fails when more than a fifth of an English one's letters, or under half of a Chinese one's, are Chinese characters.
 - **A figure the numbers give is calculated** (#1444), for the reserves requests: asked how much something changed between two cells it cites, the Answer has a Calculated figure that shows the difference (11.73亿美元), and its reply never says it couldn't calculate it.
+- **A term as the field writes it** (#1635), for the translation of the trip notes: what it writes into the Mind calls spring tides 大潮, never 春潮, which Kimi K2.6 wrote with thinking off.
 - **A cited sentence says only what its quote supports** (#1073), for the research questions: each sentence of the reply that carries a Citation is checked by the app's own Check against Documents, with the quotes it cites (`support.ts`), run by the model asked. The report gives the share judged Supported, which must be at least 95%, and lists the others. An inference belongs in a sentence of its own, with no Citation.
 
 ## The requests
@@ -48,7 +49,7 @@ INCARNAMIND_EVAL_CHAT_KEY=sk-ant-... \
 npm run eval:everyday
 ```
 
-- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5, `research` only the research questions, and `dates` only the contracts and minutes. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
+- `INCARNAMIND_EVAL_EVERYDAY=hard` asks only the hard requests, for a stronger model such as Claude Sonnet 5.5, `research` only the research questions, `dates` only the contracts and minutes, and `chinese` only the requests in Chinese. A list of ids asks only those: `INCARNAMIND_EVAL_EVERYDAY=owner-1,only-second-en`.
 - `INCARNAMIND_EVAL_EVERYDAY_RUNS` sets how many times each request is asked (3 by default).
 - Another model judges the claims, never the one asked: Claude Sonnet 5.5 on the Anthropic key (Opus 5.5 when Sonnet is asked), or the one `INCARNAMIND_EVAL_JUDGE_KIND`, `_MODEL` and `_KEY` name, which a run on another provider must set. The report says which.
 - The report goes into `eval/results/<start time>-everyday/`. `report.md` has the pass rates by language and by request, against each request's floor, the Answers' tokens, then every run's result with its reply and the Blocks it changed. `report.json` has the same data.

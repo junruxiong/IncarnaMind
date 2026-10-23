@@ -170,6 +170,27 @@ describe("The everyday request guards", () => {
     expect(failures([3])).toEqual([]);
   });
 
+  // protects=a translation written into a Mind must use the field's term for a thing, here 大潮 for "spring tides", and fails on the near one, 春潮 (#1635); fails_when=either passes unnoticed; no_claim=other terms.
+  test("a translation that doesn't use the term asked for fails, naming the one it used", () => {
+    const failures = (writtenInMinds: string[]) =>
+      requestFailures(
+        outcome({
+          expected: {
+            write: true,
+            cite: false,
+            coverAll: false,
+            terms: [{ want: "大潮", not: ["春潮"] }],
+          },
+          answer: { text: "", citations: [], toolCalls: [created], steps: null },
+          writtenInMinds,
+        }),
+      );
+    expect(failures(["导游说每月有两次大潮。"])).toEqual([]);
+    expect(failures(["导游说每月有两次春潮。"])).toEqual([
+      { kind: "term", want: "大潮", found: ["春潮"] },
+    ]);
+  });
+
   // protects=a Mind written with a source as text fails, naming it, and one with none passes (#1075); fails_when=bracketed sources in a Mind go unnoticed; no_claim=how the sources are found (tests/shared/namedSources.test.ts).
   test("a Mind holding a source written as text fails", () => {
     const kinds = (sourcesAsText: string[]) =>

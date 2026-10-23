@@ -10,10 +10,12 @@ import { openModelSetup } from "../modelSetup";
 import { stepsShownOf } from "../nudges";
 import { revealAssistant } from "../quietAssistant";
 import { useAppStore } from "../store";
+import { useUnreadFiles } from "../unreadFiles";
 import { ExampleBanner } from "./GettingStarted";
 import { CloseLineIcon } from "./lineIcons";
 import { ProblemLine } from "./ProblemLine";
 import { SLOT, Slotted } from "./Slotted";
+import { UnreadFilesLine } from "./UnreadFilesLine";
 import { buttonStyle } from "./ui";
 
 type StepKey = "citation" | "question" | "files";
@@ -112,6 +114,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
   const modelReady = useAppStore((state) => state.chatReadiness?.ready === true);
   const placeAssistant = useAppStore((state) => state.placeAssistant);
   const skipped = useAppStore((state) => state.skippedFiles);
+  const unread = useUnreadFiles(null);
   const addFiles = useRef<HTMLButtonElement>(null);
   // The ready Question's button goes once it is asked: the focus moves on to the next step.
   const focusNext = useRef(false);
@@ -202,9 +205,13 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
             )}
           </Step>
           <Step step="files" number={3} state={stateOf("files")} live={live}>
-            <p className="text-[13px] leading-5 text-ink-secondary">
-              {t("firstOpen.step.files.body")}
-            </p>
+            {live && unread.length > 0 ? (
+              <UnreadFilesLine files={unread} testId="first-open-unread" />
+            ) : (
+              <p className="text-[13px] leading-5 text-ink-secondary">
+                {t("firstOpen.step.files.body")}
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <button
                 ref={live ? addFiles : undefined}

@@ -2032,7 +2032,7 @@ export interface GettingStarted {
   started: boolean;
   /** The User opened a Citation's card. */
   citationChecked: boolean;
-  /** The User added Documents of their own, or connected an app. */
+  /** A Document of the User's own has been read, not only added, or the User connected an app. */
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
   askedOwn: boolean;
@@ -2076,6 +2076,11 @@ export interface DeviceSettings {
   suggestionOffers: number;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
+  /**
+   * The source a failed model download's line picked on this device (#1578), leading the others.
+   * "auto" by default: the probe orders them.
+   */
+  modelSource: ModelSourceChoice;
   /**
    * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
    * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
@@ -3705,7 +3710,23 @@ export interface EmbeddingModelError {
   kind: "network" | "integrity" | "storage" | "load";
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** A download every source failed (#1578): what each one said, in the order tried. */
+  sources?: { source: ModelSourceId; message: string }[];
 }
+
+/**
+ * Where the built-in models download from (#1578): Hugging Face, IncarnaMind's copy on
+ * ModelScope, hf-mirror.com, IncarnaMind's copy on Cloudflare R2.
+ */
+export type ModelSourceId = "huggingface" | "modelscope" | "hf-mirror" | "r2";
+
+/** The source the User picked on a failed download's line; "auto" tries them all in the probe's order. */
+export type ModelSourceChoice = "auto" | "huggingface" | "modelscope";
+export const MODEL_SOURCE_CHOICES: readonly ModelSourceChoice[] = [
+  "auto",
+  "huggingface",
+  "modelscope",
+];
 
 export interface EmbeddingModelStatus {
   /** The model's name, e.g. "multilingual-e5-small". */
@@ -6531,6 +6552,10 @@ export interface PageSetup {
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136), and the
  *   two models that tell its speakers apart (#138), when one is first recorded.
+ * - "model-source-modelscope", "model-source-hf-mirror", "model-source-copy": where else a
+ *   built-in model's files may come from when Hugging Face doesn't give them (#1578):
+ *   IncarnaMind's copy on ModelScope (whose front page the probe asks whenever a model
+ *   downloads), hf-mirror.com, and IncarnaMind's own copy on Cloudflare R2, once it exists.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -6553,6 +6578,9 @@ export const networkTrafficIds = [
   "reranking-model",
   "text-recognition-model",
   "transcription-model",
+  "model-source-modelscope",
+  "model-source-hf-mirror",
+  "model-source-copy",
   "ollama-pull",
   "chatgpt-sign-in",
   "claude-sign-in",
@@ -8498,7 +8526,8 @@ export interface CoreApi {
    * Document's Passages and text, a Tag's links), keeping each one's id and when it was
    * deleted, so a later sync can pass the
    * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
-   * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
+   * touches the User's files; a copy the old layout made in the data folder (ADR-0010) goes
+   * with its Document. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
    */
   deletePermanently(refs: DeletedRef[]): Promise<void>;
 
