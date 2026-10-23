@@ -27,12 +27,18 @@ jobs:
   # unit test reads), skips them; the required checks still report, as passed. Marking a draft
   # ready runs them. Any other file and every merge group run everything. Not every *.md is a
   # document: the built-in Skills and the example Documents are Markdown files the tests read.
+  # The two LibreOffice jobs (word, excel) are narrower still: they run unless every changed file
+  # is in the `unread` list below, which names what they never read. A file not named there runs
+  # them, so a new folder is covered until someone proves otherwise; with no list of files they
+  # run. The nightly run does them in full.
   changes:
     name: Which checks to run
     runs-on: ubuntu-latest
     outputs:
       heavy: ${{ steps.diff.outputs.heavy }}
       packaged: ${{ steps.diff.outputs.packaged }}
+      word: ${{ steps.diff.outputs.word }}
+      excel: ${{ steps.diff.outputs.excel }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,26 +49,59 @@ jobs:
           DRAFT: ${{ github.event.pull_request.draft }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          GROUP_BASE: ${{ github.event.merge_group.base_sha }}
+          GROUP_HEAD: ${{ github.event.merge_group.head_sha }}
         run: |
           heavy=true
           packaged=false
+          word=true
+          excel=true
           if [ "$EVENT" = pull_request ] && [ "$DRAFT" = true ]; then
             heavy=false
-          elif [ "$EVENT" = pull_request ]; then
-            files="$(git diff --name-only "$BASE...$HEAD")" || files=""
-            echo "$files"
-            # Nothing listed (the diff failed, or is empty) runs everything.
-            if [ -n "$files" ] && ! echo "$files" | grep -qvE '^([^/]+\.md|docs/(.+))$' \
-               && ! echo "$files" | grep -qx 'docs/privacy.md'; then
-              heavy=false
+            word=false
+            excel=false
+          else
+            files=""
+            if [ "$EVENT" = pull_request ]; then
+              files="$(git diff --name-only "$BASE...$HEAD")" || files=""
+            elif [ "$EVENT" = merge_group ]; then
+              files="$(git diff --name-only "$GROUP_BASE" "$GROUP_HEAD")" || files=""
             fi
-            # Only a change to what the packaged transcription check covers runs it.
-            if [ -z "$files" ] || echo "$files" | grep -qE '^(src/core/(transcription|meetings)/|src/core/embedding/download\.ts$|src/main/meetings/|src/main/transcriber(Process)?\.ts$|src/main/speaker(Process|Separator)\.ts$|src/(preload|shared)/capture\.ts$|src/renderer/capture(/|\.html$)|build/entitlements\.mac\.plist$|electron-builder\.yml$|electron\.vite\.config\.ts$|package(-lock)?\.json$|e2e/app\.ts$|e2e/packaged/|tests/fixtures/speech/|\.github/(actions/packaged-transcription/|workflows/ci\.yml$))'; then
-              packaged=true
+            echo "$files"
+            if [ "$EVENT" = pull_request ]; then
+              # Nothing listed (the diff failed, or is empty) runs everything.
+              if [ -n "$files" ] && ! echo "$files" | grep -qvE '^([^/]+\.md|docs/(.+))$' \
+                 && ! echo "$files" | grep -qx 'docs/privacy.md'; then
+                heavy=false
+              fi
+              # Only a change to what the packaged transcription check covers runs it.
+              if [ -z "$files" ] || echo "$files" | grep -qE '^(src/core/(transcription|meetings)/|src/core/embedding/download\.ts$|src/main/meetings/|src/main/transcriber(Process)?\.ts$|src/main/speaker(Process|Separator)\.ts$|src/(preload|shared)/capture\.ts$|src/renderer/capture(/|\.html$)|build/entitlements\.mac\.plist$|electron-builder\.yml$|electron\.vite\.config\.ts$|package(-lock)?\.json$|e2e/app\.ts$|e2e/packaged/|tests/fixtures/speech/|\.github/(actions/packaged-transcription/|workflows/ci\.yml$))'; then
+                packaged=true
+              fi
+            fi
+            # The LibreOffice jobs import the editor's schema from src/renderer and nothing from the
+            # other evaluation folders; none of the folders below is in the code they run.
+            unread='^([^/]+\.md|docs/|e2e/|src/main/|src/preload/|src/shared/i18n/|src/renderer/|src/core/(meetings|transcription|connectors|sources|agents|reranking|embedding|tags|cost|suggestions)/|eval/(checks|classification|dumps|everyday|grouping|hard|harness|ocr|organize|references|repeats|retrieval|speakers|tables|transcription)/|tests/(core|main|privacy|renderer|shared|live|eval)/|\.github/(ISSUE_TEMPLATE/|pull_request_template\.md$))'
+            if [ -n "$files" ]; then
+              word=false
+              excel=false
+              while IFS= read -r path; do
+                if [[ $path =~ $unread && ! $path =~ ^src/renderer/src/editor/ ]]; then
+                  continue
+                fi
+                case "$path" in
+                  eval/excel/*) excel=true ;;
+                  eval/word/libreoffice.ts) word=true; excel=true ;;
+                  eval/word/*) word=true ;;
+                  *) word=true; excel=true ;;
+                esac
+              done <<< "$files"
             fi
           fi
           echo "heavy=$heavy" | tee -a "$GITHUB_OUTPUT"
           echo "packaged=$packaged" | tee -a "$GITHUB_OUTPUT"
+          echo "word=$word" | tee -a "$GITHUB_OUTPUT"
+          echo "excel=$excel" | tee -a "$GITHUB_OUTPUT"
 
   check:
     name: Typecheck, lint and unit tests
@@ -119,7 +158,7 @@ jobs:
   word-corpus:
     name: Word corpus opens in LibreOffice
     needs: changes
-    if: needs.changes.outputs.heavy == 'true'
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.word == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -155,7 +194,7 @@ jobs:
   excel-exports:
     name: Excel exports open in LibreOffice
     needs: changes
-    if: needs.changes.outputs.heavy == 'true'
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.excel == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

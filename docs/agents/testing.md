@@ -23,6 +23,8 @@ Every night too, `.github/workflows/nightly-real-model.yml` asks real models, si
 
 The packages CI installs (the Noto CJK fonts, ffmpeg, LibreOffice) come from a cache of their downloaded files. On some runners the package mirror serves them at about 50 kB/s, and one install held a runner for up to 30 minutes (#1731). The `apt-install` action (`.github/actions/apt-install`) restores the files and apt downloads only what the cache lacks. A run with no matching cache downloads from archive.ubuntu.com, drops a download still going after 5 minutes to try the Azure mirror, and waits as long as it takes on the last try, as the install always did. Only a run on `main` saves a cache that every pull request and merge group reads, so `.github/workflows/warm-ci-caches.yml` saves them every day and when it changes; a package CI installs with the action also goes in its matrix.
 
+The two LibreOffice jobs of a pull request, "Word corpus opens in LibreOffice" and "Excel exports open in LibreOffice", are not required checks. They run unless every changed file is one they never read (the `unread` list in `ci.yml`: documents, the windows outside the editor, `e2e/`, the unit tests, agents, meetings and the like), and the nightly run does both in full. A file or folder the list doesn't name runs them.
+
 ## Before you open a pull request
 
 1. Merge `main` into your branch only to resolve a conflict or to pick up something you need; the merge queue tests your change on top of `main` anyway.

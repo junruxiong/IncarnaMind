@@ -97,8 +97,32 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install LibreOffice Writer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libreoffice-writer
+        uses: ./.github/actions/apt-install
+        with:
+          package: libreoffice-writer
       - run: npm run eval:word:fetch
       - run: npm run eval:word
+
+  # A comparison table exported to Excel opens in LibreOffice (#132). A pull request runs it only
+  # when it changes something the job reads (ci.yml), so the whole of main is checked here.
+  excel-exports:
+    name: Excel exports open in LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      INCARNAMIND_EXCEL_REQUIRE_LIBREOFFICE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install LibreOffice Calc
+        uses: ./.github/actions/apt-install
+        with:
+          package: libreoffice-calc
+      - run: npm run eval:excel
+        env:
+          INCARNAMIND_EXCEL_OUT: ${{ runner.temp }}/excel-exports
