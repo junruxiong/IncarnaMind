@@ -1062,6 +1062,28 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     expect(plain?.shown).toEqual({ state: "supported" });
   });
 
+  test("names no part covered when the reply says no Passage is about the sentence's topic", async () => {
+    const { core, client, check } = await mindWith(
+      [STAFF],
+      checkingModel({
+        [STAFF]: {
+          verdict: "unsupported",
+          quote: MOON,
+          says: `Topic: not found\nNothing is said of who watches.${PARTLY}`,
+          judgement: "neither",
+        },
+      }),
+    );
+
+    await check();
+
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toEqual({
+      reason: "Nothing is said of who watches.",
+      covered: null,
+      uncovered: null,
+    });
+  });
+
   test("stays supported when the reply names a wider group but not the parts", async () => {
     const { core, client, check } = await mindWith(
       [STAFF],

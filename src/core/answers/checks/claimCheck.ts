@@ -404,10 +404,13 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     };
     session.check();
     if (verdict.verdict === "unsupported") {
+      // A part covered stands only for a claim whose own topic a Passage is about: the reply's own
+      // field says so, so a neighbouring topic's line is never shown as part of the claim.
+      const onTopic = verdict.topic !== "not found";
       return unsupported({
         reason: verdict.says,
-        covered: verdict.covered,
-        uncovered: verdict.uncovered,
+        covered: onTopic ? verdict.covered : null,
+        uncovered: onTopic ? verdict.uncovered : null,
       });
     }
     const evidence =

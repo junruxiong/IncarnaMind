@@ -13,6 +13,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: "the speed comparison",
       uncovered: "memory and robustness",
       scope: null,
+      topic: null,
     });
     expect(
       readVerdict(
@@ -34,6 +35,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: "the speed",
       uncovered: "memory",
       scope: null,
+      topic: null,
     });
     expect(
       readVerdict("Verdict: unsupported\nNothing here is covered.\nNot covered: memory"),
@@ -67,6 +69,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: null,
       uncovered: null,
       scope: null,
+      topic: null,
     });
     expect(readVerdict("Verdict: unsupported\nNo Passage mentions penguins.")).toEqual({
       verdict: "unsupported",
@@ -74,6 +77,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: null,
       uncovered: null,
       scope: null,
+      topic: null,
     });
     expect(readVerdict("Verdict: unsupported\nCovered:\nNot covered: ")).toMatchObject({
       covered: null,
@@ -118,6 +122,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: "speed",
       uncovered: "Memory",
       scope: null,
+      topic: null,
     });
   });
 
@@ -132,6 +137,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: "two days a week for the Employee",
       uncovered: "staff in general",
       scope: "wider",
+      topic: null,
     });
     expect(readVerdict("**Verdict:** supported\n**Scope:** same\nIt says so [^1].")).toMatchObject({
       says: "It says so.",
@@ -151,6 +157,7 @@ describe("What a reply says its Citations cover and don't", () => {
       covered: null,
       uncovered: null,
       scope: null,
+      topic: null,
     });
   });
 });
