@@ -90,6 +90,7 @@ function Step({
   state,
   live,
   onDo,
+  offered = false,
   children,
 }: {
   step: StepKey;
@@ -97,6 +98,8 @@ function Step({
   state: StepState;
   live: boolean;
   onDo: () => void;
+  /** Its buttons show before its turn too: a newcomer's own files may come first. */
+  offered?: boolean;
   children?: ReactNode;
 }) {
   const t = useT();
@@ -128,7 +131,9 @@ function Step({
           />
         </button>
       </div>
-      {state === "open" && <div className="flex flex-col gap-2 pl-7">{children}</div>}
+      {(state === "open" || (offered && state === "later")) && (
+        <div className="flex flex-col gap-2 pl-7">{children}</div>
+      )}
     </li>
   );
 }
@@ -248,6 +253,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
             number={3}
             state={stateOf("files")}
             live={live}
+            offered
             onDo={() => void pickDocuments()}
           >
             {live && unread.length > 0 ? (
@@ -263,7 +269,7 @@ export function FirstOpenSteps({ mindId }: { mindId: string }) {
                 type="button"
                 data-testid={only("first-open-add-files")}
                 onClick={() => void pickDocuments()}
-                className={buttonStyle("primary", "sm")}
+                className={buttonStyle(stateOf("files") === "open" ? "primary" : "secondary", "sm")}
               >
                 {t("startGuide.documents.addFiles")}
               </button>
