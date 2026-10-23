@@ -32,6 +32,7 @@ import type {
   ClaimCalculation,
   ClaimCheckFailure,
   ClaimCheckResult,
+  ExcludedEvidence,
   LeftOutDocument,
   PassageSearchResult,
   ProviderError,
@@ -82,7 +83,7 @@ export interface ClaimCheckDependencies {
   /** The interface language: what a check's sentence is written in. */
   language(): Language;
   engine: AnswerEngine;
-  evidence: Pick<Evidence, "search">;
+  evidence: Pick<Evidence, "inScope" | "leftOut">;
   documents: Pick<AnswerDocuments, "citationSource" | "pageTexts" | "documentDate"> & {
     searchableCount(documentIds: readonly string[] | null): number;
     searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
@@ -163,30 +164,42 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const excluded = new Map<string, LeftOutDocument>();
     const decisions = caseCitations(request.claim);
     const workings = new Map<string, PassageSearchResult[]>();
+    // Where the Documents left out matched never reaches the model: it isn't kept waiting for it.
+    const leftOut: Promise<
+      { ok: true; found: ExcludedEvidence[] } | { ok: false; error: unknown }
+    >[] = [];
+    const recordLeftOut = (found: readonly ExcludedEvidence[]) => {
+      for (const each of found) {
+        if (each.reason === "own-workings") {
+          workings.set(each.documentId, [
+            ...(workings.get(each.documentId) ?? []),
+            ...each.passages,
+          ]);
+        }
+        if (excluded.has(each.documentId)) continue;
+        excluded.set(each.documentId, {
+          documentId: each.documentId,
+          documentName: each.documentName,
+          reason: each.reason,
+        });
+      }
+    };
     const scoped: AnswerDocuments = {
       searchableCount: () => deps.documents.searchableCount(scope.documentIds),
       async search(query, searchSignal) {
-        const found = await deps.evidence.search(query, scope, searchSignal);
+        const found = await deps.evidence.inScope(query, scope, searchSignal);
+        leftOut.push(
+          deps.evidence.leftOut(query, scope, signal).then(
+            (each) => ({ ok: true, found: each }),
+            (error: unknown) => ({ ok: false, error }),
+          ),
+        );
         // A web search's result never settles a citation of a court decision.
         const passages =
           decisions.length === 0
-            ? found.passages
-            : found.passages.filter((passage) => !deps.documents.savedBySearch(passage.documentId));
+            ? found
+            : found.filter((passage) => !deps.documents.savedBySearch(passage.documentId));
         for (const passage of passages) read.set(passage.documentId, passage.contentHash);
-        for (const each of found.excluded) {
-          if (each.reason === "own-workings") {
-            workings.set(each.documentId, [
-              ...(workings.get(each.documentId) ?? []),
-              ...each.passages,
-            ]);
-          }
-          if (excluded.has(each.documentId)) continue;
-          excluded.set(each.documentId, {
-            documentId: each.documentId,
-            documentName: each.documentName,
-            reason: each.reason,
-          });
-        }
         return passages;
       },
       citationSource: (passageId) => deps.documents.citationSource(passageId),
@@ -337,6 +350,16 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       else if (event.type === "finished") finished = true;
     }
     if (signal.aborted) return notChecked("stopped");
+    for (const searched of await Promise.all(leftOut)) {
+      if (searched.ok) {
+        recordLeftOut(searched.found);
+        continue;
+      }
+      if (signal.aborted) return notChecked("stopped");
+      console.error("A check couldn't search the Documents it leaves out:", searched.error);
+      const { error } = searched;
+      return notChecked("failed", error instanceof Error ? error.message : String(error));
+    }
     if (failed) {
       const { reason, detail } = failureOf(failed);
       return notChecked(reason, detail);

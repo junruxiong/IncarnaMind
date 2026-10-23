@@ -2,6 +2,7 @@ import { appendFile, copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { type CoreAdapters, type EvidenceSearchResult, InvalidInputError } from "../../src/core";
+import type { Reranker } from "../../src/core/documents/searchTool";
 import { askAndFinish } from "../helpers/citations";
 import { createTempDataFolder, nextEvent, queryDatabase, startCore } from "../helpers/core";
 import {
@@ -276,6 +277,50 @@ describe("Files IncarnaMind wrote aren't evidence", () => {
     const read = JSON.stringify(checked?.prompt.filter((message) => message.role === "tool"));
     expect(read).toContain('document=\\"Moon\\"');
     expect(read).not.toContain('document=\\"Tides\\"');
+  });
+
+  // protects=a check's model isn't kept waiting for where the Documents it leaves out matched, and the result still names them; fails_when=its next call waits for that search, or the export goes unnamed; no_claim=how long a search takes.
+  test("a sentence's check doesn't wait for where the Documents it leaves out matched, and still names them", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let leftOutScored = false;
+    const reranker: Reranker = async (_query, candidates) => {
+      // Only the export says "twice a month": this is the search of what the check leaves out.
+      if (candidates.some((candidate) => candidate.text.includes("twice a month"))) {
+        await held;
+        leftOutScored = true;
+      }
+      return [...candidates];
+    };
+    let scoredBeforeVerdict: boolean | null = null;
+    const model = scriptedModel((call) => {
+      if (call.results.length === 0) {
+        return {
+          calls: [{ tool: "search_documents", input: { query: "spring tides full moon" } }],
+        };
+      }
+      scoredBeforeVerdict = leftOutScored;
+      release();
+      return { text: "Verdict: unsupported" };
+    });
+    const { core, moon } = await setUp({
+      createChatModel: scriptedModels(model).createChatModel,
+      reranker,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const exported = await exportMind(core, "Tides", NOTE);
+
+    const result = await core.checkClaim({ claim: NOTE });
+
+    expect(scoredBeforeVerdict).toBe(false);
+    expect(leftOutScored).toBe(true);
+    expect(result).toMatchObject({
+      verdict: "unsupported",
+      versions: [{ documentId: moon.id, contentHash: moon.contentHash }],
+      excluded: [{ documentId: exported.id, documentName: "Tides", reason: "own-file" }],
+    });
   });
 
   test("files the User added themselves, empty ones and their pasted text included, are never left out", async () => {

@@ -205,39 +205,57 @@ export function createEvidence(deps: EvidenceDependencies) {
       scope: EvidenceScope,
       signal?: AbortSignal,
     ): Promise<EvidenceSearch> {
-      const passages = await deps.search(query, {
-        documentIds: scope.documentIds ?? undefined,
-        signal,
-      });
-      if (scope.excluded.size === 0) return { passages, excluded: [] };
-      const matched = await deps.search(query, {
-        documentIds: [...scope.excluded.keys()],
-        parameters: EXCLUDED_PARAMETERS,
-        signal,
-      });
-      // The search Tool gives its Passages by Document, the best Document first.
-      const byDocument = new Map<string, ExcludedEvidence>();
-      const add = (passage: PassageSearchResult) => {
-        const reason = scope.excluded.get(passage.documentId);
-        if (!reason) return;
-        const entry = byDocument.get(passage.documentId) ?? {
-          documentId: passage.documentId,
-          documentName: passage.documentName,
-          reason,
-          passages: [],
-        };
-        entry.passages.push(passage);
-        byDocument.set(passage.documentId, entry);
-      };
-      for (const passage of matched) add(passageResult(passage));
-      // Search shows the Passages of identical files once (see `distinctPassages`): each copy
-      // left out is named too, where the one shown matched.
-      for (const found of [...byDocument.values()]) {
-        for (const copy of copiesOf(found, scope.excluded)) add(copy);
-      }
-      return { passages, excluded: [...byDocument.values()] };
+      const passages = await inScope(query, scope, signal);
+      return { passages, excluded: await leftOut(query, scope, signal) };
     },
+
+    inScope,
+    leftOut,
   };
+
+  /** The evidence a search of a check's scope finds, as the search Tool gives it to the model. */
+  function inScope(
+    query: string,
+    scope: EvidenceScope,
+    signal?: AbortSignal,
+  ): Promise<WindowedPassage[]> {
+    return deps.search(query, { documentIds: scope.documentIds ?? undefined, signal });
+  }
+
+  /** The Documents a check leaves out that match the search too, the best first: none when it leaves none out. */
+  async function leftOut(
+    query: string,
+    scope: EvidenceScope,
+    signal?: AbortSignal,
+  ): Promise<ExcludedEvidence[]> {
+    if (scope.excluded.size === 0) return [];
+    const matched = await deps.search(query, {
+      documentIds: [...scope.excluded.keys()],
+      parameters: EXCLUDED_PARAMETERS,
+      signal,
+    });
+    // The search Tool gives its Passages by Document, the best Document first.
+    const byDocument = new Map<string, ExcludedEvidence>();
+    const add = (passage: PassageSearchResult) => {
+      const reason = scope.excluded.get(passage.documentId);
+      if (!reason) return;
+      const entry = byDocument.get(passage.documentId) ?? {
+        documentId: passage.documentId,
+        documentName: passage.documentName,
+        reason,
+        passages: [],
+      };
+      entry.passages.push(passage);
+      byDocument.set(passage.documentId, entry);
+    };
+    for (const passage of matched) add(passageResult(passage));
+    // Search shows the Passages of identical files once (see `distinctPassages`): each copy
+    // left out is named too, where the one shown matched.
+    for (const found of [...byDocument.values()]) {
+      for (const copy of copiesOf(found, scope.excluded)) add(copy);
+    }
+    return [...byDocument.values()];
+  }
 
   /** The same Passages in the other Documents left out that hold the same file as `found`. */
   function copiesOf(

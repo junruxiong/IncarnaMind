@@ -132,7 +132,7 @@ export interface ChecksOptions
   /** Local mode: only models on this computer. */
   localOnly(): boolean;
   resolveScope(scope: SearchScope): string[] | null;
-  evidence: Pick<Evidence, "scope" | "search">;
+  evidence: Pick<Evidence, "scope" | "inScope" | "leftOut">;
   documents: ClaimCheckDependencies["documents"] &
     MindCheckOptions["documents"] & {
       /** Every live Document's names: what the Citations a sentence already has are named by. */
