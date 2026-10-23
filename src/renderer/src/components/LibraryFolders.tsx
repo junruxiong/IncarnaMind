@@ -16,6 +16,7 @@ import { documentFields, mindFields } from "../sortFields";
 import { allExamples, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
+import { ExamplesMenu } from "./ExamplesMenu";
 import { InlineName } from "./InlineName";
 import {
   ChevronDownLineIcon,
@@ -449,6 +450,7 @@ function NotInAFolder({
         title={title}
         headingTestId="not-in-a-folder-title"
         tooltip={examplesOnly ? undefined : t("sidebar.notInFolder.hint")}
+        actions={examplesOnly ? <ExamplesMenu /> : undefined}
         drop={drop}
       >
         <Contents
