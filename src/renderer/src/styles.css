@@ -1294,6 +1294,229 @@
     position: absolute;
     top: 16px;
     right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /*
+   * The reviewing pane (#697; the board Final-10-Redlines): beside the page,
+   * inside the Mind's tab; under a 760px Mind, folded to its button, which
+   * opens it at the page's right edge, the page narrowing so it never covers
+   * the change a card points to.
+   */
+  .review-slot {
+    display: none;
+
+    &[data-shown="beside"],
+    &[data-shown="over"] {
+      display: flex;
+      flex-direction: column;
+      width: 296px;
+      min-height: 0;
+      background: var(--color-sheet);
+      border-left: 1px solid var(--color-rule);
+    }
+    &[data-shown="beside"] {
+      flex: none;
+    }
+    &[data-shown="over"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 20;
+      max-width: 100%;
+      box-shadow: var(--shadow-popover);
+    }
+  }
+  .mind-tab-row[data-review="over"] > .mind-tab-page {
+    margin-right: min(296px, 100%);
+  }
+  .review-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex-grow: 1;
+    font-family: var(--font-sans);
+  }
+  .review-pane-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 8px 8px 12px;
+  }
+  .review-pane-who {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    height: 28px;
+    margin-left: auto;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 20px;
+    color: var(--color-ink-secondary);
+    white-space: nowrap;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-chip);
+      color: var(--color-ink);
+    }
+  }
+  .review-pane-list {
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 8px 16px;
+  }
+  .review-pane-empty {
+    margin: 0;
+    padding: 12px 12px;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--color-ink-meta);
+  }
+  .review-card {
+    border-radius: 8px;
+
+    & + & {
+      margin-top: 2px;
+    }
+    &[data-selected] {
+      background: var(--color-frame);
+      box-shadow: 0 0 0 1px var(--color-rule);
+    }
+  }
+  .review-card-main {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    border-radius: 8px;
+    text-align: start;
+    outline: none;
+
+    &:hover {
+      background: var(--color-frame);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -2px;
+    }
+  }
+  .review-card-initials,
+  .review-card-mark {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-top: -3px;
+  }
+  .review-card-initials {
+    border-radius: 50%;
+    background: var(--color-chip);
+    box-shadow: 0 0 0 2px var(--color-sheet);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    color: var(--color-ink-secondary);
+  }
+  .review-card-mark {
+    color: var(--color-ink-meta);
+  }
+  .review-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex-grow: 1;
+  }
+  .review-card-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 16px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .review-card-clause,
+  .review-card-name {
+    min-width: 0;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    overflow-wrap: anywhere;
+  }
+  .review-card-status {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    color: var(--color-ink-meta);
+  }
+  .review-card-excerpt {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-ink);
+    overflow-wrap: break-word;
+
+    & ins {
+      text-decoration: underline 1px currentColor;
+      text-underline-offset: 3px;
+    }
+    /* A thin space before what replaces it, as in the text (DESIGN.md, How a change reads). */
+    & del {
+      margin-inline-end: 0.2em;
+      color: var(--color-ink-meta);
+      text-decoration: line-through 1px var(--color-ink-meta);
+    }
+    [data-selected] > .review-card-main & {
+      display: block;
+      -webkit-line-clamp: unset;
+    }
+    [data-state="accepted"] &,
+    [data-state="rejected"] & {
+      color: var(--color-ink-meta);
+    }
+  }
+  .review-card-what {
+    color: var(--color-ink-meta);
+  }
+  .review-card-comment {
+    color: var(--color-ink-secondary);
+    white-space: pre-line;
+  }
+  /* "Changes (3)" at the page's top right, while the pane is folded or over the page. */
+  .review-fold {
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--color-ink-secondary);
+    white-space: nowrap;
+
+    &:hover,
+    &[aria-expanded="true"] {
+      background: var(--color-hover);
+      color: var(--color-ink);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 1px;
+    }
   }
   .page-menu-button {
     display: flex;
@@ -3948,14 +4171,15 @@
     text-decoration: line-through 1px var(--color-ink-meta);
   }
   .mind-editor .proposal-current,
-  .mind-editor .proposal-target {
+  .mind-editor .proposal-target,
+  .mind-editor .review-picked {
     background: var(--color-accent-wash);
     border-radius: 2px;
   }
   /*
    * "3 changes from the assistant · Accept all · Reject all": at the top of
-   * the Mind, in view as it scrolls, with a line of its own for someone's
-   * changes from a Word file (#108).
+   * the Mind, in view as it scrolls, and "4 changes from Dana Kim · Review"
+   * for someone's changes from a Word file (#108, #697).
    */
   .proposals-bar {
     position: sticky;
