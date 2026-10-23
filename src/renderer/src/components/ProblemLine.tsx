@@ -53,6 +53,7 @@ export function ProblemLine({
   action,
   also,
   details = [],
+  disclosure,
   role = "alert",
   testId,
   title,
@@ -64,6 +65,8 @@ export function ProblemLine({
   also?: ProblemAction | undefined;
   /** More parts of the line between its words and its actions, such as a run's estimate. */
   details?: readonly string[];
+  /** Details the User opens: their toggle after the actions, their panel under the line. */
+  disclosure?: { toggle: ReactNode; panel: ReactNode } | undefined;
   role?: "alert" | "status";
   testId?: string;
   /** More to read on hover, such as the provider's own words. */
@@ -86,8 +89,10 @@ export function ProblemLine({
           children,
           ...details,
           ...buttons.map((each) => <LineAction key={each.label} action={each} />),
+          disclosure?.toggle,
         ]}
       />
+      {disclosure?.panel}
     </div>
   );
 }
