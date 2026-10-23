@@ -736,6 +736,15 @@ test("a key refused on the chosen region says which host refused it, in English 
     await language(window, "en");
     expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
 
+    // The button sends the same key to the other region; refused there too, the line offers the first again.
+    const sent = (await askedMoonshot()).length;
+    await form.getByTestId("provider-send-other-region").click();
+    await expect(refused).toContainText("China: api.moonshot.cn refused this key.");
+    await expect(form.getByTestId("provider-send-other-region")).toHaveText(
+      "Send it to International",
+    );
+    expect(new Set((await askedMoonshot()).slice(sent))).toEqual(new Set(["api.moonshot.cn"]));
+
     await app.evaluate(() => {
       (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot.length = 0;
     });
