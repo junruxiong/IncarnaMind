@@ -194,7 +194,13 @@ import {
   type RequestMind,
   readMind,
 } from "./context";
-import { coverageInstructions, coverageOf, documentsAsked, type SizedDocument } from "./coverage";
+import {
+  coverageInstructions,
+  coverageOf,
+  documentsAsked,
+  namedCoverage,
+  type SizedDocument,
+} from "./coverage";
 import {
   documentSkimBlock,
   documentTextBlock,
@@ -669,10 +675,14 @@ export interface DocumentsForAnswers
   ): Promise<WindowedPassage[]>;
 }
 
-/** The Documents one Answer searches: those of its Question's Search scope, or all of them (null). */
+/**
+ * The Documents one Answer searches: those of its Question's Search scope, or all of them (null).
+ * `readByName` gathers those it searches by name, each once, in order.
+ */
 function inScope(
   documents: DocumentsForAnswers,
   documentIds: readonly string[] | null,
+  readByName: string[],
 ): AnswerDocuments {
   return {
     searchableCount: () => documents.searchableCount(documentIds),
@@ -686,12 +696,13 @@ function inScope(
       const key = (text: string) => text.replace(/\s+/g, " ").trim().toLocaleLowerCase();
       const wanted = key(name.replace(/\s*\(“[^”]*”\)\s*$/, ""));
       const all = documents.searchableBySize(documentIds);
-      return (
+      const id =
         all.find((each) => key(each.name) === wanted)?.id ??
         all.find((each) => key(each.name).includes(wanted) || wanted.includes(key(each.name)))
           ?.id ??
-        null
-      );
+        null;
+      if (id !== null && !readByName.includes(id)) readByName.push(id);
+      return id;
     },
   };
 }
@@ -995,9 +1006,31 @@ export function createAnswers(options: AnswersOptions) {
       }
       return stillReadingAtEnd;
     };
+    /** The Documents it searched by name, in order. */
+    const readByName: string[] = [];
+    /** The one it read by a name that fits others too (#1512), looked at once, when the Answer ends. */
+    let namedAtEnd: AnswerSteps["coverage"] | null;
+    const covered = () => {
+      if (coverage || outside || finishedAt === null) return coverage;
+      if (namedAtEnd === undefined) {
+        const titles = new Map(options.documents.names().map((each) => [each.id, each.title]));
+        namedAtEnd =
+          readByName.length === 0
+            ? null
+            : namedCoverage(
+                context.question,
+                readByName,
+                options.documents
+                  .searchableBySize(documentIds)
+                  .map((each) => ({ ...each, title: titles.get(each.id) })),
+              );
+      }
+      return namedAtEnd;
+    };
     const steps = (): AnswerSteps => {
       const summary = reasoning.trim();
       const reading = stillReading();
+      const shownCoverage = covered();
       const thoughtUntil =
         firstTextAt !== null && reasoningStartedAt !== null && firstTextAt > reasoningStartedAt
           ? firstTextAt
@@ -1029,7 +1062,7 @@ export function createAnswers(options: AnswersOptions) {
         ...(careful && { careful: true as const }),
         ...(unbackedClaims.length > 0 && { unbackedClaims: [...unbackedClaims] }),
         ...(withoutMindTools && { withoutMindTools: true as const }),
-        ...(coverage && { coverage }),
+        ...(shownCoverage && { coverage: shownCoverage }),
         ...(writtenFrom && { writtenFrom }),
         ...(reading && { stillReading: reading }),
         ...(sentDocuments && {
@@ -1041,7 +1074,7 @@ export function createAnswers(options: AnswersOptions) {
       };
     };
     let skills: SkillSession | null = null;
-    const searched = inScope(options.documents, documentIds);
+    const searched = inScope(options.documents, documentIds, readByName);
     const inAssistant = !outside && input.assistant !== undefined;
     const mindIn = input.assistant?.focused?.mindId ?? null;
     const originalId =

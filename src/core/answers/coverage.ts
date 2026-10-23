@@ -4,8 +4,12 @@
  * "总结这些文档"), or the main few ("the two main documents"). A summary of
  * more than `COVERED_AT_ONCE` covers the largest, and says so with an offer
  * of the rest; the main few are the largest, named, with an offer of others.
+ * A Document the Question names that it read, when the name fits others too,
+ * is named with an offer of those others.
  */
+import { displayName } from "../../shared/documentNames";
 import type { AnswerCoverage } from "../api";
+import { keywordTerms, keywordText } from "../documents/keywords";
 
 export const COVERED_AT_ONCE = 8;
 
@@ -100,6 +104,66 @@ export function coverageOf(
       used: documents.slice(0, COVERED_AT_ONCE).map(named),
       rest: documents.slice(COVERED_AT_ONCE).map((each) => each.id),
     };
+  }
+  return null;
+}
+
+export interface TitledDocument {
+  id: string;
+  name: string;
+  /** Its own title (see ../documents/title), which may name it where its file name doesn't. */
+  title?: string | null;
+}
+
+const HAN = /\p{Script=Han}/u;
+// "The document" and "这个文件" name no one Document; what "this document" means is #1334's.
+const ANY_DOCUMENT = /^(?:documents?|docs?|files?|pdfs?|文档|文件)$/;
+
+const compact = (text: string) => text.replaceAll(" ", "");
+
+/** Whether a Document's name or title has a word of `keywordTerms`; a Chinese one may sit inside a longer word. */
+function namedBy(document: TitledDocument, term: string): boolean {
+  return [document.name, document.title].some((field) => {
+    if (!field) return false;
+    const words = keywordText(field);
+    if (HAN.test(term)) return compact(words).includes(compact(term));
+    return words.split(" ").some((word) => word === term || word === `${term}'s`);
+  });
+}
+
+/** A word that can name a Document on its own: not a number, a letter or a single character. */
+const canName = (term: string) =>
+  /\p{L}/u.test(term) && compact(term).length >= (HAN.test(term) ? 2 : 3);
+
+/**
+ * A Document the Answer read by name that the Question's words name, when they name others
+ * of `documents` (those in scope) too (#1512): the first of `read` (the Documents it searched
+ * by name, in order) whose name or title has the Question's words that some other Document's
+ * has as well, named as the User sees it, with those others it didn't read; null when there is none.
+ */
+export function namedCoverage(
+  question: string,
+  read: readonly string[],
+  documents: readonly TitledDocument[],
+): AnswerCoverage | null {
+  const terms = keywordTerms(question).filter(
+    (term) => compact(term).length > 1 && !ANY_DOCUMENT.test(term),
+  );
+  for (const id of read) {
+    const document = documents.find((each) => each.id === id);
+    if (!document) continue;
+    const said = terms.filter((term) => namedBy(document, term));
+    if (!said.some(canName)) continue;
+    const rest = documents.filter(
+      (each) => !read.includes(each.id) && said.every((term) => namedBy(each, term)),
+    );
+    if (rest.length > 0) {
+      return {
+        kind: "named",
+        used: [{ id: document.id, name: displayName(document) }],
+        rest: rest.map((each) => each.id),
+      };
+    }
   }
   return null;
 }

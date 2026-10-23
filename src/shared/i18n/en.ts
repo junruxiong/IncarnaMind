@@ -4958,6 +4958,8 @@ export const en = {
   "coverage.main": "I took {documents} as the main ones.",
   "coverage.main.one": "I took {document} as the main one.",
   "coverage.main.others": "Use others",
+  "coverage.named": "I read {document}; {count} other Documents match.",
+  "coverage.named.one": "I read {document}; 1 other Document matches.",
   "coverage.askedAgain": "Asked again with the other {count} Documents",
   "coverage.askedAgain.one": "Asked again with the other Document",
   "mindChanges.noMind": "No Mind was open to change.",
