@@ -248,6 +248,7 @@ import {
   skillSetsLanguage,
   sourcesInstructions,
   stillReadingNote,
+  THIS_DOCUMENT_RULE,
   webInstructions,
   withPassageNotes,
   workingCopyNote,
@@ -336,12 +337,17 @@ export interface AnswerConversations {
    * Adds a Question, and its conversation with its first one, and its Answer, being
    * written, which reads `read`.
    */
-  add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn;
-  /** The Question of an Answer, and the Tool calls it made, to write the Answer again. */
+  add(
+    input: Omit<QuestionInput, "onScreen">,
+    answerModel: ChatModelChoice | null,
+    read: AnswerRead | null,
+  ): Turn;
+  /** The Question of an Answer, and the Tool calls it made, to write the Answer again; what is on screen now. */
   questionOf(input: unknown): {
     answerId: string;
     question: ConversationQuestion;
     toolCalls: AnswerToolCall[];
+    onScreen: string[];
   };
   /** Takes the Search scope off a Question: its Answers search every Document (#748). */
   clearScope(questionId: string): ConversationQuestion | null;
@@ -2138,6 +2144,7 @@ export function createAnswers(options: AnswersOptions) {
               lastAnswer: input.assistant?.lastAnswer != null,
             }),
             commandInstructions(withCommandTools),
+            input.assistant && !help ? THIS_DOCUMENT_RULE : "",
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
@@ -2518,6 +2525,7 @@ export function createAnswers(options: AnswersOptions) {
     documentIds: string[] | null,
     emptyScope: boolean,
     mind: MindToRead | null,
+    onScreen: readonly string[],
     remake: string | null = null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
@@ -2533,11 +2541,13 @@ export function createAnswers(options: AnswersOptions) {
     const section =
       mind && earlier.length > 0 ? mind.reading.section(MIND_TOKEN_LIMIT, asking) : mind?.section;
     const documents = options.documents.names();
+    const shown = namesOnScreen(onScreen, documentIds);
     const { context, origins } = conversationContextOf(earlier, question.text, {
       mind: section,
       documents,
       mindNames: options.readableMindName,
       changeStates: changeStatesOf,
+      onScreen: shown,
     });
     const requestOf = (reading: MindReading, kept: MindCut): RequestMind => ({
       text: kept.text,
@@ -2570,6 +2580,7 @@ export function createAnswers(options: AnswersOptions) {
                   documents,
                   mindNames: options.readableMindName,
                   changeStates: changeStatesOf,
+                  onScreen: shown,
                 }).context,
                 request: requestOf(mind.reading, smaller),
                 share: smaller.share,
@@ -2599,6 +2610,14 @@ export function createAnswers(options: AnswersOptions) {
     });
     return { asked: true, conversation, questionId: question.id, answerId: answer.id };
   }
+
+  /** The names of the Documents open on screen that the Answer may search, in their order (#1334). */
+  const namesOnScreen = (onScreen: readonly string[], documentIds: readonly string[] | null) =>
+    onScreen.flatMap((id) =>
+      documentIds === null || documentIds.includes(id)
+        ? options.documents.searchableNames([id], 1).names
+        : [],
+    );
 
   const filedIn = (scope: SearchScope | null, askedFrom: AskedFrom | null) =>
     filingFolder(
@@ -2777,7 +2796,7 @@ export function createAnswers(options: AnswersOptions) {
       const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
       const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind);
+      return startInConversation(turn, ready, documentIds, emptyScope, mind, question.onScreen);
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
@@ -2785,7 +2804,7 @@ export function createAnswers(options: AnswersOptions) {
       const asked = options.conversations.questionOf(input);
       const everyDocument = isRecord(input) && input.clearScope === true;
       if (everyDocument) options.conversations.clearScope(asked.question.id);
-      const { answerId, question, toolCalls } = options.conversations.questionOf(input);
+      const { answerId, question, toolCalls, onScreen } = options.conversations.questionOf(input);
       const ready = await readyModel(question.model, question.forcedSkill);
       if ("asked" in ready) return ready;
       active.get(answerId)?.finish({ status: "stopped" });
@@ -2805,7 +2824,7 @@ export function createAnswers(options: AnswersOptions) {
       const mind =
         !from || from.deleted ? null : mindToRead(from.mindId, question.focus, question.text);
       const turn = options.conversations.restartAnswer(answerId, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind, remake);
+      return startInConversation(turn, ready, documentIds, emptyScope, mind, onScreen, remake);
     },
 
     /** Stops an Answer of a conversation being written, keeping what it has. */

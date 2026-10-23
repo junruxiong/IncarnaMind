@@ -121,6 +121,24 @@ export function commandInstructions(offered: boolean): string {
   ].join("\n");
 }
 
+const ON_SCREEN = "On screen now:";
+
+/** The line that starts the Question's message when Documents are open on screen (#1334); "" for none. */
+export function onScreenLine(names: readonly string[]): string {
+  if (names.length === 0) return "";
+  return `${ON_SCREEN} ${names.map((name) => `"${listedName(name)}"`).join(", ")}`;
+}
+
+/**
+ * What "this document" and a short piece mean in the assistant (#1334), told once: given only
+ * the Documents in scope, models summarised every one, at length.
+ */
+export const THIS_DOCUMENT_RULE = [
+  `A line "${ON_SCREEN} …" before the Question names the Documents the User has open, the one they are in first.`,
+  '- "This document", "this contract", "这份文件", "这份合同" and the like mean the Document the User\'s selection cites, else the one on screen: answer or write about that Document alone (search_documents with its document), unless the User asks about others too. With two or more on screen and nothing to tell which, ask which one with ask_user before writing anything.',
+  "- When the User asks for it short, keep it to five lines at most in all: a heading, a paragraph and each list item each count as one.",
+].join("\n");
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
@@ -202,7 +220,7 @@ export function mindInstructions(
     '- A chart ("make a bar chart of revenue by quarter", "画一个各季度收入的柱状图"): search and cite the figures, then write them as a table into a Mind, each cell cited, and give chart with the kind the User named and a short title from their words: IncarnaMind draws it from that table, right after it. For a table already in the Mind, call add_to_mind with chart and content empty. Chart only figures the Documents state: for a series they don\'t state, say you can chart only the figures the Documents state.',
     ...(lastAnswer
       ? [
-          '- To put your last Answer into a Mind as it is ("make it a document", "put that in this page", "做成文档"), give answer: true to create_mind, or to add_to_mind for the empty Mind in front, and nothing else: it goes in with its Citations and every Document it covered, so don\'t search again or write it anew.',
+          '- To put your last Answer into a Mind as it is ("add this to my notes", "make it a document", "put that in this page", "把这个加到我的笔记里", "做成文档"), give answer: true to add_to_mind for the Mind in <mind>, or to create_mind when there is none or the User asks for a new one, and nothing else: it goes in with its Citations and every Document it covered, so don\'t search again or write it anew. Write new notes about Documents only when the User asks for notes about them.',
         ]
       : []),
     "- If a Tool says nothing was changed, say that first, in one sentence, with why, and don't make the change another way.",

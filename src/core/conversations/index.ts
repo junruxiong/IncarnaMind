@@ -67,6 +67,8 @@ export interface QuestionInput {
   mind: { id: string; folderId: string | null } | null;
   /** Where the User was in that Mind; null with none. */
   focus: MindFocus | null;
+  /** The Documents open on screen, by id, the focused group's first; not kept with the Question. */
+  onScreen: string[];
   scope: SearchScope | null;
   model: ChatModelChoice | null;
   forcedSkill: string | null;
@@ -358,6 +360,15 @@ function storedFocus(value: string | null): MindFocus | null {
 }
 
 /** A `MindFocus`, or null for anything else. */
+/** The Documents open on screen, by id, in order, each once; throws for anything but a list of ids. */
+export function parseOnScreen(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || !value.every((id) => typeof id === "string" && id !== "")) {
+    throw new InvalidInputError("The Documents on screen must be a list of Document ids.");
+  }
+  return [...new Set(value as string[])];
+}
+
 function parseFocus(value: unknown): MindFocus | null {
   if (!isRecord(value) || typeof value.selection !== "string" || !Array.isArray(value.blockIds)) {
     return null;
@@ -747,6 +758,7 @@ export function createConversations(db: Database, now: () => string) {
         text: text.trim(),
         mind,
         focus: mind ? where : null,
+        onScreen: parseOnScreen(input.onScreen),
         scope: parseSearchScope(input.scope),
         model: model ?? null,
         forcedSkill: typeof forcedSkill === "string" ? forcedSkill : null,
@@ -759,7 +771,11 @@ export function createConversations(db: Database, now: () => string) {
      * conversation is named by the Question and belongs to the Folder of the Mind in
      * focus, or to none.
      */
-    add(input: QuestionInput, answerModel: ChatModelChoice | null, read: AnswerRead | null): Turn {
+    add(
+      input: Omit<QuestionInput, "onScreen">,
+      answerModel: ChatModelChoice | null,
+      read: AnswerRead | null,
+    ): Turn {
       return db.transaction(() => {
         const at = now();
         let conversationId = input.conversationId;
@@ -828,12 +844,13 @@ export function createConversations(db: Database, now: () => string) {
         .map((row) => ({ question: row.question, answer: row.answer ?? "" }));
     },
 
-    /** The Question of an Answer, both live, to write the Answer again. */
+    /** The Question of an Answer, both live, to write the Answer again, and what is on screen now. */
     questionOf(input: unknown): {
       answerId: string;
       question: ConversationQuestion;
       /** The Tool calls the Answer made, as it stands before it is written again. */
       toolCalls: AnswerToolCall[];
+      onScreen: string[];
     } {
       if (!isRecord(input)) {
         throw new InvalidInputError("Expected { conversationId, answerId }.");
@@ -851,6 +868,7 @@ export function createConversations(db: Database, now: () => string) {
         answerId: answer.id,
         question: toQuestion(question),
         toolCalls: storedList<AnswerToolCall>(answer.tool_calls),
+        onScreen: parseOnScreen(input.onScreen),
       };
     },
 
