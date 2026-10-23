@@ -374,12 +374,17 @@ test("Check this Mind with nothing changed sends nothing: the marks stay and the
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
 
   await setLanguage(window, "zh-CN");
+  await setWindowSize(app, window, 900, 720);
   const reopened = await checkCard(window);
   const sentAgain = await modelRequests(window);
   await pointAndClick(window, reopened.getByTestId("badge-check-mind"));
   await expect(unchanged).toContainText(/^自 .+ 起没有改动/);
   await expect(unchanged.getByTestId("mind-check-every")).toHaveText("重新核对每一句");
   expect(await modelRequests(window)).toBe(sentAgain);
-  await screenshot(window, "mind-check-unchanged-zh");
+  const [lineBox, cardBox] = [await unchanged.boundingBox(), await reopened.boundingBox()];
+  if (!lineBox || !cardBox) throw new Error("The line or the card isn't drawn.");
+  expect(lineBox.x).toBeGreaterThanOrEqual(cardBox.x);
+  expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+  await screenshot(window, "mind-check-unchanged-zh-narrow");
   await app.close();
 });
