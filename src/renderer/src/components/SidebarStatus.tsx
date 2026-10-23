@@ -22,7 +22,14 @@ import { taggingProblem } from "../taggingProblem";
 import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
-import { canTryAgain, outsideDialog, reasonKey, useWebPages } from "../webPages";
+import {
+  canTryAgain,
+  heldInLocalMode,
+  outsideDialog,
+  reasonKey,
+  siteOf,
+  useWebPages,
+} from "../webPages";
 import { CloseLineIcon } from "./lineIcons";
 import { embeddingProviderLabel } from "./providers/EmbeddingSettings";
 import { testErrorKey } from "./providers/shared";
@@ -70,6 +77,8 @@ interface Status {
   full: string;
   action?: { label: string; testId?: string; title?: string; run(): void };
   dismiss?: () => void;
+  /** What the dismissing control says, where "Dismiss" isn't what it does. */
+  dismissLabel?: string;
   /** It may take two lines, its action said after it, so nothing it names is cut off. */
   wraps?: boolean;
   /** It asks the User's consent, which is never hidden (ADR-0022). */
@@ -207,8 +216,8 @@ function StatusRow({ status, children }: { status: Status; children?: ReactNode 
       {dismiss && (
         <button
           type="button"
-          aria-label={t("error.dismiss")}
-          title={t("error.dismiss")}
+          aria-label={status.dismissLabel ?? t("error.dismiss")}
+          title={status.dismissLabel ?? t("error.dismiss")}
           onClick={dismiss}
           className={rowActionButtonClass}
         >
@@ -549,10 +558,13 @@ function useStatuses(): Status[] {
   for (const problem of pageProblems) {
     const refused = !canTryAgain(problem);
     const reason = t(reasonKey(problem.reason));
+    const held = heldInLocalMode(problem);
     const { message: short, fullMessage = short } = saidInLine(t, (t) =>
-      problem.document
-        ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
-        : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason }),
+      held
+        ? t("webPages.localMode", { site: siteOf(problem.address) })
+        : problem.document
+          ? t("webPages.fetchAgainFailed", { name: problem.document.name, reason })
+          : t(refused ? "webPages.notAdded" : "webPages.couldNotFetch", { reason }),
     );
     const { tryAgain, dismiss } = useWebPages.getState();
     statuses.push({
@@ -564,12 +576,13 @@ function useStatuses(): Status[] {
         ? {}
         : {
             action: {
-              label: t("webPages.tryAgain"),
-              testId: "web-page-try-again",
-              run: () => void tryAgain(problem),
+              label: t(held ? "webPages.localMode.once" : "webPages.tryAgain"),
+              testId: held ? "web-page-fetch-once" : "web-page-try-again",
+              run: () => void tryAgain(problem, held ? true : undefined),
             },
           }),
       dismiss: () => dismiss(problem),
+      ...(held && { dismissLabel: t("webPages.localMode.keep") }),
     });
   }
 
