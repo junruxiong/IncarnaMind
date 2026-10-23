@@ -118,8 +118,13 @@ import { readPageSetup } from "./documents/formats/docxPages";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
-import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import {
+  BUILT_IN_TEXT_RECOGNITION_MODEL,
+  createTextRecognitionModel,
+  type TextRecognitionModel,
+} from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
+import type { Reranker } from "./documents/searchTool";
 import { tunedSearch } from "./documents/searchTuning";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
@@ -244,6 +249,8 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { inFlow } from "./timing/flows";
+import { createTimings } from "./timing/timings";
 import type { CommandsHost, MarkingSettled } from "./tools/commands/run";
 import { createCommandSteps } from "./tools/commands/steps";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
@@ -408,6 +415,16 @@ function parseQuoted(input: unknown): ScannedQuoteInput {
   };
 }
 
+const STILL_PROCESSING: ReadonlySet<DocumentStatus> = new Set([
+  "queued",
+  "waiting-for-model",
+  "embedding",
+]);
+
+// A check's own kind, as its request names it ("find-support", "check-against-documents"…).
+const actionOf = (input: unknown, otherwise: string) =>
+  isRecord(input) && typeof input.action === "string" ? input.action : otherwise;
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -421,6 +438,8 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  const timings = createTimings({ db, now: () => adapters.now?.() ?? new Date() });
+  timings.prune();
   const systemPaper = () =>
     paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
   try {
@@ -573,6 +592,37 @@ export function createCore(adapters: CoreAdapters): Core {
         emitStatus: (status) => events.emit("textRecognitionModel.status", status),
       })
     : undefined;
+  // From the first moment a Document is read to it being searchable, by its kind and pages.
+  const indexingSince = new Map<string, number>();
+  const timeIndexing = (document: Document) => {
+    const since = indexingSince.get(document.id);
+    if (document.status === "extracting") {
+      if (since === undefined) indexingSince.set(document.id, performance.now());
+      return;
+    }
+    if (since === undefined || STILL_PROCESSING.has(document.status)) return;
+    indexingSince.delete(document.id);
+    if (document.status !== "ready") return;
+    timings.step("index-document", document.kind, performance.now() - since, document.pageCount);
+  };
+  const timedRecognition = (model: TextRecognitionModel): TextRecognitionModel => ({
+    get reader() {
+      return model.reader;
+    },
+    status: () => model.status(),
+    retry: () => model.retry(),
+    onReady: (listener) => model.onReady(listener),
+    read: (picture, page) =>
+      timings.local(
+        "ocr-page",
+        model.reader,
+        () => model.read(picture, page),
+        (lines) => lines.length,
+      ),
+    readFile: (file, page) =>
+      timings.local("ocr-page", model.reader, () => model.readFile(file, page)),
+    close: () => model.close(),
+  });
   /** What `getTextRecognitionModel` says in a copy that has no recognizer: nothing to download. */
   const textRecognitionUnavailable: EmbeddingModelStatus = {
     name: BUILT_IN_TEXT_RECOGNITION_MODEL.name,
@@ -631,11 +681,12 @@ export function createCore(adapters: CoreAdapters): Core {
       now,
       log: adapters.log ?? silentLogger,
       model: embedding.model,
-      textRecognition: textRecognitionModel,
+      textRecognition: textRecognitionModel && timedRecognition(textRecognitionModel),
       ...(adapters.scansAtOnce !== undefined && { scansAtOnce: adapters.scansAtOnce }),
       pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {
+        timeIndexing(document);
         events.emit("document.status", document);
         libraryDocumentChanged(document.id);
         batches.changed([document.id]);
@@ -944,6 +995,7 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     now: () => adapters.now?.() ?? new Date(),
     cap: () => settings.get().user.monthlyCap,
+    timings,
   });
   // Nothing is in flight yet: what is still reserved was left by a crash.
   meter.settleOpen();
@@ -1106,6 +1158,15 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   sources.dropPurged().catch((error: unknown) => console.error(error));
   /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose unless `rerank` is false. */
+  const timedRerank = (reranker: Reranker | undefined): Reranker | undefined =>
+    reranker &&
+    ((query, candidates, signal) =>
+      timings.local(
+        "rerank",
+        rerank.usesBuiltIn() ? BUILT_IN_RERANKING_MODEL.name : "rerank service",
+        () => reranker(query, candidates, signal),
+        () => candidates.length,
+      ));
   const searchDocuments = (
     query: string,
     documentIds: readonly string[] | null,
@@ -1114,7 +1175,7 @@ export function createCore(adapters: CoreAdapters): Core {
   ) => {
     const options = {
       signal,
-      rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
+      rerank: reranking ? timedRerank(adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
       ...(parameters && { parameters }),
     };
@@ -1196,7 +1257,10 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     leaveOutOwnFiles: () => settings.get().user.leaveOutOwnFiles,
     search: (query, options) =>
-      documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
+      documents.searchTool(query, {
+        ...options,
+        rerank: timedRerank(adapters.reranker ?? rerank.active()),
+      }),
   });
 
   // Web search through the Answer's model's provider (#128): asked for once per provider, as
@@ -2863,6 +2927,8 @@ export function createCore(adapters: CoreAdapters): Core {
       partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
       audioDeleted: (meetingId) =>
         listMeetings?.().find((each) => each.id === meetingId)?.audio.deletedAt != null,
+      decoded: (modelId, decodeMs, audioSeconds) =>
+        timings.step("transcribe", modelId, decodeMs, audioSeconds),
       recordSpeed: (modelId, ratio) => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
         settings.writeDeviceValue(TRANSCRIPTION_SPEED, {
@@ -3633,7 +3699,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
       return meter.estimate(metered, items, searches, each);
     },
-    compareDocuments: (input) => comparisons.compareDocuments(input),
+    compareDocuments: (input) => inFlow("comparison", () => comparisons.compareDocuments(input)),
     fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
     stopComparisonTable: (input) => comparisons.stop(input),
     listFillingComparisons: async () => comparisons.filling(),
@@ -3646,31 +3712,33 @@ export function createCore(adapters: CoreAdapters): Core {
     tellTask: async (taskId, text) => tasks.tell(taskId, text),
     untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
     getResearchPlan: async (taskId) => research.planView(taskId),
-    planResearch: (input) => research.plan(input),
-    startResearch: (input) => research.start(input),
+    planResearch: (input) => inFlow("research", () => research.plan(input)),
+    startResearch: (input) => inFlow("research", () => research.start(input)),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
       answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
-    suggestNext: (request) => suggestions.suggest(request),
+    suggestNext: (request) => inFlow("suggestion", () => suggestions.suggest(request)),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
     acceptSuggestion: async (input) => suggestions.accept(input),
     getSuggestionStatus: () => suggestions.status(),
     editWithAi: (input) => edits.editWithAi(input),
     regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
-    checkSentences: (input) => checks.checkSentences(input),
+    checkSentences: (input) =>
+      inFlow(actionOf(input, "check-sentences"), () => checks.checkSentences(input)),
     cancelCheck: async (requestId) => checks.cancel(requestId),
-    checkClaim: (input) => checks.checkClaim(input),
-    verifyDocument: (input) => checks.verifyDocument(input),
-    findClaims: (input) => checks.findClaims(input),
-    verifyClaims: (input) => checks.verifyClaims(input),
+    checkClaim: (input) => inFlow(actionOf(input, "check-claim"), () => checks.checkClaim(input)),
+    verifyDocument: (input) => inFlow("verify", () => checks.verifyDocument(input)),
+    findClaims: (input) => inFlow("verify", () => checks.findClaims(input)),
+    verifyClaims: (input) => inFlow("verify", () => checks.verifyClaims(input)),
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
-    checkContradictions: (input) => checks.checkContradictions(input),
+    checkContradictions: (input) =>
+      inFlow("contradictions", () => checks.checkContradictions(input)),
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
-    findMindClaims: (input) => checks.findMindClaims(input),
-    checkMind: (input) => checks.checkMind(input),
+    findMindClaims: (input) => inFlow("check-mind", () => checks.findMindClaims(input)),
+    checkMind: (input) => inFlow("check-mind", () => checks.checkMind(input)),
     documentsAddedSinceChecks: async (mindId) => checks.documentsAddedSinceChecks(mindId),
 
     getSecretStorage: async () => secrets.status(),
@@ -4093,7 +4161,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (result.ok) skillsChanged();
       return result;
     },
-    draftSkillFromMind: (input) => skillDrafts.draft(input),
+    draftSkillFromMind: (input) => inFlow("skill-draft", () => skillDrafts.draft(input)),
     cancelSkillDraft: async (requestId) => skillDrafts.cancel(requestId),
     listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
     restoreBuiltInSkills: async () => {

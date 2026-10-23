@@ -138,6 +138,7 @@ import {
 } from "../skills/scripts";
 import { scriptCallInput, skillTools } from "../skills/tools";
 import { asksForSources } from "../sources/intent";
+import { inFlow } from "../timing/flows";
 import {
   COMMAND_TOOLS,
   DOCUMENT_TOOLS,
@@ -2285,7 +2286,20 @@ export function createAnswers(options: AnswersOptions) {
       settleMinds();
       finish(outcome);
     };
-    run().catch((error: unknown) => {
+    const flow = help
+      ? "call-help"
+      : outside
+        ? "outside-agent"
+        : input.toolSet === "check"
+          ? "check"
+          : input.task
+            ? "task"
+            : routed?.kind === "write"
+              ? "assistant-write"
+              : routed?.kind === "edit"
+                ? "assistant-edit"
+                : "question";
+    inFlow(flow, run).catch((error: unknown) => {
       options.reportError(error);
       settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });

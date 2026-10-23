@@ -241,6 +241,8 @@ export interface TranscriptsOptions {
   recordSpeed(modelId: string, ratio: number): void;
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
   health: CaptureHealthRecords;
+  /** A stretch this computer transcribed: its model, how long it took and how many seconds of audio (#1624). */
+  decoded?(modelId: string, decodeMs: number, audioSeconds: number): void;
   /** The Meeting's Transcript is finished: saved, its Document in its place, or with no lines (#142). */
   saved?(meetingId: string): void;
   /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
@@ -570,6 +572,11 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   /** The speed probe: how long decoding takes for the audio it decodes, kept for the next Meeting's choice of model. */
   function probe(state: State, segment: SpeechSegment): void {
+    options.decoded?.(
+      model.definition.id,
+      segment.decodeMs,
+      (segment.endMs - segment.startMs) / 1000,
+    );
     state.probe.audioMs += segment.endMs - segment.startMs;
     state.probe.decodeMs += segment.decodeMs;
     health.decoded(state.meetingId, segment.endMs - segment.startMs, segment.decodeMs);
