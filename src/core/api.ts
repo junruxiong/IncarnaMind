@@ -9123,7 +9123,8 @@ export interface CoreApi {
   /**
    * Cites words the User selected in a Document's viewer (#101), given in the
    * order selected, one part for each Unit: checked against the current
-   * version's text of those Units only, never found somewhere else.
+   * version's text of those Units only, never found somewhere else. Only
+   * when no part names its Unit is the whole Document searched.
    */
   citeSelection(input: { documentId: string; parts: SelectedPart[] }): Promise<CitedSelection>;
   /**

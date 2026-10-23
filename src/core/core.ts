@@ -431,11 +431,14 @@ function parseSelectedPart(input: unknown): SelectedPart {
   }
   const count = (value: unknown) =>
     typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
-  const unit = count(input.unit);
+  const unit = input.unit === null || input.unit === undefined ? null : count(input.unit);
+  // A Unit that isn't one would read as no Unit, and widen the check to the whole Document.
+  if (unit === undefined || unit === 0)
+    throw new InvalidInputError({ key: "error.selection.none" });
   const linesBefore = count(input.linesBefore);
   const linesAfter = count(input.linesAfter);
   return {
-    unit: unit !== undefined && unit >= 1 ? unit : null,
+    unit,
     text: input.text,
     ...(linesBefore !== undefined && { linesBefore }),
     ...(linesAfter !== undefined && { linesAfter }),
@@ -3765,13 +3768,14 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     citeSelection: async (input) => {
-      if (!isRecord(input) || !Array.isArray(input.parts) || input.parts.length === 0) {
+      if (!isRecord(input) || !Array.isArray(input.parts)) {
         throw new InvalidInputError({ key: "error.selection.none" });
       }
-      return citeSelection(documents, {
-        documentId: parseDocumentId(input.documentId),
-        parts: input.parts.map(parseSelectedPart),
-      });
+      const parts = input.parts.map(parseSelectedPart);
+      if (parts.every((part) => part.text.trim() === "")) {
+        throw new InvalidInputError({ key: "error.selection.none" });
+      }
+      return citeSelection(documents, { documentId: parseDocumentId(input.documentId), parts });
     },
     searchPassages: (query, options) => documents.search(query, options),
     searchEvidence: async (query, options) => {

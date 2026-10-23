@@ -471,8 +471,8 @@ function withoutRunningLines(part: SelectedPart, unit: PageText, matching: Match
  * Cites what the User selected in a Document's viewer (see
  * `CoreApi.citeSelection`): parts on known Units are checked in those Units
  * alone, which become the Citation's, so it points where the User selected,
- * not at the same words elsewhere. Parts on no known Unit are looked for in
- * the whole Document. The quote is read as words (`readableQuote`), its
+ * not at the same words elsewhere. Only a selection on no known Unit at all
+ * is looked for in the whole Document; one that mixes both isn't found. The quote is read as words (`readableQuote`), its
  * radical look-alikes the ideographs they stand for.
  */
 export function citeSelection(
@@ -505,10 +505,11 @@ export function citeSelection(
   if (all === "") return refused(NOT_ON_PAGES, nowhere);
   // A whole TXT or Markdown file stored before Units is checked as one text.
   if (units.length === 1 && units[0]?.kind === "text") return citeIn(nowhere, raw);
-  if (input.parts.some((part) => part.unit === null)) {
+  if (input.parts.every((part) => part.unit === null)) {
     const located = locateQuote(units, raw, matching);
     return located ? citeIn(located, raw) : refused(NOT_ON_PAGES, nowhere);
   }
+  if (input.parts.some((part) => part.unit === null)) return refused(NOT_ON_PAGES, nowhere);
   const numbers = input.parts.map((part) => part.unit as number);
   const spread = { pageFrom: Math.min(...numbers), pageTo: Math.max(...numbers) };
   // A page at each end may hold nothing but a running header or footer: more can't be cited.
