@@ -57,7 +57,6 @@ export function AddProvider({
           providers={providers}
           refused={refused}
           onSaved={onAdded}
-          withMoreProviders
           keepDefault
         />
       )}
