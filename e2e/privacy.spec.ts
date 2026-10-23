@@ -4,6 +4,7 @@ import { gunzipSync } from "node:zlib";
 import { expect, type Locator, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import {
+  acceptPlainTextKeys,
   createDataFolder,
   dismissChatSetup,
   launchApp,
@@ -193,6 +194,7 @@ async function startFakeSentry(): Promise<{ server: Server; dsn: string; events:
 test("each use of a service has a button named for it, a service with one use has only its own, and focus stays on the last button", async () => {
   const { app, window } = await launchApp(dataDir);
   await dismissChatSetup(window);
+  await acceptPlainTextKeys(window);
   await window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     await bridge.saveChatProvider({
