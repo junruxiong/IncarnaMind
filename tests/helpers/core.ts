@@ -222,3 +222,12 @@ export async function saveProviderUnasked(
   }
   return provider;
 }
+
+/**
+ * Turns on tagging and sorting new Documents by themselves, which a cloud model starts without
+ * (#1617), as the switch in Settings does: where a line says what goes, that is the consent too.
+ */
+export async function turnOnAutomaticTagging(core: Core): Promise<void> {
+  const { settings } = await core.getLibrary();
+  await core.saveLibrarySettings({ ...settings, automatic: true });
+}

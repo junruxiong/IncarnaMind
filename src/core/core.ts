@@ -2245,11 +2245,15 @@ export function createCore(adapters: CoreAdapters): Core {
       }
     },
     usesCloud: ({ classifier, organizeWith }) => {
-      // Automatic's pick isn't known until it is worked out: until then it counts as a cloud model.
-      const tags = classifier.kind === "automatic" ? tagging.lastResolved() : classifier;
       const sorts = classifier.kind === "automatic" ? organizeWith : classifier;
-      if (classifier.kind === "automatic" && tags === null) return true;
-      return [tags, sorts].some((each) => each !== null && tagging.service(each) !== null);
+      if (sorts && tagging.service(sorts) !== null) return true;
+      if (classifier.kind !== "automatic") return tagging.service(classifier) !== null;
+      const picked = tagging.lastResolved();
+      if (picked) return tagging.service(picked) !== null;
+      // Not worked out yet: Jev, else the chat model, where Automatic looks first.
+      if (jev.service()) return true;
+      const chosen = settings.get().user.chatModel;
+      return !!chosen && chat.describeModel(chosen)?.service !== null;
     },
     pagesWaitFor: (classifier) => {
       if (classifier.kind !== "chat") return null;
@@ -2488,7 +2492,14 @@ export function createCore(adapters: CoreAdapters): Core {
     if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
+    // The switch for tagging and sorting follows the model until the User sets it: say when it moved.
+    const automatic = library.settings().automatic;
+    if (automatic !== lastAutomatic) {
+      lastAutomatic = automatic;
+      events.emit("library.changed", null);
+    }
   };
+  let lastAutomatic = library.settings().automatic;
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {

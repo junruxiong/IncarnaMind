@@ -31,6 +31,8 @@ test("the Privacy page lists the data flows and the update check, and offers no 
       baseUrl: "https://llm.example.com/v1",
       modelId: "example-model",
     });
+    // Tagging and sorting by themselves start off for it; turning them on is the consent too.
+    await bridge.saveLibrarySettings({ ...(await bridge.getLibrary()).settings, automatic: true });
   });
 
   const privacy = await openPrivacySettings(window);

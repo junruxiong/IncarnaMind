@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { AUTO_CLASSIFICATION } from "../src/core/library/automatic";
+import { openDatabase } from "../src/core/storage";
 import { buildPdf } from "../tests/helpers/pdf";
 import {
   acceptPlainTextKeys,
@@ -214,7 +215,7 @@ test("Organize suggests a Folder and Tags, keeps corrections and survives reopen
     });
     // On by default; turned off here, so the Document waits for Organize.
     const automatic = settings.getByRole("checkbox", {
-      name: /^Move new Documents into Folders automatically/,
+      name: /^Tag and sort new Documents automatically/,
     });
     await expect(automatic).toBeChecked();
     await automatic.uncheck();
@@ -309,7 +310,7 @@ test("⌘Z takes Organize's suggestions back and ⇧⌘Z brings them back in one
       await form.getByLabel("Model name", { exact: true }).fill("small-classifier");
     });
     await settings
-      .getByRole("checkbox", { name: /^Move new Documents into Folders automatically/ })
+      .getByRole("checkbox", { name: /^Tag and sort new Documents automatically/ })
       .uncheck();
     await closeSettings(window);
     const names = ["Research notes A", "Research notes B", "Research notes C"];
@@ -934,5 +935,66 @@ test("a scan with no text waits for its page images to be allowed with a cloud m
     ).toBe("accepted");
   } finally {
     await app.close();
+  }
+});
+
+test("a Library whose automatic tagging and sorting went off for a cloud model says so once, with the way back", async () => {
+  const first = await launchApp(dataDir, { fakeChat: true });
+  await acceptPlainTextKeys(first.window);
+  await (await coreOf(first.window)).evaluate(async (core) => {
+    await core.saveChatProvider({
+      kind: "openai",
+      apiKey: "sk-not-a-real-key",
+      modelId: "gpt-6-luna",
+    });
+  });
+  const path = join(sources, "Research notes.txt");
+  await writeFile(path, "Research report about membrane separation and water filtration.");
+  await first.window.getByTestId("add-documents-input").setInputFiles([path]);
+  await expect(first.window.getByTestId("document-list-item")).toHaveCount(1);
+  await first.app.close();
+  // What the migration that turned it off leaves behind.
+  const db = openDatabase(join(dataDir, "incarnamind.db"));
+  try {
+    db.run(
+      `INSERT INTO device_settings (id, key, value, created_at, updated_at)
+       VALUES ('notice', 'libraryAutomaticOffNotice', 'true', '2026-10-22T09:00:00.000Z', '2026-10-22T09:00:00.000Z')`,
+    );
+  } finally {
+    db.close();
+  }
+
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await setWindowSize(app, window, 900, 800);
+    await window.getByTestId("open-library").click();
+    const line = window.getByTestId("library-automatic-off");
+    await expect(line).toContainText(
+      "Automatic tagging and sorting is now off for OpenAI, since it sent each Document’s name and an excerpt.",
+    );
+    await setLanguage(window, "zh-CN");
+    await expect(line).toContainText("已为 OpenAI 关闭自动打标签和整理");
+    await setLanguage(window, "en");
+
+    // The way back is one click: Settings opens on the Tagging switch, and the line is gone for good.
+    await line.getByTestId("library-automatic-off-settings").click();
+    const tagging = window.getByTestId("tagging-settings");
+    await expect(tagging).toBeVisible();
+    await expect(
+      tagging.getByRole("checkbox", { name: /^Tag and sort new Documents automatically/ }),
+    ).not.toBeChecked();
+    await closeSettings(window);
+    await expect(window.getByTestId("library-automatic-off")).toHaveCount(0);
+  } finally {
+    await app.close();
+  }
+
+  const again = await launchApp(dataDir, { fakeChat: true });
+  try {
+    await again.window.getByTestId("open-library").click();
+    await expect(again.window.getByTestId("library")).toBeVisible();
+    await expect(again.window.getByTestId("library-automatic-off")).toHaveCount(0);
+  } finally {
+    await again.app.close();
   }
 });

@@ -65,7 +65,7 @@ function countRequests(core: Core) {
 }
 
 describe("Choosing a service is the consent (ADR-0022)", () => {
-  test("choosing the chat model's provider allows every flow that sends to it: nothing asks", async () => {
+  test("choosing the chat model's provider allows what runs by itself, and tagging and sorting wait for the User: nothing asks", async () => {
     const { core, models } = await startWithModel();
     const requests = countRequests(core);
     const changed = nextEvent(core, "dataFlows.changed");
@@ -87,8 +87,13 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
       allowed("suggestions", ["writing", "writing-passages"]),
       allowed("edits", ["selection"]),
       allowed("checks", ["selection", "passages", "verified-document", "blocks"]),
-      allowed("tagging", ["tags", "document-excerpts"]),
-      allowed("classification", ["groups", "tags", "document-excerpts"]),
+      // Tagging and sorting Documents aren't what choosing a provider allows: the User turns them on.
+      {
+        flow: { id: "tagging", service: OPENAI_SERVICE, sends: ["tags", "document-excerpts"] },
+        consent: "not-asked",
+        decidedAt: null,
+        chosen: false,
+      },
     ]);
     // The Privacy page hears of it at once.
     expect((await changed).find((flow) => flow.id === "chat")?.services).toEqual([
@@ -379,11 +384,7 @@ describe("Data-flow consent", () => {
       }),
       expect.objectContaining({
         flow: expect.objectContaining({ id: "tagging" }),
-        consent: "accepted",
-      }),
-      expect.objectContaining({
-        flow: expect.objectContaining({ id: "classification" }),
-        consent: "accepted",
+        consent: "not-asked",
       }),
     ]);
     const second = await askAndWaitForConsent(core);
