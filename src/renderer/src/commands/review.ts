@@ -27,7 +27,7 @@ function selectedShown(ctx: CommandContext) {
   return change ? { ...shown, change } : null;
 }
 
-function authorShown(ctx: CommandContext) {
+function personInFocus(ctx: CommandContext) {
   const shown = reviewableShown(ctx);
   if (!shown) return null;
   const author = authorInFocus(shown.editor, shown.mindId);
@@ -61,15 +61,15 @@ const decide = (outcome: "accept" | "reject"): Pick<Command, "when" | "run"> => 
 
 const decideAll = (outcome: "accept" | "reject"): Pick<Command, "label" | "when" | "run"> => ({
   label: (ctx, t) => {
-    const author = authorShown(ctx)?.author;
+    const author = personInFocus(ctx)?.author;
     const name = author ?? t("proposal.unknownAuthor");
-    return t(outcome === "accept" ? "proposal.theirs.acceptAll" : "proposal.theirs.rejectAll", {
-      name,
+    return t(outcome === "accept" ? "review.acceptAuthor" : "review.rejectAuthor", {
+      person: name,
     });
   },
-  when: (ctx) => authorShown(ctx) !== null,
+  when: (ctx) => personInFocus(ctx) !== null,
   run(ctx) {
-    const shown = authorShown(ctx);
+    const shown = personInFocus(ctx);
     if (shown) decideAuthor(shown.editor, shown.mindId, shown.author, outcome);
   },
 });

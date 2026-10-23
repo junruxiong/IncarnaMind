@@ -22,6 +22,7 @@ import {
   waitingChanges,
 } from "../../src/renderer/src/editor/theirChanges";
 import { authorShown, filterOf, shownIn } from "../../src/renderer/src/reviewPane";
+import { translate } from "../../src/shared/i18n";
 import { decideProposals, pendingProposals } from "../../src/shared/proposals";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import type { MindClient } from "../helpers/mindClient";
@@ -178,6 +179,23 @@ describe("what a card says", () => {
     expect(namesList(["审核人甲", "对方律师"], "zh-CN")).toBe("审核人甲和对方律师");
     expect(namesList(["Dana Kim", "Luis Ortega", "审核人甲"], "zh-CN")).toBe(
       "Dana Kim、Luis Ortega 和审核人甲",
+    );
+    // A space between Chinese and a Latin name, none beside a Chinese one (docs/agents/zh-CN.md).
+    const line = (names: string) => translate("zh-CN", "review.line", { count: 4, names });
+    expect(line(namesList(["对方律师", "审核人甲"], "zh-CN"))).toBe(
+      "来自对方律师和审核人甲的 4 处修订",
+    );
+    expect(line(namesList(["Dana Kim", "Luis Ortega"], "zh-CN"))).toBe(
+      "来自 Dana Kim 和 Luis Ortega 的 4 处修订",
+    );
+    expect(translate("zh-CN", "review.acceptAuthor", { person: "对方律师" })).toBe(
+      "全部接受对方律师的修订",
+    );
+    expect(translate("zh-CN", "review.rejectAuthor", { person: "Luis Ortega" })).toBe(
+      "全部拒绝 Luis Ortega 的修订",
+    );
+    expect(translate("en", "review.line", { count: 4, names: "Dana Kim and Luis Ortega" })).toBe(
+      "4 changes from Dana Kim and Luis Ortega",
     );
   });
 });

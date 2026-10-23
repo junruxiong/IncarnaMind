@@ -6,6 +6,7 @@ import { buildPdf } from "../tests/helpers/pdf";
 import {
   askInAssistant,
   assistantAnswers,
+  confirmLink,
   createDataFolder,
   dismissChatSetup,
   expectReadyDocuments,
@@ -16,6 +17,7 @@ import {
   newMind,
   openPageMenu,
   pointAndClick,
+  previewLink,
   removeDataFolder,
   setLanguage,
   setSidebarWidth,
@@ -375,6 +377,119 @@ test("Ask a question and Add your own files do their step on a click, Enter or S
     });
   }
   await app.close();
+});
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`Add files… and Link a folder… are under step 3 from the start, each works before steps 1 and 2, and what is added ticks step 3 alone, in ${language} (#1574)`, async () => {
+    const sources = await createDataFolder();
+    const notes = join(sources, "Harbour notes.md");
+    await writeFile(notes, "# Harbour notes\n\nThe harbour master publishes the tide tables.\n");
+    const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+    try {
+      await setWindowSize(app, window, 900, 900);
+      await setLanguage(window, language);
+      const card = window.getByTestId("first-open-steps");
+      const files = step(window, "files");
+      await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+      await expect(files).toHaveAttribute("data-state", "later");
+
+      const add = files.getByTestId("first-open-add-files");
+      const link = files.getByTestId("first-open-link-folder");
+      await expect(add).toHaveText(language === "en" ? "Add files…" : "添加文件…");
+      await expect(link).toHaveText(language === "en" ? "Link a folder…" : "添加同步文件夹…");
+      await expect(files).toContainText(
+        language === "en"
+          ? "Your files stay where they are. IncarnaMind reads them on this computer."
+          : "你的文件留在原处，IncarnaMind 在这台电脑上读取它们。",
+      );
+      const [cardBox, title, addBox, linkBox] = await Promise.all([
+        card.boundingBox(),
+        files.getByTestId("first-open-step-do").boundingBox(),
+        add.boundingBox(),
+        link.boundingBox(),
+      ]);
+      if (!cardBox || !title || !addBox || !linkBox) throw new Error("Step 3 isn't laid out.");
+      expect(addBox.y, "the buttons sit under the title").toBeGreaterThan(title.y + title.height);
+      expect(linkBox.x + linkBox.width, "and inside the card").toBeLessThanOrEqual(
+        cardBox.x + cardBox.width,
+      );
+      expect(linkBox.y + linkBox.height).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+
+      const dialog = await previewLink(app, window, sources, link);
+      await window.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      expect(await gettingStarted(window)).toMatchObject({ indexed: false });
+
+      await interceptOpenDialog(app, notes);
+      await pointAndClick(window, add);
+      await expect(files).toHaveAttribute("data-state", "done", { timeout: 20_000 });
+      await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+      await expect(step(window, "question")).toHaveAttribute("data-state", "later");
+      expect(await gettingStarted(window)).toMatchObject({
+        mistakeSeen: false,
+        askedOwn: false,
+        askedReady: false,
+        indexed: true,
+      });
+    } finally {
+      await app.close();
+      await removeDataFolder(sources);
+    }
+  });
+}
+
+test("a folder linked before steps 1 and 2 ticks step 3 alone (#1574)", async () => {
+  const sources = await createDataFolder();
+  await writeFile(
+    join(sources, "Harbour notes.md"),
+    "# Harbour notes\n\nThe harbour master publishes the tide tables.\n",
+  );
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    const files = step(window, "files");
+    await expect(files).toHaveAttribute("data-state", "later");
+    await confirmLink(
+      await previewLink(app, window, sources, files.getByTestId("first-open-link-folder")),
+    );
+    await expect(files).toHaveAttribute("data-state", "done", { timeout: 20_000 });
+    await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+    await expect(step(window, "question")).toHaveAttribute("data-state", "later");
+  } finally {
+    await app.close();
+    await removeDataFolder(sources);
+  }
+});
+
+test("a file dropped on the window, or added from the + menu or ⌘O, before steps 1 and 2 ticks step 3 and leaves them open (#1574)", async () => {
+  const sources = await createDataFolder();
+  const dropped = join(sources, "Dropped notes.md");
+  const opened = join(sources, "Opened notes.md");
+  await writeFile(dropped, "# Dropped notes\n\nThe harbour master publishes the tide tables.\n");
+  await writeFile(opened, "# Opened notes\n\nThe pilot station answers on channel 12.\n");
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await window.getByTestId("add-documents-input").setInputFiles([dropped]);
+    await expect(step(window, "files")).toHaveAttribute("data-state", "done", {
+      timeout: 20_000,
+    });
+    expect(await gettingStarted(window)).toMatchObject({ mistakeSeen: false, askedOwn: false });
+    await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+
+    await markSteps(window, NONE);
+    await expect(step(window, "files")).toHaveAttribute("data-state", "later");
+    await interceptOpenDialog(app, opened);
+    await window.keyboard.press("ControlOrMeta+o");
+    await expect
+      .poll(async () => (await gettingStarted(window)).indexed, { timeout: 20_000 })
+      .toBe(true);
+    await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+    await expect(step(window, "question")).toHaveAttribute("data-state", "later");
+  } finally {
+    await app.close();
+    await removeDataFolder(sources);
+  }
 });
 
 const BUTTON_STATES = [
