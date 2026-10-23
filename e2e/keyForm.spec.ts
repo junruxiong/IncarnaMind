@@ -516,7 +516,7 @@ test("Kimi's form opens on the region of the interface's language: International
   }
 });
 
-test("a Kimi key refused on the chosen region says which host refused it, in English and Chinese, and only that host is asked (#1650)", async () => {
+test("a key refused on the chosen region says which host refused it, in English and Chinese, and only that host is asked (#1650)", async () => {
   const { app, window } = await launchApp(dataDir);
   try {
     await setWindowSize(app, window, 900, 900);
@@ -529,8 +529,8 @@ test("a Kimi key refused on the chosen region says which host refused it, in Eng
         const url = new URL(
           typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
         );
-        if (!url.host.startsWith("api.moonshot.")) return original(input, init);
-        asked.push(url.host);
+        if (!/^(api\.moonshot\.|dashscope)/.test(url.host)) return original(input, init);
+        if (url.host.startsWith("api.moonshot.")) asked.push(url.host);
         return Promise.resolve(
           Response.json({ error: { message: "Invalid Authentication" } }, { status: 401 }),
         );
@@ -545,11 +545,11 @@ test("a Kimi key refused on the chosen region says which host refused it, in Eng
     await form.getByLabel(/^API key/).fill(KEYS.bare);
     await form.getByTestId("provider-use-key").click();
     await expect(refused).toContainText(
-      "api.moonshot.ai (International) refused this key. Check it on platform.kimi.ai.",
+      "International: api.moonshot.ai refused this key. Check it on platform.kimi.ai.",
     );
     await language(window, "zh-CN");
     await expect(refused).toContainText(
-      "api.moonshot.ai（国际）拒绝了这个密钥。请到 platform.kimi.ai 检查。",
+      "国际：api.moonshot.ai 拒绝了这个密钥。请到 platform.kimi.ai 检查。",
     );
     await language(window, "en");
     expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
@@ -561,9 +561,18 @@ test("a Kimi key refused on the chosen region says which host refused it, in Eng
     await form.getByLabel(/^API key/).fill(KEYS.bare);
     await form.getByTestId("provider-use-key").click();
     await expect(refused).toContainText(
-      "api.moonshot.cn (China) refused this key. Check it on platform.kimi.com.",
+      "China: api.moonshot.cn refused this key. Check it on platform.kimi.com.",
     );
     expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.cn"]));
+
+    // A region's own label may carry brackets: the line does not wrap it in more.
+    await settings.getByTestId("models-back").click();
+    const qwen = await addProviderForm(settings, "qwen");
+    await qwen.getByLabel(/^API key/).fill(KEYS.bare);
+    await qwen.getByTestId("provider-use-key").click();
+    await expect(qwen.getByTestId("connection-test")).toContainText(
+      "China (Beijing): dashscope.aliyuncs.com refused this key. Check it on bailian.console.aliyun.com.",
+    );
   } finally {
     await app.close();
   }

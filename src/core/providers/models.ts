@@ -94,7 +94,6 @@ function requireBaseUrl(spec: ChatModelSpec): string {
   return spec.baseUrl;
 }
 
-/** A hosted provider's API: the spec's base URL, else the address of the endpoint it names (the first when it names none). */
 const hostedUrl = (spec: ChatModelSpec): string =>
   spec.baseUrl ?? endpointUrl(spec.kind, spec.endpoint, spec.catalogId) ?? requireBaseUrl(spec);
 
