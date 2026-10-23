@@ -45,6 +45,7 @@ import type * as Y from "yjs";
 import { asGenerated } from "../../shared/aiText";
 import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
+import { askedFor, waitsForUser as heldForUser } from "../../shared/askedChanges";
 import { citationNode, withCitations } from "../../shared/blockJson";
 import type { LiveDocument } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
@@ -2007,6 +2008,22 @@ export function createAnswers(options: AnswersOptions) {
       };
       const changedAMind = () => [...mindChanges.values()].some(changesAMind);
       const heldBack = holdBack(() => mindsListed().map((mind) => mind.name));
+      // Asked again inside the turn, the model reads what applied as applied: the window may not
+      // have taken it in yet, and told it waits, the model tells the User so.
+      const appliedInTurn: ChangeStates = (change) => {
+        const asked = new Set(
+          toolCalls.flatMap((call) =>
+            call.mindChange?.mindId === change.mindId ? [call.mindChange.request] : [],
+          ),
+        );
+        return (
+          minds?.read(change.mindId, (blocks) =>
+            blocks.doc && askedFor(blocks.doc, change.request) && !heldForUser(blocks.doc, asked)
+              ? { waiting: 0, accepted: 0, rejected: 0, applied: true }
+              : null,
+          ) ?? null
+        );
+      };
       const turnChecks: TurnCheck[] = [
         {
           name: "claimed-change",
@@ -2014,7 +2031,10 @@ export function createAnswers(options: AnswersOptions) {
             mindsNow = null;
             const claims = claimsNoCallMade(text, toolCalls, mindsListed(), focusedId);
             return claims.length > 0
-              ? { claims, note: askAgainNote(claims, toolCalls, options.readableMindName) }
+              ? {
+                  claims,
+                  note: askAgainNote(claims, toolCalls, options.readableMindName, appliedInTurn),
+                }
               : null;
           },
         },
@@ -2032,7 +2052,7 @@ export function createAnswers(options: AnswersOptions) {
             return unmade
               ? {
                   claims: ["changed"],
-                  note: unmadeFixesNote(unmade, toolCalls, options.readableMindName),
+                  note: unmadeFixesNote(unmade, toolCalls, options.readableMindName, appliedInTurn),
                 }
               : null;
           },

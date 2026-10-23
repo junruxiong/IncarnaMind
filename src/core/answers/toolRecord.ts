@@ -21,6 +21,8 @@ export interface ChangeState {
   accepted: number;
   rejected: number;
   gone?: boolean;
+  /** Read in its own turn: it applies in the Mind at once, as the window takes it in (#1559). */
+  applied?: boolean;
 }
 
 /** What became of a call's change, if known: read from its Mind as it is now. */
@@ -133,6 +135,7 @@ function decisions(total: number, accepted: number, rejected: number): string {
 function fateOf(proposals: number, state: ChangeState | null): string {
   if (!state) return "waiting for the User";
   if (state.gone) return GONE;
+  if (state.applied) return "applied in the Mind at once, with Undo";
   const { waiting, accepted, rejected } = state;
   if (waiting >= proposals) return "waiting for the User";
   const did =

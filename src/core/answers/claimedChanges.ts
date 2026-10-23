@@ -9,7 +9,7 @@
  */
 import type { AnswerToolCall, ClaimedChange } from "../api";
 import type { UnmadeFixes } from "./claimedFixes";
-import { type MindNames, toolRecordLines } from "./toolRecord";
+import { type ChangeStates, type MindNames, toolRecordLines } from "./toolRecord";
 
 /** A change a sentence of the reply says was made, and the Mind it names, by its name; null for none. */
 export interface Claim {
@@ -296,10 +296,11 @@ export function askAgainNote(
   claims: readonly ClaimedChange[],
   calls: readonly AnswerToolCall[],
   names: MindNames,
+  states?: ChangeStates,
 ): string {
   const said = claims.map((claim) => CLAIMED_WORDS[claim]).join(", and ");
   return [
-    thisAnswersRecord(calls, names),
+    thisAnswersRecord(calls, names, states),
     `Your reply says you ${said}, but no Tool did that. Write your reply again from its start, without saying what you changed: IncarnaMind lists each change under your reply. Say plainly what wasn't done and why. If the User's request still needs a change you can make now, make it with the Tools first.`,
     UNSEEN_REPLY,
   ].join("\n");
@@ -310,6 +311,7 @@ export function unmadeFixesNote(
   unmade: UnmadeFixes,
   calls: readonly AnswerToolCall[],
   names: MindNames,
+  states?: ChangeStates,
 ): string {
   const said = [
     ...(unmade.words.length > 0
@@ -324,14 +326,18 @@ export function unmadeFixesNote(
       : []),
   ];
   return [
-    thisAnswersRecord(calls, names),
+    thisAnswersRecord(calls, names, states),
     `Your reply says ${said.join(", and ")}. If the User's request still needs that change, make it now with edit_mind. Then write your reply again from its start, saying only what your edits did.`,
     UNSEEN_REPLY,
   ].join("\n");
 }
 
-function thisAnswersRecord(calls: readonly AnswerToolCall[], names: MindNames): string {
-  const lines = toolRecordLines(calls, names);
+function thisAnswersRecord(
+  calls: readonly AnswerToolCall[],
+  names: MindNames,
+  states?: ChangeStates,
+): string {
+  const lines = toolRecordLines(calls, names, states);
   return [
     "<tool-record>",
     "What the Tools of this Answer really did, as IncarnaMind recorded it:",

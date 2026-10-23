@@ -331,7 +331,7 @@ describe("What became of a change, in its record", () => {
   const line = (proposals: number, state: ChangeState | null) =>
     toolRecordLines([change(proposals)], names, () => state)[0];
 
-  // protects=each fate of a change reads as what the User did: all rejected, all accepted, part accepted with the rest waiting, a mix, and a Mind since deleted; fails_when=a rejected page still reads as waiting; no_claim=none beyond protects.
+  // protects=each fate of a change reads as what the User did: all rejected, all accepted, part accepted with the rest waiting, a mix, a Mind since deleted, and, in its own turn, one that applies at once (#1559); fails_when=a rejected page, or one that applied, still reads as waiting; no_claim=none beyond protects.
   test.each([
     [5, { waiting: 0, accepted: 0, rejected: 5 }, "then the User rejected all 5"],
     [3, { waiting: 0, accepted: 3, rejected: 0 }, "then the User accepted all 3"],
@@ -340,6 +340,11 @@ describe("What became of a change, in its record", () => {
     [3, { waiting: 0, accepted: 2, rejected: 1 }, "then the User accepted 2 and rejected 1"],
     [3, { waiting: 3, accepted: 0, rejected: 0 }, "waiting for the User"],
     [3, { waiting: 0, accepted: 0, rejected: 0, gone: true }, "but the Mind is no longer there"],
+    [
+      2,
+      { waiting: 0, accepted: 0, rejected: 0, applied: true },
+      "applied in the Mind at once, with Undo",
+    ],
   ])("%i changes, %j", (proposals, state, said) => {
     expect(line(proposals, state)).toBe(
       `- add_to_mind “Tide notes”: proposed ${proposals} new Block${proposals === 1 ? "" : "s"}, ${said}`,

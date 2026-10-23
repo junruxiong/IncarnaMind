@@ -171,7 +171,7 @@ describe("A claim needs its command (#1559)", { timeout: 30_000 }, () => {
     expect(changesIn(answer)).toEqual([]);
   });
 
-  // protects=a reply that names a fix its edit didn't make (the 2026-10-21 run's "Fix the typos in this") is asked for once more with the word left, and the honest reply then stands; fails_when=the claim passes, or the model isn't told which word; no_claim=that a real model then fixes it.
+  // protects=a reply that names a fix its edit didn't make (the 2026-10-21 run's "Fix the typos in this") is asked for once more with the word left and its edit's record reading as applied, not waiting (#1559's review: told it waits, Haiku and Kimi told the User so), and the honest reply then stands; fails_when=the claim passes, the model isn't told which word, or the record says the edit waits; no_claim=that a real model then fixes it.
   test("a fix the edit didn't make is asked about, by the word left", async () => {
     const notes: string[] = [];
     const model = scriptedModel((call): ScriptedReply => {
@@ -194,6 +194,8 @@ describe("A claim needs its command (#1559)", { timeout: 30_000 }, () => {
     const answer = await askAssistant(core, { text: "Fix the typos in this", mindId: trip.id });
 
     expect(notes.at(-1)).toContain("that you fixed “compleatly”, but your edits left it");
+    expect(notes.at(-1)).toContain("proposed 1 change, applied in the Mind at once");
+    expect(notes.at(-1)).not.toContain("waiting for the User");
     expect(answer.text).toBe("Fixed “visted” in “Trip notes”.");
     expect(answer.steps?.unbackedClaims).toBeUndefined();
   });
