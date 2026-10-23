@@ -5138,6 +5138,12 @@ export type MindCheckPlan =
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
+  /**
+   * "Changed" mode with nothing to send: every claim has a check that still holds, made no
+   * earlier than `since` (ISO 8601 UTC; the oldest of them, else the last whole-Mind check;
+   * null when neither says).
+   */
+  | { kind: "unchanged"; since: string | null }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
 /** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
@@ -9413,7 +9419,8 @@ export interface CoreApi {
   /**
    * What "Check this Mind" (#737) would send in `mode`, against the Mind's
    * Folder or, with `allDocuments`, every Document; or why there is nothing
-   * to check. Sends nothing.
+   * to check. Sends nothing. In "changed" mode the checks that couldn't be
+   * made count as changed.
    */
   planMindCheck(
     mindId: string,
@@ -9432,7 +9439,9 @@ export interface CoreApi {
    * sentences, leaving out headings, questions and the User's own opinions,
    * then each claim is checked as Check against Documents checks it, against
    * the Mind's Folder (or every Document). In "changed" mode only the checks
-   * that need a re-check, and the sentences never checked since, are sent.
+   * that need a re-check or couldn't be made, and the sentences never checked
+   * since, are sent. In "all" mode a sentence with a check is checked again,
+   * and neither it nor a skipped one is sent to the model to be named again.
    * Each claim gets its mark at once, then its result; a cloud model checks a
    * few at once, and the monthly cap or a plan's limit stops the run. Records
    * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.

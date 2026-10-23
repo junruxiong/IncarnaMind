@@ -231,7 +231,7 @@ describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) =
     const { mindId, client } = await mindWith(core, words.own.line, folder.id);
     await checkAll(core, mindId);
     const planned = () => core.planMindCheck(mindId, "changed");
-    expect(await planned()).toEqual({ kind: "nothing" });
+    expect(await planned()).toMatchObject({ kind: "unchanged" });
 
     setMindScope(client.doc, documentsScope(other.id));
     await client.settled();
