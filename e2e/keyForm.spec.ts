@@ -743,6 +743,15 @@ test("with Kimi saved on China, only the China tile says Added and opens it, and
   }
 });
 
+const COMPLETION = {
+  id: "c1",
+  object: "chat.completion",
+  created: 1,
+  model: "any",
+  choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+  usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+};
+
 /**
  * An OpenAI-compatible server that refuses one key and answers with the other, and answers a
  * third with Anthropic's 400 for a model that needs 30-day data retention.
@@ -767,33 +776,109 @@ async function server(): Promise<{ server: Server; url: string }> {
       }
       const good = request.headers.authorization === "Bearer good-key";
       response.writeHead(good ? 200 : 401, { "content-type": "application/json" });
-      response.end(
-        JSON.stringify(
-          good
-            ? {
-                id: "c1",
-                object: "chat.completion",
-                created: 1,
-                model: "any",
-                choices: [
-                  {
-                    index: 0,
-                    message: { role: "assistant", content: "OK" },
-                    finish_reason: "stop",
-                  },
-                ],
-                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-              }
-            : { error: { message: "bad key" } },
-        ),
-      );
+      response.end(JSON.stringify(good ? COMPLETION : { error: { message: "bad key" } }));
     });
   });
   await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
   return { server: http, url: `http://127.0.0.1:${(http.address() as AddressInfo).port}/v1` };
 }
 
-test("Use this key shows a refused key in place, and with a good one saves and the waiting Question is asked", async () => {
+/** A server on this computer that needs no key: it answers every request once `answer` is called. */
+async function keylessServer(): Promise<{ server: Server; url: string; answer(): void }> {
+  let answer = () => {};
+  const answering = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  const http = createServer((request, response) => {
+    request.resume();
+    request.on("end", () => {
+      void answering.then(() => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(COMPLETION));
+      });
+    });
+  });
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(http.address() as AddressInfo).port}/v1`;
+  return { server: http, url, answer };
+}
+
+/** An address on this computer that refuses the connection: a port just freed. */
+async function refusingAddress(): Promise<string> {
+  const http = createServer();
+  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  const { port } = http.address() as AddressInfo;
+  await new Promise<void>((resolve) => http.close(() => resolve()));
+  return `http://127.0.0.1:${port}/v1`;
+}
+
+for (const { value, connect, connecting, tags, keyTags, unreachable } of [
+  {
+    value: "en",
+    connect: "Connect server",
+    connecting: "Connecting…",
+    tags: "Tagging starts when you connect the server.",
+    keyTags: "Tagging starts when you save the key.",
+    unreachable: "Couldn’t reach the server. Check its URL and your connection.",
+  },
+  {
+    value: "zh-CN",
+    connect: "连接服务器",
+    connecting: "正在连接…",
+    tags: "连接服务器后就开始打标签。",
+    keyTags: "保存密钥后就开始打标签。",
+    unreachable: "无法连接到服务器。请检查地址和网络连接。",
+  },
+] as const) {
+  test(`a server that needs no key says Connect server, and tagging starts once it is connected; a refused address keeps the form for the next try (${value})`, async () => {
+    const fake = await keylessServer();
+    const refused = await refusingAddress();
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      const settings = await openSettings(window, "models");
+      await language(window, value);
+      const form = await addProviderForm(settings, "openai-compatible");
+      const address = form.locator('input[type="url"]');
+      const model = form.getByTestId("provider-model-text");
+      const key = form.locator('input[type="password"]');
+      const button = form.getByTestId("provider-use-key");
+      await expect(button).toHaveText(connect);
+      await expect(form.getByText(tags)).toBeVisible();
+      await expect(form.getByText(keyTags)).toHaveCount(0);
+
+      await address.fill(refused);
+      await model.fill("any");
+      await button.click();
+      await expect(form.getByTestId("connection-test")).toContainText(unreachable, {
+        timeout: 20_000,
+      });
+      await expect(address).toHaveValue(refused);
+      await expect(model).toHaveValue("any");
+      await expect(key).toHaveValue("");
+      await expect(button).toHaveText(connect);
+      await expect(form.getByText(tags)).toBeVisible();
+      if (process.env.INCARNAMIND_SCREENSHOTS) {
+        await window.screenshot({
+          path: `${process.env.INCARNAMIND_SCREENSHOTS}/keyless-server-refused-${value}.png`,
+        });
+      }
+
+      await address.fill(fake.url);
+      await button.click();
+      await expect(button).toHaveText(connecting);
+      await expect(button).toBeDisabled();
+      fake.answer();
+      await expect(form).toBeHidden();
+      await expect(settings.getByTestId("provider-page-address")).toHaveText(fake.url);
+    } finally {
+      await app.close();
+      fake.server.close();
+    }
+  });
+}
+
+test("Connect server shows a key the server refuses in place, and with a good one saves and the waiting Question is asked", async () => {
   const fake = await server();
   const { app, window } = await launchApp(dataDir);
   try {
@@ -809,6 +894,7 @@ test("Use this key shows a refused key in place, and with a good one saves and t
     await form.getByLabel("Server URL").fill(fake.url);
     await form.getByTestId("provider-model-text").fill("any");
     await form.getByLabel(/^API key/).fill("wrong-key");
+    await expect(form.getByTestId("provider-use-key")).toHaveText("Connect server");
     await form.getByTestId("provider-use-key").click();
     await expect(form.getByTestId("connection-test")).toContainText("The key was refused", {
       timeout: 20_000,
