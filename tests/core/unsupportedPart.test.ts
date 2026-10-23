@@ -14,7 +14,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: "memory and robustness",
       scope: null,
       topic: null,
-      roles: null,
     });
     expect(
       readVerdict(
@@ -37,7 +36,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: "memory",
       scope: null,
       topic: null,
-      roles: null,
     });
     expect(
       readVerdict("Verdict: unsupported\nNothing here is covered.\nNot covered: memory"),
@@ -72,7 +70,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: null,
       scope: null,
       topic: null,
-      roles: null,
     });
     expect(readVerdict("Verdict: unsupported\nNo Passage mentions penguins.")).toEqual({
       verdict: "unsupported",
@@ -81,7 +78,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: null,
       scope: null,
       topic: null,
-      roles: null,
     });
     expect(readVerdict("Verdict: unsupported\nCovered:\nNot covered: ")).toMatchObject({
       covered: null,
@@ -127,7 +123,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: "Memory",
       scope: null,
       topic: null,
-      roles: null,
     });
   });
 
@@ -143,7 +138,6 @@ describe("What a reply says its Citations cover and don't", () => {
       uncovered: "staff in general",
       scope: "wider",
       topic: null,
-      roles: null,
     });
     expect(readVerdict("**Verdict:** supported\n**Scope:** same\nIt says so [^1].")).toMatchObject({
       says: "It says so.",
@@ -167,26 +161,27 @@ describe("What a reply says its Citations cover and don't", () => {
     expect(scopeOf("Scope: Staff")).toBeNull();
   });
 
-  test("a reply's roles are the field's last word, wherever the field is, and never its explanation", () => {
+  test("a reply's Roles line, before or after its verdict, is never its explanation", () => {
     expect(
       readVerdict(
-        "Roles: the Company must pay / the Company may pay, differs\nVerdict: supported\nScope: the Company, same\nThe agreement says the Company may pay [^1].",
+        "Roles: the Company must pay / the Company may pay, differs\nVerdict: contradicted\nScope: the Company, same\nThe agreement says the Company may pay [^1].",
+      ),
+    ).toMatchObject({ verdict: "contradicted", says: "The agreement says the Company may pay." });
+    expect(
+      readVerdict(
+        "Verdict: supported\nRoles: 乙方为甲方缴纳 / 乙方为甲方缴纳，same\n文件这样写 [^1]。",
+      ),
+    ).toMatchObject({ verdict: "supported", says: "文件这样写。" });
+    expect(
+      readVerdict(
+        "Roles: none, same. Verdict: contradicted. Scope: none, same. Topic: found.\n\nIt says 27 days [^1].",
       ),
     ).toMatchObject({
-      verdict: "supported",
-      says: "The agreement says the Company may pay.",
-      roles: "differs",
+      verdict: "contradicted",
+      says: "It says 27 days.",
+      scope: "same",
+      topic: "found",
     });
-    const rolesOf = (line: string) =>
-      readVerdict(`Verdict: supported\n${line}\nIt says so.`)?.roles;
-    expect(rolesOf("**Roles:** 乙方为甲方缴纳 / 甲方为乙方缴纳，differs")).toBe("differs");
-    expect(rolesOf("Roles: the same party pays / the Tenant pays, same")).toBe("same");
-    expect(rolesOf("Roles: none, same")).toBe("same");
-    expect(rolesOf("Roles: the Tenant pays")).toBeNull();
-    expect(readVerdict("Verdict: supported\nIt says so.")?.roles).toBeNull();
-    expect(
-      readVerdict('{"verdict": "supported", "says": "Yes.", "roles": "differs"}'),
-    ).toMatchObject({ roles: "differs" });
   });
 });
 
@@ -213,7 +208,6 @@ describe("What a judgement of a sentence beside its quote says", () => {
       uncovered: null,
       scope: null,
       topic: null,
-      roles: null,
     });
   });
 });

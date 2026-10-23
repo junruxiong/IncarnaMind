@@ -159,6 +159,9 @@ export function recordJudged(
 const SEARCH_FIRST =
   "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
 
+const VERDICT_LINE =
+  "Your reply has no Verdict line. Reply again in exactly the form asked, each field on a line of its own.";
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
@@ -336,6 +339,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
           check: (text) =>
             !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
         },
+        // Lines written beside `cite` are taken back as a preamble, and with them the verdict when
+        // the model wrote it there: Claude Haiku 5.5 did, about one check in a hundred (#1668).
+        {
+          name: "verdict-line",
+          check: (text) =>
+            searched && text.trim() !== "" && !readVerdict(text) && !readsAsRefusal(text)
+              ? { claims: [], note: VERDICT_LINE }
+              : null,
+        },
       ],
       signal,
     })) {
@@ -441,22 +453,16 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       verdict.covered && verdict.uncovered
         ? { covered: verdict.covered, uncovered: verdict.uncovered }
         : await partOf(request, quoted, session, signal, deps.language());
-    // Another party, the parties the other way round, or must for may is no support, whatever the
-    // verdict line says: the reply's own field compares them before it (#1668).
-    const claimed =
-      verdict.verdict === "supported" && verdict.roles === "differs"
-        ? "contradicted"
-        : verdict.verdict;
     // A general word for the Passage's own party is backed for that party only: the wider group
     // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
     // its own, so the verdict doesn't rest on the model weighing it.
-    if (claimed === "supported" && verdict.scope === "wider" && !byCalculation) {
+    if (verdict.verdict === "supported" && verdict.scope === "wider" && !byCalculation) {
       const part = await parts(evidence);
       if (signal.aborted) return notChecked("stopped");
       if (part.covered && part.uncovered)
         return unsupported({ reason: verdict.says, ...part }, evidence);
     }
-    if (claimed === "contradicted") {
+    if (verdict.verdict === "contradicted") {
       // The judgements disagree with the check: the card shows the part the quote states
       // (DESIGN.md › Checks).
       const inDoubt = async (): Promise<ClaimCheckResult> => {
@@ -490,7 +496,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       if (strictly === "neither") return inDoubt();
     }
     return {
-      verdict: claimed,
+      verdict: verdict.verdict,
       evidence,
       says: verdict.says,
       unsupported: null,

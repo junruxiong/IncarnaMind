@@ -372,25 +372,20 @@ describe("One claim check", () => {
     });
   });
 
-  test("a supported reply whose roles differ from the Passage's is judged as a contradiction", async () => {
+  test("the reply names who does what for whom, and must or may, before its verdict", async () => {
     const MUST = "Harbours must publish the times of high water every year.";
     const calls: ModelCall[] = [];
-    const plan = (roles: string): Plan => ({
-      verdict: "supported",
-      roles,
-      quote: "Harbours publish the times of high water every year.",
-      says: "Tides says harbours publish them every year.",
-      judgement: "conflict",
-      strict: {
-        text: "Sentence: harbours must publish\nQuote: harbours publish\nJudgement: conflict",
-      },
-    });
     const { core, client, check } = await mindWith(
-      [MUST, SUPPORTED],
+      [MUST],
       checkingModel(
         {
-          [MUST]: plan("harbours must publish / harbours publish, differs"),
-          [SUPPORTED]: { ...(PLANS[SUPPORTED] as Plan), roles: "none, same" },
+          [MUST]: {
+            verdict: "contradicted",
+            roles: "Harbours must publish / Harbours publish, differs",
+            quote: "Harbours publish the times of high water every year.",
+            says: "Tides says harbours publish them every year, not that they must.",
+            judgement: "conflict",
+          },
         },
         calls,
       ),
@@ -398,14 +393,13 @@ describe("One claim check", () => {
 
     await check();
 
-    const [must, plain] = await shownChecks(core, client);
     const system = calls[0]?.system ?? "";
+    expect(system.indexOf("Roles: ")).toBeGreaterThan(-1);
     expect(system.indexOf("Roles: ")).toBeLessThan(system.indexOf("Verdict: "));
-    expect(must).toMatchObject({
+    expect((await shownChecks(core, client))[0]).toMatchObject({
       shown: { state: "contradicted" },
-      check: { says: "Tides says harbours publish them every year." },
+      check: { says: "Tides says harbours publish them every year, not that they must." },
     });
-    expect(plain?.shown).toEqual({ state: "supported" });
   });
 
   describe("a contradiction the strict judgement doesn't uphold", () => {
@@ -1385,6 +1379,39 @@ describe("When the model can't check a sentence", () => {
       expect(checked?.check.evidence).toBeNull();
     },
   );
+
+  test("a verdict written beside its record, and so taken back with it, is asked for once more", async () => {
+    const asked: string[] = [];
+    const model = scriptedModel(
+      (call) => {
+        const searches = call.results.filter((result) => result.tool === "search_documents");
+        if (searches.length === 0)
+          return { calls: [{ tool: "search_documents", input: { query: SUPPORTED } }] };
+        if (!call.results.some((result) => result.tool === "cite")) {
+          const passage = shownPassages(searches.at(-1)?.text ?? "")[0]?.id;
+          const quote = "Spring tides happen at new moon and at full moon";
+          return {
+            text: "Roles: none, same\nVerdict: supported\nScope: none, same",
+            calls: [{ tool: "cite", input: { citations: [{ marker: 1, passage, quote }] } }],
+          };
+        }
+        asked.push(call.prompt);
+        return call.prompt.includes("no Verdict line")
+          ? { text: "Roles: none, same\nVerdict: supported\nTides says so [^1]." }
+          : { text: "Tides says so [^1]." };
+      },
+      { generate: checkGenerate({}) },
+    );
+    const { core, client, check } = await mindWith([SUPPORTED], model);
+
+    await check();
+
+    expect((await shownChecks(core, client))[0]).toMatchObject({
+      shown: { state: "supported" },
+      check: { says: "Tides says so." },
+    });
+    expect(asked).toHaveLength(2);
+  });
 
   test("a verdict given without its Passage is asked for once more, and counts once its quote is found", async () => {
     const plans: Record<string, Plan> = {
