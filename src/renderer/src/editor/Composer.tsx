@@ -11,8 +11,10 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
+import { setMindScope } from "../../../shared/mindScope";
 import { mindName } from "../../../shared/naming";
 import {
+  chosenScope,
   filingFolder,
   hasSearchScope,
   mindSearchScope,
@@ -27,7 +29,6 @@ import { ProblemLine } from "../components/ProblemLine";
 import { answerAskFrom } from "../components/TaskTray";
 import { TypingTextarea } from "../components/TypingTextarea";
 import {
-  chosenScope,
   composerKey,
   composerScope,
   type Draft,
@@ -49,6 +50,7 @@ import { type Dragged, type Dropped, useDropTarget } from "../dragDrop";
 import { editFromComposer, stopEditing, useEdits } from "../editWithAi";
 import { errorMessage } from "../errors";
 import { useT } from "../i18n";
+import { useScopeBefore } from "../keptScope";
 import { modelInUseOf, useModelInUse } from "../modelInUse";
 import { newNoteTitle } from "../newNoteRequest";
 import {
@@ -148,6 +150,7 @@ export function Composer({
     (state) => state.minds.find((each) => each.id === mindId)?.folderId ?? null,
   );
   const folderHolds = useFolderHoldsDocuments(folderId);
+  const before = useScopeBefore(mind?.doc ?? null);
   const folderName = useAppStore(
     (state) => state.library?.groups.find((each) => each.id === folderId)?.name ?? null,
   );
@@ -221,7 +224,10 @@ export function Composer({
     return (own && mindName(own)) || t("mind.untitled");
   });
 
-  const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
+  const update = (change: Partial<Draft>) => {
+    useComposer.getState().update(key, change);
+    if (mind && change.scope !== undefined) setMindScope(mind.doc, change.scope);
+  };
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 
@@ -394,6 +400,17 @@ export function Composer({
     updateScope({ ...scope, [SCOPE_LISTS[kind]]: left });
   };
 
+  // Back to the wide scope it narrowed, never straight to the whole Library: All Documents is a
+  // second, deliberate step in the "@" picker.
+  const goBack = () => {
+    update({ scope: before });
+    field.current?.focus();
+  };
+  const backLabel =
+    before === null && folderHolds && folderName !== null
+      ? t("composer.scope.back", { name: folderName })
+      : t("composer.scope.backAll");
+
   /** A chip's name, or "All Documents": types the "@" that opens the picker. */
   const openScopePicker = () => {
     const element = field.current;
@@ -408,6 +425,16 @@ export function Composer({
     setPicking({ kind: "scope", query: "", from, to: from + 1 });
     element?.focus();
   };
+
+  const scopeWanted = useComposer((state) => state.scopeWanted);
+  const latestPicker = useRef(openScopePicker);
+  latestPicker.current = openScopePicker;
+  // Once the field is on screen and has the focus, as `focusWanted` waits for.
+  useEffect(() => {
+    if (!scopeWanted || focusWanted) return;
+    useComposer.getState().scopeTaken();
+    latestPicker.current();
+  }, [scopeWanted, focusWanted]);
 
   /** A paste over 2,000 characters or 30 lines becomes a chip instead of going into the text. */
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -876,6 +903,8 @@ export function Composer({
               scope={scope}
               ownFolderId={folderId}
               onRemove={removeFromScope}
+              {...(draft.scope !== null &&
+                hasSearchScope(draft.scope) && { back: { label: backLabel, onBack: goBack } })}
               onChange={openScopePicker}
               shown={CHIPS_SHOWN}
               className="composer-scope"

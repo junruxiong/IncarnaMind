@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import {
@@ -13,7 +13,7 @@ import {
 import { setTextOrigin } from "../../src/shared/textOrigins";
 import { createTempDataFolder, manualClock, startCore } from "../helpers/core";
 import { parseCsv } from "../helpers/csv";
-import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, linkAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { writeMind } from "../helpers/minds";
 import { fakePrinter } from "../helpers/printer";
@@ -542,14 +542,26 @@ describe("What the check record can't know", () => {
     expect(rowsOf(zh)[0]?.文件).toBe("文档已删除");
   });
 
-  test("the Documents searched are the ones the checks searched: a Folder, everything, or a Folder since deleted", async () => {
+  test("the Documents searched are the ones the checks searched: a Folder, everything, a Folder since deleted, or the Mind's chosen scope, a Linked folder's included", async () => {
     const setup = await setUp();
     const own = { folderId: setup.folderId, widened: false };
     const gone = await setup.core.createLibraryGroup({ name: "Old harbours", description: "" });
+    const notes = join(await createTempDataFolder(), "Notes");
+    await writeSourceFile(notes, "Holiday.md", "# Holiday\n\nLeave is 25 days.\n");
+    await linkAndProcess(setup.core, notes);
+    const linked = (await setup.core.listFolders()).find((folder) => folder.name === "Notes");
+    if (!linked) throw new Error("The Linked folder has no Folder.");
+    const chosen = (scope: Partial<{ folderIds: string[]; documentIds: string[] }>) => ({
+      folderId: setup.folderId,
+      widened: false,
+      chosen: { folderIds: [], tagIds: [], documentIds: [], ...scope },
+    });
     const checks = [
       ["Spring tides come at new moon.", own],
       ["Neap tides are weaker.", { folderId: null, widened: true }],
       ["Tidal ranges differ between harbours.", { folderId: gone.id, widened: false }],
+      ["High water comes later each day.", chosen({ documentIds: [setup.tides.id] })],
+      ["Leave is 25 days.", chosen({ folderIds: [linked.id] })],
     ] as const;
     writeMind(setup.client, [
       paragraph(
@@ -569,7 +581,7 @@ describe("What the check record can't know", () => {
     const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
 
     expect(summaryOf(csv).get("Documents searched")).toBe(
-      "Harbours; All Documents; A deleted Folder",
+      "Harbours; All Documents; A deleted Folder; Tides; Notes",
     );
   });
 

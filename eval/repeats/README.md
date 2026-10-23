@@ -46,7 +46,35 @@ npm run eval:repeats
 
 **The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today: the Chinese negation the claims leave out (#1682).
 
+## Scope of a check from a Mind
+
+`npm run eval:scope` checks a Mind that summarises one Document, in a Library of that Document and 5 or 20 other invented Documents, to see whether searching every Document, as a Mind in no Folder does, costs it verdicts. The cases are `unfiled-5`, `filed-5`, `unfiled-20` and `filed-20`: the Mind either in no Folder or filed into the Folder that holds the agreement, with the other Documents outside it. `scoped-5` and `scoped-20` are the Mind in no Folder with the agreement as the Search scope the User set for it in the composer (#1623). The same six with the Chinese 劳动合同 and Documents (`scopeDocumentsZh.ts`) have the prefix `zh-`. `unfiled-no-agreements-17` is the 17 other Documents that remain once the other agreements are left out.
+
+- The Documents are the English agreement of `cases.ts` and the first 5 or all 20 of `scopeDocuments.ts`: two or three more employment agreements in the agreement's layout with other figures, policies an employer keeps, and Documents of other kinds. None states what a sentence says (`tests/eval/scopeScoring.test.ts`). There are no example Documents, so the number of others is exact.
+- The sentences are four of the `en` set, worded as there: the notice paraphrase and the agreement's own words, which it states, and the car allowance it doesn't mention and the holiday sentence with a wrong figure, which it doesn't state.
+- The report counts, per case and model, the faithful sentences that didn't come back Supported, the other sentences that did, and for every wrong check whether a Passage handed to the model held the clause that settles the sentence. The model's requests are watched for the Passages (`passagesHanded.ts`), and the Passages of each Library are kept in `passages-<case>.json`.
+- `INCARNAMIND_EVAL_SCOPE_CASES` picks cases by id, `INCARNAMIND_EVAL_SCOPE_BUDGET` stops the run past that many dollars (1), and `INCARNAMIND_EVAL_REPEATS` is the checks a case (10). Ten checks of one case cost $0.02 to $0.05 on Claude Haiku 5.5 and $0.30 to $0.60 on Claude Sonnet 5.5, a Mind in no Folder the most.
+
 ## Results
+
+### 2026-10-23: a Mind's chosen scope narrows its check (#1623)
+
+The scope cases on this version, where a check from a Mind searches the Search scope the User set for it, else its Folder, else every Document. "Before" is the measurement on the version this one is built on, where a Mind in no Folder searched every Document whatever scope it had; "filed" is the same Mind in the agreement's Folder, which this version doesn't change. Counts are of 20 checks of the two faithful sentences (false Unsupported) and of the two the agreement doesn't state (false Supported); 10 checks a case.
+
+| Model | Language | Others | Before: in no Folder | Now: in no Folder, scope the agreement | Now: filed | False Supported now |
+|---|---|---|---|---|---|---|
+| Haiku 5.5 | English | 5 | 9 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
+| Haiku 5.5 | English | 20 | 13 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
+| Haiku 5.5 | Chinese | 5 | 10 of 20 | 1 of 20 | 0 of 20 | 0 of 40 |
+| Haiku 5.5 | Chinese | 20 | 11 of 20 | 0 of 20 | 0 of 20 | 0 of 40 |
+| Sonnet 5.5 | English | 20 | 0 of 20 | 0 of 20 | not run | 0 of 20 |
+| Sonnet 5.5 | Chinese | 20 | 1 of 20 | 0 of 20 | not run | 0 of 20 |
+
+- Every check of a Mind with its scope set was handed the agreement alone, as every filed check was. The car allowance was "I didn’t find this" and the holiday sentence Contradicted in all 140 checks.
+- The one miss is Haiku's partly-supported card on the Chinese notice paraphrase, with the agreement alone in hand: it took the sentence as wider than the agreement's two parties ("Not covered: 适用于所有劳动者").
+- A first run on this change before the check's newer reply wording was merged in gave 0 of 20 in every case, the Chinese one with 5 others included.
+- Spend at the app's own count: $1.57 for both runs (Haiku $0.27, Sonnet $1.30).
+- After main's second, strict judgement of a contradiction (#1647) was merged in, Haiku 5.5 ran the scoped cases again, 10 checks each: 0 of 20 false Unsupported and 0 of 20 false Supported in English and in Chinese, with 5 and with 20 others, the agreement alone handed to every check, and 8 of 20 false Unsupported for the same Mind in no Folder with no scope. $0.11.
 
 ### 2026-10-23: who does what for whom, and must or may (#1668)
 
