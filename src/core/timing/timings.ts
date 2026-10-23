@@ -1,13 +1,6 @@
-/**
- * How long each AI request and each local step took (#1624), for the speed baseline and the
- * budgets every AI flow is held to: per model request, the times to its first byte, first
- * reasoning, first text and first Tool call, and to its end, with its tokens and reasoning
- * setting; per local step (reranking, reading a scanned page, indexing a Document,
- * transcribing a stretch), its time. Each is tagged with its flow and step (./flows). Only
- * numbers and names are kept, never a request's or a reply's text; the records stay in this
- * computer's database, nothing here is sent anywhere, and those older than 30 days go.
- */
+// Only numbers and names are kept, never a request's or a reply's text, and nothing is sent.
 import { randomUUID } from "node:crypto";
+import type { Logger } from "../adapters";
 import type { Database } from "../storage";
 import { type FlowTag, flowNow } from "./flows";
 
@@ -29,8 +22,10 @@ interface Usage {
   outputTokens?: number | undefined;
 }
 
-export function createTimings(options: { db: Database; now: () => Date }) {
-  const { db, now } = options;
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+export function createTimings(options: { db: Database; now: () => Date; log: Logger }) {
+  const { db, now, log } = options;
 
   function insert(row: {
     kind: "model" | "local";
@@ -50,42 +45,50 @@ export function createTimings(options: { db: Database; now: () => Date }) {
     outcome: TimingOutcome;
   }): void {
     const at = now().toISOString();
-    db.run(
-      `INSERT INTO ai_timings (id, kind, flow, step, data_flow, provider_kind, model_id, reasoning,
+    // A record is never worth a request or a step: a locked or closed database, or a full disk,
+    // loses the record, and the reply, the cancel or the result goes on.
+    try {
+      db.run(
+        `INSERT INTO ai_timings (id, kind, flow, step, data_flow, provider_kind, model_id, reasoning,
          started_at, first_byte_ms, first_reasoning_ms, first_text_ms, first_tool_ms, end_ms,
          input_tokens, cached_input_tokens, output_tokens, units, outcome, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        randomUUID(),
-        row.kind,
-        row.tag?.flow ?? null,
-        row.tag?.step ?? null,
-        row.dataFlow,
-        row.providerKind,
-        row.modelId,
-        row.reasoning,
-        row.startedAt,
-        row.firstByteMs,
-        row.firstReasoningMs,
-        row.firstTextMs,
-        row.firstToolMs,
-        row.endMs,
-        row.usage?.inputTokens ?? null,
-        row.usage?.cachedInputTokens ?? null,
-        row.usage?.outputTokens ?? null,
-        row.units,
-        row.outcome,
-        at,
-        at,
-      ],
-    );
+        [
+          randomUUID(),
+          row.kind,
+          row.tag?.flow ?? null,
+          row.tag?.step ?? null,
+          row.dataFlow,
+          row.providerKind,
+          row.modelId,
+          row.reasoning,
+          row.startedAt,
+          row.firstByteMs,
+          row.firstReasoningMs,
+          row.firstTextMs,
+          row.firstToolMs,
+          row.endMs,
+          row.usage?.inputTokens ?? null,
+          row.usage?.cachedInputTokens ?? null,
+          row.usage?.outputTokens ?? null,
+          row.units,
+          row.outcome,
+          at,
+          at,
+        ],
+      );
+    } catch (error) {
+      log.warn("timing.not_recorded", {
+        kind: row.kind,
+        flow: row.tag?.flow ?? null,
+        step: row.tag?.step ?? null,
+        model: row.modelId,
+        reason: messageOf(error),
+      });
+    }
   }
 
   return {
-    /**
-     * A model request starting now, in the flow it runs in: `heard` each part of its reply as it
-     * comes, then `end` once, with what the provider counted.
-     */
     request(model: ModelRequestTiming) {
       const tag = flowNow();
       const startedAt = now().toISOString();
@@ -129,7 +132,6 @@ export function createTimings(options: { db: Database; now: () => Date }) {
       };
     },
 
-    /** A step run elsewhere and timed there (local transcription's decoding), as `local` records one. */
     step(step: string, model: string, ms: number, units: number | null): void {
       insert({
         kind: "local",
@@ -150,7 +152,6 @@ export function createTimings(options: { db: Database; now: () => Date }) {
       });
     },
 
-    /** Times a step run on this computer (`step`, by `model`), with how much it worked through. */
     async local<T>(
       step: string,
       model: string,
@@ -183,15 +184,18 @@ export function createTimings(options: { db: Database; now: () => Date }) {
         record("finished", unitsOf(result));
         return result;
       } catch (error) {
-        record("failed", null);
+        record(error instanceof Error && error.name === "AbortError" ? "stopped" : "failed", null);
         throw error;
       }
     },
 
-    /** Removes the records older than 30 days, once a start. */
     prune(): void {
       const before = new Date(now().getTime() - KEPT_DAYS * 86_400_000).toISOString();
-      db.run("DELETE FROM ai_timings WHERE started_at < ?", [before]);
+      try {
+        db.run("DELETE FROM ai_timings WHERE started_at < ?", [before]);
+      } catch (error) {
+        log.warn("timing.not_pruned", { reason: messageOf(error) });
+      }
     },
   };
 }

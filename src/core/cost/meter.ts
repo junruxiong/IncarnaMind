@@ -79,7 +79,6 @@ export interface MeteredModel {
   maxOutput: number | undefined;
   /** A model in Ollama that runs on ollama.com. */
   ollamaCloud: boolean;
-  /** The reasoning setting its requests are made with, for their timing records (#1624). */
   reasoning?: string;
 }
 
@@ -208,7 +207,6 @@ const usageOf = (usage: Usage) => ({
 const outcomeOf = (error: unknown) =>
   error instanceof Error && error.name === "AbortError" ? "stopped" : "failed";
 
-// A whole reply's parts, as a stream would have sent them, for the timing record.
 const GENERATED: Readonly<Record<string, string>> = {
   text: "text-delta",
   reasoning: "reasoning-delta",
@@ -279,7 +277,7 @@ export function createMeter(options: {
   now: () => Date;
   /** The monthly cap, read at each reservation, so a change applies to the next request. */
   cap: () => MonthlyCap | null;
-  /** Where each request's timing is recorded (#1624), a model on this computer's too. */
+  /** A free model's requests, on this computer, are timed too. */
   timings?: Timings;
 }) {
   const { db, now, timings } = options;

@@ -424,10 +424,6 @@ const STILL_PROCESSING: ReadonlySet<DocumentStatus> = new Set([
   "embedding",
 ]);
 
-// A check's own kind, as its request names it ("find-support", "check-against-documents"…).
-const actionOf = (input: unknown, otherwise: string) =>
-  isRecord(input) && typeof input.action === "string" ? input.action : otherwise;
-
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -441,7 +437,11 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
-  const timings = createTimings({ db, now: () => adapters.now?.() ?? new Date() });
+  const timings = createTimings({
+    db,
+    now: () => adapters.now?.() ?? new Date(),
+    log: adapters.log ?? silentLogger,
+  });
   timings.prune();
   const systemPaper = () =>
     paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
@@ -595,7 +595,7 @@ export function createCore(adapters: CoreAdapters): Core {
         emitStatus: (status) => events.emit("textRecognitionModel.status", status),
       })
     : undefined;
-  // From the first moment a Document is read to it being searchable, by its kind and pages.
+  // A Document waiting for its password counts as indexing until it is read.
   const indexingSince = new Map<string, number>();
   const timeIndexing = (document: Document) => {
     const since = indexingSince.get(document.id);
@@ -3740,7 +3740,8 @@ export function createCore(adapters: CoreAdapters): Core {
       return meter.estimate(metered, items, searches, each);
     },
     compareDocuments: (input) => inFlow("comparison", () => comparisons.compareDocuments(input)),
-    fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
+    fillComparisonTable: (input) =>
+      inFlow("comparison", () => comparisons.fillComparisonTable(input)),
     stopComparisonTable: (input) => comparisons.stop(input),
     listFillingComparisons: async () => comparisons.filling(),
     listTasks: async () => tasks.list(),
@@ -3766,10 +3767,9 @@ export function createCore(adapters: CoreAdapters): Core {
     editWithAi: (input) => edits.editWithAi(input),
     regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
-    checkSentences: (input) =>
-      inFlow(actionOf(input, "check-sentences"), () => checks.checkSentences(input)),
+    checkSentences: (input) => inFlow(input.action, () => checks.checkSentences(input)),
     cancelCheck: async (requestId) => checks.cancel(requestId),
-    checkClaim: (input) => inFlow(actionOf(input, "check-claim"), () => checks.checkClaim(input)),
+    checkClaim: (input) => inFlow("check-claim", () => checks.checkClaim(input)),
     verifyDocument: (input) => inFlow("verify", () => checks.verifyDocument(input)),
     findClaims: (input) => inFlow("verify", () => checks.findClaims(input)),
     verifyClaims: (input) => inFlow("verify", () => checks.verifyClaims(input)),

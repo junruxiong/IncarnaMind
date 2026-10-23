@@ -1,13 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-/**
- * Which AI flow a model request or a local step works for (#1624): the User's action it serves
- * (`flow`: a Question, Edit with AI, Check this Mind…) and, inside it, the step (`step`: the
- * search rewrite, the rewrite an edit makes, the check of what was written…). Set where each
- * flow and step starts, through every await below it, as `currentTask` is, so the timing record
- * (./timings) is tagged with no id passed through the code. A request made outside any flow is
- * recorded under its data flow alone, so a new flow still shows in the table.
- */
+// Carried through every await, as `currentTask` is, so a timing record is tagged with no id passed through the code.
 export interface FlowTag {
   flow: string;
   step: string | null;

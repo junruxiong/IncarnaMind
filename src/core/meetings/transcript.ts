@@ -250,7 +250,6 @@ export interface TranscriptsOptions {
   health: CaptureHealthRecords;
   /** Tells speakers apart after the call (#138). Absent: lines keep the labels of where they came from. */
   speakers?: SpeakerPass;
-  /** A stretch this computer transcribed: its model, how long it took and how many seconds of audio (#1624). */
   decoded?(modelId: string, decodeMs: number, audioSeconds: number): void;
   /**
    * The Meeting's Transcript is finished (#142): saved, its Document in its place and its

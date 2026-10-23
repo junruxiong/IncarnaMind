@@ -1,15 +1,19 @@
 import { join } from "node:path";
 import { streamText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { DATABASE_FILE } from "../../src/core/core";
+import { createMeter, type MeteredModel } from "../../src/core/cost/meter";
 import { BUILT_IN_RERANKING_MODEL } from "../../src/core/reranking";
-import { openDatabase } from "../../src/core/storage";
+import { type Database, openDatabase } from "../../src/core/storage";
 import { flowNow, inFlow, inStep } from "../../src/core/timing/flows";
+import { createTimings } from "../../src/core/timing/timings";
 import { setUpWithDocuments, unaskedModel } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
+import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
+import { scriptedModel } from "../helpers/models";
 import { transcribingCore, until } from "../helpers/transcription";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
@@ -229,5 +233,119 @@ describe("How long each AI request took, by flow (#1624)", () => {
     expect(queryDatabase<{ id: string }>(dataDir, "SELECT id FROM ai_timings")).toEqual([
       { id: "new" },
     ]);
+  });
+});
+
+describe("A timing record that can't be written (#1624)", () => {
+  // A database whose writes fail, as a locked or closed one does, or a full disk.
+  async function failingTimings() {
+    const db = openDatabase(join(await createTempDataFolder(), DATABASE_FILE));
+    const failing: Database = {
+      ...db,
+      run: () => {
+        throw new Error("database is locked");
+      },
+    };
+    const warned: string[] = [];
+    const log = { info: () => {}, error: () => {}, warn: (event: string) => warned.push(event) };
+    const timings = createTimings({ db: failing, now: () => new Date(), log });
+    const meter = createMeter({ db: failing, now: () => new Date(), cap: () => null, timings });
+    return { timings, meter, warned };
+  }
+
+  const FREE: MeteredModel = {
+    providerId: "local",
+    kind: "ollama",
+    modelId: "local-model",
+    flow: "chat",
+    billing: "free",
+    price: undefined,
+    maxOutput: undefined,
+    ollamaCloud: false,
+  };
+
+  // protects=a timing record that can't be written never reaches the request: the reply comes whole, and the failure is logged (#1624 review); fails_when=the stream errors after the reply, as it did; no_claim=the record, which is lost.
+  test("a reply comes whole, and the lost record is logged", async () => {
+    const { meter, warned } = await failingTimings();
+    const result = streamText({ model: meter.wrap(thinkingModel(), FREE), prompt: "When?" });
+    expect(await result.text).toBe("The tide turns twice a day.");
+    expect(warned).toEqual(["timing.not_recorded"]);
+  });
+
+  // protects=cancelling a reply whose record can't be written still cancels the request at the model's provider; fails_when=the write throws before the cancel is passed on; no_claim=none beyond protects.
+  test("cancelling a reply reaches the model", async () => {
+    const { meter } = await failingTimings();
+    let cancelled = false;
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream<StreamPart>({
+          pull(controller) {
+            controller.enqueue({ type: "text-delta", id: "t", delta: "The tide" });
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+      }),
+    });
+    const wrapped = meter.wrap(model, FREE);
+    const { stream } = await wrapped.doStream({ prompt: [] });
+    const reader = stream.getReader();
+    await reader.read();
+    await reader.cancel("stopped");
+    expect(cancelled).toBe(true);
+  });
+
+  // protects=a local step whose record can't be written still gives its result; fails_when=the write's failure turns a good rerank or OCR page into a failure; no_claim=none beyond protects.
+  test("a local step still gives its result", async () => {
+    const { timings, warned } = await failingTimings();
+    expect(await timings.local("rerank", "reranker", async () => 7)).toBe(7);
+    timings.prune();
+    expect(warned).toEqual(["timing.not_recorded", "timing.not_pruned"]);
+  });
+});
+
+describe("Background work in the timing records (#1624)", () => {
+  // protects=Organize's turn in the background queue is recorded under its data flow alone, not under the flow that happened to queue it (an Answer that saved a Document, say); fails_when=its requests carry that flow's tag; no_claim=the turn's own timing.
+  test("a background turn queued inside a flow isn't tagged with it", async () => {
+    let folderId = "";
+    const filed = () => ({ text: JSON.stringify({ groupId: folderId, tags: [] }) });
+    const model = scriptedModel(filed, { generate: filed });
+    const { core, dataDir } = await cloudCore(model);
+    const [service] = (await core.listChatProviders()).flatMap((each) => each.service ?? []);
+    for (const flow of ["tagging", "classification"] as const) {
+      if (service) await core.allowDataFlow(flow, service.id);
+    }
+    folderId = (await core.createLibraryGroup({ name: "Tides", description: "The sea" })).id;
+    const [provider] = await core.listChatProviders();
+    await core.saveLibrarySettings({
+      classifier: {
+        kind: "chat",
+        choice: { providerId: provider?.id ?? "", modelId: "claude-haiku-5-5" },
+      },
+      automatic: false,
+    });
+    const sources = await createTempDataFolder();
+    const [moon] = await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        "Moon.md",
+        "# Moon\n\nSpring tides come at new and full moon.",
+      ),
+    ]);
+    await inFlow("question", () => core.classifyDocuments([moon?.id ?? ""]));
+    await vi.waitFor(
+      async () =>
+        expect(
+          (await core.getLibrary()).assignments.filter((each) => each.status === "classified"),
+        ).toHaveLength(1),
+      { timeout: 10_000 },
+    );
+    const rows = queryDatabase<{ flow: string | null; data_flow: string | null }>(
+      dataDir,
+      "SELECT flow, data_flow FROM ai_timings WHERE kind = 'model'",
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.flow === null)).toBe(true);
   });
 });
