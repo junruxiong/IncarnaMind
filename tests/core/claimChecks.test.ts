@@ -353,13 +353,59 @@ describe("One claim check", () => {
     await check();
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
 
-    const same = { ...PLANS[CONTRADICTED], judgement: "same" as const };
+    const same = {
+      ...PLANS[CONTRADICTED],
+      judgement: "same" as const,
+      part: "Covered: the times of high water\nNot covered: every week",
+    };
     const again = await mindWith([CONTRADICTED], checkingModel({ [CONTRADICTED]: same }));
     await again.check();
     expect((await shownChecks(again.core, again.client))[0]).toMatchObject({
-      shown: { state: "supported" },
-      check: { evidence: { quote: "Harbours publish the times of high water every year." } },
+      shown: { state: "unsupported" },
+      check: {
+        unsupported: {
+          covered: "the times of high water",
+          uncovered: "every week",
+          quoted: { quote: "Harbours publish the times of high water every year." },
+        },
+      },
     });
+  });
+
+  test("a supported reply whose roles differ from the Passage's is judged as a contradiction", async () => {
+    const MUST = "Harbours must publish the times of high water every year.";
+    const calls: ModelCall[] = [];
+    const plan = (roles: string): Plan => ({
+      verdict: "supported",
+      roles,
+      quote: "Harbours publish the times of high water every year.",
+      says: "Tides says harbours publish them every year.",
+      judgement: "conflict",
+      strict: {
+        text: "Sentence: harbours must publish\nQuote: harbours publish\nJudgement: conflict",
+      },
+    });
+    const { core, client, check } = await mindWith(
+      [MUST, SUPPORTED],
+      checkingModel(
+        {
+          [MUST]: plan("harbours must publish / harbours publish, differs"),
+          [SUPPORTED]: { ...(PLANS[SUPPORTED] as Plan), roles: "none, same" },
+        },
+        calls,
+      ),
+    );
+
+    await check();
+
+    const [must, plain] = await shownChecks(core, client);
+    const system = calls[0]?.system ?? "";
+    expect(system.indexOf("Roles: ")).toBeLessThan(system.indexOf("Verdict: "));
+    expect(must).toMatchObject({
+      shown: { state: "contradicted" },
+      check: { says: "Tides says harbours publish them every year." },
+    });
+    expect(plain?.shown).toEqual({ state: "supported" });
   });
 
   describe("a contradiction the strict judgement doesn't uphold", () => {
