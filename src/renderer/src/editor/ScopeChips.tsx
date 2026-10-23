@@ -30,14 +30,14 @@ function ChipIcon({ chip }: { chip: ScopeChip }) {
  * the rest. In the composer (`onChange`), each chip shows its kind's icon and
  * its name opens the "@" picker, to change the scope; the Mind's own Folder
  * (`ownFolderId`) says how many Documents it searches, and that taking it
- * out searches everything. A scope the User chose (`onWiden`) widens back to every
- * Document in one click: its one chip's ×, or, with more, a last chip that says so.
+ * out searches everything. A scope the User narrowed (`back`) goes back in one click to
+ * the scope it narrowed: its one chip's ×, or, with more, a last chip that says where.
  */
 export function ScopeChips({
   scope,
   ownFolderId = null,
   onRemove,
-  onWiden,
+  back,
   onChange,
   shown: most,
   className,
@@ -47,7 +47,8 @@ export function ScopeChips({
   /** The Folder of the Mind the composer is in: its chip is the Mind's own. */
   ownFolderId?: string | null;
   onRemove(kind: ScopeKind, id: string): void;
-  onWiden?(): void;
+  /** `label` names the scope it goes back to. */
+  back?: { label: string; onBack(): void };
   /** Opens the picker from a chip's name, as "@" does. */
   onChange?(): void;
   /** Beyond this many chips (the Documents a Library filter showed, say), the rest fold behind "+N more". */
@@ -83,10 +84,8 @@ export function ScopeChips({
       {shown.map((chip) => {
         const { deleted } = chip;
         const name = chip.name ?? t(DELETED_NAMES[chip.kind]);
-        const widens = onWiden !== undefined && chips.length === 1;
-        const remove = widens
-          ? t("composer.scope.widen", { name })
-          : t("scope.chip.remove", { name });
+        const goesBack = back !== undefined && chips.length === 1;
+        const remove = goesBack ? back.label : t("scope.chip.remove", { name });
         const own = !deleted && chip.kind === "folder" && chip.id === ownFolderId;
         const title = deleted
           ? t("scope.chip.deleted")
@@ -143,7 +142,7 @@ export function ScopeChips({
               title={remove}
               // Keep the cursor where it is.
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => (widens ? onWiden() : onRemove(chip.kind, chip.id))}
+              onClick={() => (goesBack ? back.onBack() : onRemove(chip.kind, chip.id))}
               className="scope-chip-remove"
             >
               <RemoveIcon className="size-2.5" />
@@ -167,19 +166,18 @@ export function ScopeChips({
           </button>
         </li>
       )}
-      {onWiden && chips.length > 1 && (
+      {back && chips.length > 1 && (
         <li>
           <button
             type="button"
-            data-testid="scope-chips-widen"
-            aria-label={t("composer.scope.widenAll", { count: chips.length })}
-            title={t("composer.scope.widenAll", { count: chips.length })}
+            data-testid="scope-chips-back"
+            title={back.label}
             // Keep the cursor where it is.
             onMouseDown={(event) => event.preventDefault()}
-            onClick={onWiden}
+            onClick={back.onBack}
             className="scope-chip scope-chip-more"
           >
-            {t("composer.scope.all")}
+            <span className="truncate">{back.label}</span>
           </button>
         </li>
       )}

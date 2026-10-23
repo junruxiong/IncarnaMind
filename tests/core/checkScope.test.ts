@@ -6,18 +6,12 @@
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
 import * as Y from "yjs";
-import {
-  CONTENT_SCHEMA_VERSION_KEY,
-  type Core,
-  MIND_CONTENT_FIELD,
-  MIND_SETTINGS_FIELD,
-  type SearchScope,
-} from "../../src/core";
+import { type Core, MIND_CONTENT_FIELD, type SearchScope } from "../../src/core";
 import { messageReference } from "../../src/core/references";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { checkedScope, claimCheckShown } from "../../src/shared/claimChecks";
-import { mindScopeOf, setMindScope } from "../../src/shared/mindScope";
-import { folderScope } from "../../src/shared/searchScope";
+import { mindScopeOf, scopeBeforeOf, setMindScope } from "../../src/shared/mindScope";
+import { folderScope, NO_SCOPE } from "../../src/shared/searchScope";
 import { askAssistant } from "../helpers/assistant";
 import { checkGenerate, checkReply, isCheckRun, type Plan } from "../helpers/checks";
 import { shownPassages } from "../helpers/citations";
@@ -263,9 +257,9 @@ describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) =
   });
 });
 
-describe("A Mind from before checks in a chosen scope", () => {
-  // protects=a Mind written by an older version, with no scope of its own, is checked where it was before: its Folder while that holds a Document, else every Document marked as widened; fails_when=it is checked elsewhere, or its marks read as made in a chosen scope; no_claim=Minds with a scope (above).
-  test("with no scope of its own is checked in its Folder, else in every Document, as before", async () => {
+describe("A Mind with no scope of its own, as every Mind written before", () => {
+  // protects=a Mind whose content has no scope key, as every Mind written before the scope was kept, is checked where it was before: its Folder while that holds a Document, else every Document marked as widened; fails_when=it is checked elsewhere, or its marks read as made in a chosen scope; no_claim=an older app opening a Mind with a scope (chosenScopeOlderVersion.test.ts).
+  test("is checked in its Folder, else in every Document, as before", async () => {
     const { core, words, own } = await setUp("en");
     const older = async (folderId: string | null) => {
       const mind = await core.createMind({ title: "Older", folderId });
@@ -276,7 +270,6 @@ describe("A Mind from before checks in a chosen scope", () => {
       line.insert(0, words.own.line);
       paragraph.insert(0, [line]);
       doc.getXmlFragment(MIND_CONTENT_FIELD).push([paragraph]);
-      doc.getMap(MIND_SETTINGS_FIELD).set(CONTENT_SCHEMA_VERSION_KEY, 25);
       await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(doc));
       const client = await connectToMind(core, mind.id);
       expect(mindScopeOf(client.doc)).toBeNull();
@@ -290,6 +283,86 @@ describe("A Mind from before checks in a chosen scope", () => {
     expect(await older(folder.id)).toEqual({ folderId: folder.id, widened: false });
     expect(await older(null)).toEqual({ folderId: null, widened: false });
     expect(await older(empty.id)).toEqual({ folderId: empty.id, widened: true });
+  });
+});
+
+describe("A check whose chosen scope holds nothing to check against", () => {
+  // protects=a Mind whose chosen scope is a deleted Document or a deleted Folder is told that its scope holds nothing, not that the Library is empty, nothing is sent and the scope stays as chosen; a Library with no Documents at all still reads as one; fails_when=the result reads as an empty Library, a check runs, or the scope widens by itself; no_claim=how the card words it (e2e).
+  test("says it is the Mind's scope, never widens by itself, and an empty Library still reads as one", async () => {
+    const { core, words, own, other, calls } = await setUp("en");
+    const { mindId, client } = await mindWith(core, words.own.line);
+    const nothingIn = (scope: SearchScope, folderId: string | null = null) => ({
+      kind: "no-documents",
+      folderId,
+      chosen: { scope, onlyLeftOut: false },
+    });
+
+    setMindScope(client.doc, documentsScope(own.id));
+    await client.settled();
+    await core.deleteDocument(own.id);
+    expect(await core.planMindCheck(mindId, "all")).toEqual(nothingIn(documentsScope(own.id)));
+    expect(await checkAll(core, mindId)).toEqual(nothingIn(documentsScope(own.id)));
+
+    const folder = await core.createLibraryGroup({ name: "Old agreements", description: "" });
+    setMindScope(client.doc, folderScope(folder.id));
+    await client.settled();
+    await core.deleteLibraryGroup(folder.id);
+    expect(await checkAll(core, mindId, "folder")).toEqual(
+      nothingIn(folderScope(folder.id), folder.id),
+    );
+    expect(calls.filter(isCheckRun)).toHaveLength(0);
+    expect(mindScopeOf(client.doc)).toEqual(folderScope(folder.id));
+
+    await core.deleteDocument(other.id);
+    expect(await checkAll(core, mindId, "empty")).toEqual({
+      kind: "no-documents",
+      folderId: folder.id,
+    });
+  });
+});
+
+describe("Where one click takes a narrowed scope back to", () => {
+  // protects=a narrowed scope remembers the wide scope it narrowed, the Mind's own or every Document chosen, keeps it while narrowed further and after a restart, and forgets it once the scope is wide again; fails_when=the one click would go back elsewhere, or the way back is lost on a restart; no_claim=the chip that does it (e2e).
+  test("is the Mind's own, or every Document when the User chose that, and survives a restart", async () => {
+    const { core, dataDir, words, own, other } = await setUp("en");
+    const folder = await core.createLibraryGroup({ name: "Agreements", description: "" });
+    await core.moveToFolder({ documentIds: [own.id], folderId: folder.id });
+    const { mindId, client } = await mindWith(core, words.own.line, folder.id);
+
+    setMindScope(client.doc, documentsScope(own.id));
+    expect(scopeBeforeOf(client.doc)).toBeNull();
+    setMindScope(client.doc, NO_SCOPE);
+    expect(scopeBeforeOf(client.doc)).toBeNull();
+    setMindScope(client.doc, documentsScope(own.id));
+    expect(scopeBeforeOf(client.doc)).toEqual(NO_SCOPE);
+    setMindScope(client.doc, documentsScope(own.id, other.id));
+    expect(scopeBeforeOf(client.doc)).toEqual(NO_SCOPE);
+    await client.settled();
+
+    core.close();
+    const restarted = await connectToMind(startCore(dataDir), mindId);
+    expect(mindScopeOf(restarted.doc)).toEqual(documentsScope(own.id, other.id));
+    expect(scopeBeforeOf(restarted.doc)).toEqual(NO_SCOPE);
+  });
+
+  // protects=two devices narrowing the scope at once end on one device's scope with that device's way back, never one's scope with the other's; fails_when=the scope and its way back come from different devices; no_claim=which device wins (Yjs decides).
+  test("two devices narrowing at once keep one device's scope with its own way back", () => {
+    const first = new Y.Doc();
+    const second = new Y.Doc();
+    setMindScope(first, NO_SCOPE);
+    Y.applyUpdate(second, Y.encodeStateAsUpdate(first));
+    setMindScope(first, documentsScope("okoro"));
+    setMindScope(second, null);
+    setMindScope(second, documentsScope("adeyemi"));
+    Y.applyUpdate(second, Y.encodeStateAsUpdate(first));
+    Y.applyUpdate(first, Y.encodeStateAsUpdate(second));
+
+    const ended = [mindScopeOf(first), scopeBeforeOf(first)];
+    expect([mindScopeOf(second), scopeBeforeOf(second)]).toEqual(ended);
+    expect([
+      [documentsScope("okoro"), NO_SCOPE],
+      [documentsScope("adeyemi"), null],
+    ]).toContainEqual(ended);
   });
 });
 
@@ -354,5 +427,46 @@ describe("A Mind imported from a Word file", () => {
       );
     expect(handedNames.length).toBeGreaterThan(0);
     expect(handedNames.some((name) => name.startsWith("Draft memo"))).toBe(false);
+  });
+
+  // protects=a Word Mind whose chosen scope holds only its own original file is told that is all its scope holds, and nothing is sent, while the Library has another Document; fails_when=it reads as an empty Library, or the original is checked against; no_claim=the card's words (e2e).
+  test("whose chosen scope holds only its own file is told so, and nothing is sent", async () => {
+    const calls: ModelCall[] = [];
+    const model = scriptedModel((call) => {
+      calls.push(call);
+      return { text: "" };
+    });
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: scriptedModels(model).createChatModel,
+    });
+    await core.saveChatProvider({ kind: "ollama", modelId: "local-model" });
+    const sources = await createTempDataFolder();
+    const [bank] = await addAndProcess(core, [
+      await writeSourceFile(
+        sources,
+        "Northgate Bank confirmation.md",
+        `# Confirmation\n\n${BANK}\n`,
+      ),
+    ]);
+    const { mindId, client } = await importWordBytes(
+      core,
+      sources,
+      wordFile({ body: wordParagraph(LOAN) }),
+      { name: "Draft memo.docx", origin: "own", folderId: null, addOriginal: true },
+    );
+    const listed = await waitForDocuments(core, (documents) =>
+      expect(documents.filter((each) => each.status === "ready")).toHaveLength(2),
+    );
+    const memo = listed.find((each) => each.id !== bank?.id);
+    if (!memo) throw new Error("The original wasn't added.");
+    setMindScope(client.doc, documentsScope(memo.id));
+    await client.settled();
+
+    expect(await checkAll(core, mindId)).toEqual({
+      kind: "no-documents",
+      folderId: null,
+      chosen: { scope: documentsScope(memo.id), onlyLeftOut: true },
+    });
+    expect(calls.filter(isCheckRun)).toHaveLength(0);
   });
 });

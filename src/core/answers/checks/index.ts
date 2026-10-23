@@ -75,7 +75,7 @@ import type { AnswerEngine } from "../engine";
 import { type ClaimCheckDependencies, createClaimCheck, recordJudged } from "./claimCheck";
 import { createMindCheck, type MindCheckOptions } from "./mindCheck";
 import { markedSentences, markSentence, selectedSentences, updateCheck } from "./sentences";
-import { createVerify, type VerifyOptions } from "./verify";
+import { createVerify, type NoDocuments, type VerifyOptions } from "./verify";
 import { createContradictionWatch, type WatchOptions } from "./watch";
 import { createWrittenCheck, type WrittenCheckOptions } from "./written";
 
@@ -390,13 +390,25 @@ export function createChecks(options: ChecksOptions) {
     const marked: ClaimCheckScope = inChosen
       ? { folderId: own, widened: false, chosen: wanted }
       : { folderId: own, widened: allDocuments || own !== folderId };
-    const scope = options.evidence.scope(
-      wanted && options.resolveScope(wanted),
-      leftOutOf(mindId, checked),
-    );
+    const leftOut = leftOutOf(mindId, checked);
+    const resolved = wanted && options.resolveScope(wanted);
+    const scope = options.evidence.scope(resolved, leftOut);
+    const searchable = options.documents.searchableCount(scope.documentIds);
+    const empty = (): NoDocuments => {
+      const none: NoDocuments = { kind: "no-documents", folderId };
+      if (!inChosen || !wanted) return none;
+      if (
+        options.documents.searchableCount(options.evidence.scope(null, leftOut).documentIds) === 0
+      )
+        return none;
+      const onlyLeftOut =
+        options.documents.searchableCount(options.evidence.scope(resolved).documentIds) > 0;
+      return { ...none, chosen: { scope: wanted, onlyLeftOut } };
+    };
     return {
-      searchable: options.documents.searchableCount(scope.documentIds),
+      searchable,
       folderId,
+      empty: searchable === 0 ? empty() : null,
       check: { scope, marked, wanted },
     };
   }
@@ -410,8 +422,8 @@ export function createChecks(options: ChecksOptions) {
     const read = content.read(mindId, (blocks) => selectedSentences(blocks, stretches));
     if (!read.ok) return { kind: read.reason };
 
-    const { searchable, folderId, check } = scopeOf(mindId, input.allDocuments);
-    if (searchable === 0) return { kind: "no-documents", folderId };
+    const { empty, check } = scopeOf(mindId, input.allDocuments);
+    if (empty) return empty;
     const { scope: evidenceScope, marked: scope } = check;
 
     const ready = await prepare(input.model ?? options.defaultModel());

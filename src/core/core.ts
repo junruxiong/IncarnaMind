@@ -1149,8 +1149,7 @@ export function createCore(adapters: CoreAdapters): Core {
   // A scope's Folder is a Library Folder, or one of a Linked folder's (the "@" picker offers both).
   const scopeItemName = (kind: ScopeKind, id: string): string | null =>
     kind === "folder"
-      ? ([...library.folders(), ...folders.list()].find((folder) => folder.id === id)?.name ??
-        null)
+      ? ([...library.folders(), ...folders.list()].find((folder) => folder.id === id)?.name ?? null)
       : kind === "tag"
         ? (tags.list().find((tag) => tag.id === id)?.name ?? null)
         : (documents.getMany([id])[0]?.name ?? null);

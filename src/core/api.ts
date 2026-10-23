@@ -4968,8 +4968,17 @@ export type CheckSentencesResult =
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** Nothing was sent: the scope holds no Document with text to check against. */
-  | { kind: "no-documents"; folderId: string | null }
+  /**
+   * Nothing was sent: the scope holds no Document with text to check against. `chosen`: that
+   * scope is the Search scope the User set for the Mind, while other Documents are there; its
+   * items may be deleted, or, `onlyLeftOut`, hold only what the check leaves out (the file the
+   * Mind was made from).
+   */
+  | {
+      kind: "no-documents";
+      folderId: string | null;
+      chosen?: { scope: SearchScope; onlyLeftOut: boolean };
+    }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
   /** Nothing was sent: every sentence of the selection holds changes still waiting. */

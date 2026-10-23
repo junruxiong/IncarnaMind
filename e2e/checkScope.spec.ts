@@ -4,8 +4,11 @@ import { expect, type Page, test } from "@playwright/test";
 import { wordFile, paragraph as wordParagraph } from "../tests/helpers/word";
 import {
   addDocuments,
+  checkCard,
+  coreOf,
   createDataFolder,
   dismissChatSetup,
+  documentIdOf,
   importWordFile,
   launchApp,
   motionSettled,
@@ -22,8 +25,8 @@ import {
 /**
  * A Mind's chosen scope narrows its check (#1623): the Search scope set in the composer is
  * where the check looks, every card says where that was, a change of the scope marks the
- * checks made before it for a re-check, and one click widens the scope back to every
- * Document. The scripted model supports a sentence that shares three words with a line it was
+ * checks made before it for a re-check, one click goes back to the scope it narrowed, and a
+ * scope that holds nothing says so. The scripted model supports a sentence that shares three words with a line it was
  * handed. Set INCARNAMIND_SCREENSHOTS to a folder to also save screenshots.
  */
 const SCREENSHOTS = process.env.INCARNAMIND_SCREENSHOTS;
@@ -135,42 +138,149 @@ test("a check looks in the Mind's chosen scope, its card says where, and a chang
   await app.close();
 });
 
-test("“Ask about this Document” sets the Mind's scope, and one click widens it back to every Document, by mouse or keyboard, in English and Chinese", async () => {
+test("“Ask about this Document” sets the Mind's scope, and one click goes back to the scope it narrowed, the Mind's Folder or All Documents, by mouse or keyboard, in English and Chinese", async () => {
   test.setTimeout(120_000);
   const { app, window } = await launched();
   await useLocalChatModel(window);
   await twoDocumentsAndAMind(window);
   const composer = window.getByTestId("composer");
   const chip = composer.getByTestId("scope-chip");
-  const widen = composer.getByTestId("scope-chip-remove");
+  const back = composer.getByTestId("scope-chip-remove");
+  const input = composer.getByTestId("composer-input");
+  const all = composer.getByTestId("composer-scope-all");
   const askAbout = async () => {
     const row = window.getByTestId("document-list-item").filter({ hasText: "Harbour times" });
     await openDocumentMenu(row);
     await pointAndClick(window, row.getByTestId("document.ask"));
     await expect(chip).toHaveText("Harbour times");
   };
+  const mindId = (await window.getByTestId("mind-pane").first().getAttribute("data-mind-id")) ?? "";
+  const fileMind = async (folderId: string | null) =>
+    (await coreOf(window)).evaluate(
+      (core, place) => core.moveToFolder({ mindIds: [place.mindId], folderId: place.folderId }),
+      { mindId, folderId },
+    );
 
+  // In no Folder, the Mind's own scope is every Document.
   await askAbout();
-  await expect(widen).toHaveAccessibleName("Search all Documents, not only “Harbour times”");
+  await expect(back).toHaveAccessibleName("Back to All Documents");
   await screenshot(window, "asked-about-en");
-  await pointAndClick(window, widen);
+  await pointAndClick(window, back);
   await expect(chip).toHaveCount(0);
-  await expect(composer.getByTestId("composer-scope-all")).toHaveText("All Documents");
-  await expect(composer.getByTestId("composer-input")).toBeFocused();
-
+  await expect(all).toHaveText("All Documents");
+  await expect(input).toBeFocused();
   await askAbout();
-  await widen.focus();
+  await back.focus();
   await window.keyboard.press("Enter");
-  await expect(chip).toHaveCount(0);
-  await expect(composer.getByTestId("composer-input")).toBeFocused();
+  await expect(all).toHaveText("All Documents");
+  await expect(input).toBeFocused();
+
+  // In a Folder that holds a Document, it is that Folder.
+  const folderId = await (await coreOf(window)).evaluate(
+    async (core, documentId) => {
+      const folder = await core.createLibraryGroup({ name: "Harbours", description: "" });
+      await core.moveToFolder({ documentIds: [documentId], folderId: folder.id });
+      return folder.id;
+    },
+    await documentIdOf(window, "Seabirds"),
+  );
+  await fileMind(folderId);
+  await expect(chip).toHaveText("Harbours");
+  await askAbout();
+  await expect(back).toHaveAccessibleName("Back to “Harbours”");
+  await expect(back).toHaveAttribute("title", "Back to “Harbours”");
+  await screenshot(window, "back-to-folder-en");
+  await pointAndClick(window, back);
+  await expect(chip).toHaveText("Harbours");
+  await expect(input).toBeFocused();
+  await askAbout();
+  await back.focus();
+  await window.keyboard.press("Enter");
+  await expect(chip).toHaveText("Harbours");
+  await expect(input).toBeFocused();
 
   await setLanguage(window, "zh-CN");
   await askAbout();
-  await expect(widen).toHaveAccessibleName("改为搜索全部文档，不只搜索“Harbour times”");
-  await screenshot(window, "asked-about-zh");
-  await widen.focus();
+  await expect(back).toHaveAccessibleName("改回“Harbours”");
+  await screenshot(window, "back-to-folder-zh");
+  await back.focus();
   await window.keyboard.press("Space");
-  await expect(composer.getByTestId("composer-scope-all")).toHaveText("全部文档");
+  await expect(chip).toHaveText("Harbours");
+  await expect(input).toBeFocused();
+
+  await fileMind(null);
+  await expect(all).toHaveText("全部文档");
+  await askAbout();
+  await expect(back).toHaveAccessibleName("改回全部文档");
+  await screenshot(window, "asked-about-zh");
+  await back.focus();
+  await window.keyboard.press("Space");
+  await expect(all).toHaveText("全部文档");
+  await expect(input).toBeFocused();
+  await app.close();
+});
+
+test("when the Mind's own scope holds nothing, the check says so and offers all Documents or another scope, in English and Chinese, and an empty Library still says to add Documents", async () => {
+  test.setTimeout(120_000);
+  const { app, window } = await launched();
+  await useLocalChatModel(window);
+  const editor = await twoDocumentsAndAMind(window);
+  await window.keyboard.press("ControlOrMeta+j");
+  await window.keyboard.type("@Harbour");
+  await expect(window.getByTestId("scope-picker")).toBeVisible();
+  await window.keyboard.press("Enter");
+  const composer = window.getByTestId("composer");
+  await expect(composer.getByTestId("scope-chip")).toHaveText("Harbour times");
+  const remove = async (name: string) => {
+    const id = await documentIdOf(window, name);
+    await (await coreOf(window)).evaluate(
+      (core, documentId) => core.deleteDocument(documentId),
+      id,
+    );
+    await expect(window.getByTestId("document-list-item").filter({ hasText: name })).toHaveCount(0);
+  };
+  await remove("Harbour times");
+
+  const line = editor.locator(":scope > p").first();
+  const findSupport = async () => {
+    await slideSelect(window, line, "Harbours publish", { line, words: "spring." });
+    await pointAndClick(
+      window,
+      window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+    );
+  };
+  const marks = window.getByTestId("claim-mark");
+  await findSupport();
+  const problem = (await checkCard(window)).getByTestId("checks-problem");
+  await expect(problem).toContainText(
+    "Nothing to check against: the Document this Mind’s Search scope names was deleted.",
+  );
+  await expect(problem.getByTestId("checks-change-scope")).toHaveText("Change the Search scope…");
+  await expect(marks).toHaveCount(0);
+  await screenshot(window, "empty-scope-en");
+  await pointAndClick(window, problem.getByTestId("checks-check-all"));
+  await expect(marks).toHaveCount(2);
+  await expect(marks.nth(1)).toHaveAttribute("data-check", "supported");
+  // Checked against every Document this once: the Mind's scope is still the one chosen.
+  await expect(composer.getByTestId("scope-chip")).toHaveCount(1);
+  await expect(composer.getByTestId("composer-scope-all")).toHaveCount(0);
+
+  await setLanguage(window, "zh-CN");
+  await findSupport();
+  await expect((await checkCard(window)).getByTestId("checks-problem")).toContainText(
+    "没有可核对的文档：这个 Mind 的搜索范围中的文档已删除。",
+  );
+  await screenshot(window, "empty-scope-zh");
+  await pointAndClick(window, problem.getByTestId("checks-change-scope"));
+  await expect(window.getByTestId("scope-picker")).toBeVisible();
+  await expect(composer.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.press("Escape");
+
+  await remove("Seabirds");
+  await findSupport();
+  const empty = (await checkCard(window)).getByTestId("checks-problem");
+  await expect(empty).toContainText("没有可核对的文档：请先添加文档。");
+  await expect(empty.getByTestId("checks-add-files")).toBeVisible();
   await app.close();
 });
 

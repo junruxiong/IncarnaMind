@@ -738,6 +738,21 @@ export const en = {
   "editor.ai.addDocumentsToCheck": "Add Documents to check",
   "editor.ai.addDocumentsToFindSupport": "Add Documents to find support",
   "checks.problem.no-documents.all": "Nothing to check against: add Documents first.",
+  "checks.problem.scope.empty":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, has no Documents.",
+  "checks.problem.scope.empty.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, have no Documents.",
+  "checks.problem.scope.ownFile":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, holds only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.ownFile.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, hold only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.gone.folder":
+    "Nothing to check against: the Folder this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.tag":
+    "Nothing to check against: the Tag this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.document":
+    "Nothing to check against: the Document this Mind’s Search scope names was deleted.",
+  "checks.changeScope": "Change the Search scope…",
   "checks.problem.nothing": "There’s no sentence to check in what you selected.",
   "checks.waiting.one": "1 sentence with changes waiting wasn’t checked",
   "checks.waiting": "{count} sentences with changes waiting weren’t checked",
@@ -2446,8 +2461,8 @@ export const en = {
   "composer.scope.allEmptyFolder":
     "“{folder}” has no Documents yet, so all your Documents are searched. Type @ to limit it",
   "composer.scope.change": "{name}. Change the Search scope (@)",
-  "composer.scope.widen": "Search all Documents, not only “{name}”",
-  "composer.scope.widenAll": "Search all Documents, not only these {count}",
+  "composer.scope.back": "Back to “{name}”",
+  "composer.scope.backAll": "Back to All Documents",
   "composer.skills.label": "Skills",
   "composer.skills.manage": "Manage Skills…",
   "composer.expand": "Expand the composer",

@@ -7,6 +7,7 @@ import { shownDocumentName } from "../../../shared/citations";
 import { checkedScope, coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import { verificationOf } from "../../../shared/verification";
 import { savedPageSource } from "../../../shared/webSource";
 import { useAddedDocuments } from "../addedDocuments";
 import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
@@ -190,6 +191,7 @@ export function ClaimMark({
           >
             <ClaimCard
               claim={claim}
+              verified={verificationOf(doc)?.documentId ?? null}
               cited={citedIn(editor, claim)}
               fixes={offersFixes(editor, claim)}
               addable={plus}
@@ -322,6 +324,7 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  */
 function ClaimCard({
   claim,
+  verified,
   cited,
   fixes,
   addable,
@@ -338,6 +341,8 @@ function ClaimCard({
   onKeep,
 }: {
   claim: ShownClaim;
+  /** The Document a Verify Mind checks: left out of every check, as itself, never as a copy. */
+  verified: string | null;
   cited: readonly NumberedCitation[];
   fixes: boolean;
   addable: boolean;
@@ -581,6 +586,7 @@ function ClaimCard({
         const name = left.documentName || document?.name || "";
         // The file being checked says every sentence of it: only where nothing else did is it news.
         if (left.reason === "checked-document" && state === "unsupported") {
+          if (left.documentId === verified) return null;
           return (
             <p key={left.documentId} data-testid="claim-left-out" className="citation-card-note">
               {t("evidence.excluded.checked", { name })}

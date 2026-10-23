@@ -721,6 +721,17 @@ export const zhCN = {
   "editor.ai.addDocumentsToCheck": "添加文档后才能核对",
   "editor.ai.addDocumentsToFindSupport": "添加文档后才能查找支持",
   "checks.problem.no-documents.all": "没有可核对的文档：请先添加文档。",
+  "checks.problem.scope.empty": "没有可核对的文档：这个 Mind 的搜索范围“{scope}”中没有文档。",
+  "checks.problem.scope.empty.more":
+    "没有可核对的文档：这个 Mind 的搜索范围“{scope}”等 {total} 项中没有文档。",
+  "checks.problem.scope.ownFile":
+    "没有可核对的文档：这个 Mind 的搜索范围“{scope}”中只有这个 Mind 的来源文件，核对时不会计入。",
+  "checks.problem.scope.ownFile.more":
+    "没有可核对的文档：这个 Mind 的搜索范围“{scope}”等 {total} 项中只有这个 Mind 的来源文件，核对时不会计入。",
+  "checks.problem.scope.gone.folder": "没有可核对的文档：这个 Mind 的搜索范围中的文件夹已删除。",
+  "checks.problem.scope.gone.tag": "没有可核对的文档：这个 Mind 的搜索范围中的标签已删除。",
+  "checks.problem.scope.gone.document": "没有可核对的文档：这个 Mind 的搜索范围中的文档已删除。",
+  "checks.changeScope": "更改搜索范围…",
   "checks.problem.nothing": "选中的内容里没有可核对的句子。",
   "checks.waiting.one": "有 1 句含待处理的修订，未核对",
   "checks.waiting": "有 {count} 句含待处理的修订，未核对",
@@ -2350,8 +2361,8 @@ export const zhCN = {
   "composer.scope.allTitle": "搜索你的全部文档。输入 @ 缩小范围",
   "composer.scope.allEmptyFolder": "“{folder}”中还没有文档，因此搜索你的全部文档。输入 @ 缩小范围",
   "composer.scope.change": "{name}。更改搜索范围（@）",
-  "composer.scope.widen": "改为搜索全部文档，不只搜索“{name}”",
-  "composer.scope.widenAll": "改为搜索全部文档，不只搜索这 {count} 项",
+  "composer.scope.back": "改回“{name}”",
+  "composer.scope.backAll": "改回全部文档",
   "composer.skills.label": "技能",
   "composer.skills.manage": "管理技能…",
   "composer.expand": "展开输入框",

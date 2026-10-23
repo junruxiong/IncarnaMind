@@ -847,9 +847,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
       return textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
     };
 
-    expect(await commentsIn(linked.id)).toContain(
-      "Unsupported: I didn’t find this in “Notes”.",
-    );
+    expect(await commentsIn(linked.id)).toContain("Unsupported: I didn’t find this in “Notes”.");
     expect(await commentsIn(gone.id)).toContain(
       "Unsupported: I didn’t find this in “Deleted Folder”.",
     );

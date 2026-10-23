@@ -60,10 +60,14 @@ interface ComposerState {
   seat: { editor: Editor; doc: Y.Doc; mindId: string } | null;
   /** Text to ask at once, as typed and sent in the composer: ⌘K's "Ask about…". */
   askWanted: string | null;
+  /** The "@" picker is to open once the composer has the focus: "Change the Search scope…". */
+  scopeWanted: boolean;
   draft(mindId: string): Draft;
   update(mindId: string, change: Partial<Draft>): void;
   requestFocus(): void;
   focusTaken(): void;
+  requestScope(): void;
+  scopeTaken(): void;
   requestAsk(text: string): void;
   askTaken(): void;
 }
@@ -84,6 +88,9 @@ export const useComposer = create<ComposerState>()((set, get) => ({
   },
   requestFocus: () => set({ focusWanted: true }),
   focusTaken: () => set({ focusWanted: false }),
+  scopeWanted: false,
+  requestScope: () => set({ focusWanted: true, scopeWanted: true }),
+  scopeTaken: () => set({ scopeWanted: false }),
   askWanted: null,
   requestAsk: (text) => set({ askWanted: text }),
   askTaken: () => set({ askWanted: null }),

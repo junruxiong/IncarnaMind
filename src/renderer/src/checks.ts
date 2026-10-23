@@ -26,7 +26,12 @@ import { modelInUseOf } from "./modelInUse";
 
 /** Why a check gave no marks, or what it left out, for the check badge's card. */
 export type CheckProblem =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" }>
+  | Exclude<
+      CheckSentencesResult,
+      { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" } | { kind: "no-documents" }
+    >
+  /** `checkAll`: the same check in every Document, when the Mind's own scope is what held none. */
+  | (Extract<CheckSentencesResult, { kind: "no-documents" }> & { checkAll?: () => void })
   | LeftOut
   /** Worded when shown, so it reads in the interface language (#627). */
   | { kind: "failed"; error: unknown; retry?: () => void }
@@ -103,6 +108,10 @@ export const setCheckCardOpen = (place: string, open: boolean) =>
 /** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
+
+/** Nothing to check against in the scope the User set for the Mind: offers `checkAll`, never runs it. */
+export const withCheckAll = (problem: CheckProblem, checkAll: () => void): CheckProblem =>
+  problem.kind === "no-documents" && problem.chosen ? { ...problem, checkAll } : problem;
 
 /**
  * Checks the sentences the selection (or `ranges`) touches, each whole and
@@ -183,7 +192,18 @@ export async function checkSentences(
     result.kind !== "cancelled" &&
     result.kind !== "waiting"
   ) {
-    setFor("problems", mindId, result);
+    setFor(
+      "problems",
+      mindId,
+      withCheckAll(
+        result,
+        () =>
+          void checkSentences(editor, mindId, doc, action, {
+            ranges: stretches.map((each) => each.range),
+            allDocuments: true,
+          }),
+      ),
+    );
   }
   if (result.kind === "checked") setFor("smallModel", mindId, result.smallModel ? true : null);
 }

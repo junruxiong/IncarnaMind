@@ -13,10 +13,12 @@ import {
   readinessAlso,
 } from "../components/providers/ChatReadinessNotice";
 import { UnreadFilesLine } from "../components/UnreadFilesLine";
+import { useComposer } from "../composer";
 import { useContradictionLine } from "../contradictions";
 import { errorMessage } from "../errors";
 import { useLanguage, useT } from "../i18n";
 import { startMindCheck, useMindCheck, useMindCheckRun } from "../mindCheck";
+import { useEmptyScopeLine } from "../scopeDocuments";
 import { useAppStore } from "../store";
 import { useCheckUnread } from "../unreadFiles";
 import { AddedDocumentsLine } from "./AddedDocumentsLine";
@@ -158,6 +160,9 @@ export function HealthCard({
     if (folderId === null) return null;
     return state.library?.groups.find((group) => group.id === folderId)?.name ?? null;
   });
+  const emptyScope = useEmptyScopeLine(
+    problem?.kind === "no-documents" ? (problem.chosen ?? null) : null,
+  );
   const format = (value: number) => new Intl.NumberFormat(language).format(value);
 
   const label = (part: HealthPart, count: number) => {
@@ -305,7 +310,33 @@ export function HealthCard({
           }
         />
       )}
-      {!running && problem?.kind === "no-documents" && (
+      {!running && problem?.kind === "no-documents" && emptyScope !== null && (
+        <ProblemLine
+          testId="checks-problem"
+          className="mind-health-line"
+          action={
+            problem.checkAll && {
+              label: t("checks.checkAll"),
+              testId: "checks-check-all",
+              onClick: () => {
+                dismissCheckProblem(mindId);
+                problem.checkAll?.();
+              },
+            }
+          }
+          also={{
+            label: t("checks.changeScope"),
+            testId: "checks-change-scope",
+            onClick: () => {
+              dismissCheckProblem(mindId);
+              useComposer.getState().requestScope();
+            },
+          }}
+        >
+          {emptyScope}
+        </ProblemLine>
+      )}
+      {!running && problem?.kind === "no-documents" && emptyScope === null && (
         <ProblemLine
           testId="checks-problem"
           className="mind-health-line"
