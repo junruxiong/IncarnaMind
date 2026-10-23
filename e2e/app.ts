@@ -157,7 +157,11 @@ export interface LaunchOptions {
    * The search model's files at a stand-in, and IncarnaMind's copies at others (#1578): a
    * `{ source, copies }` the core's model downloads take instead. Needs a test build.
    */
-  modelDownloads?: { source: EmbeddingModelSource; copies: Record<string, string> };
+  modelDownloads?: {
+    source: EmbeddingModelSource;
+    copies: Record<string, { url: string }>;
+    speech?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  };
   /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.

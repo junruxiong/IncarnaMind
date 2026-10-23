@@ -21,7 +21,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { EmbeddingModelSource, ModelFile } from "../adapters";
 import type { EmbeddingModelError, ModelSourceId } from "../api";
-import type { ModelSources } from "./modelSources";
+import { type ModelSources, redirectAllowedByDefault } from "./modelSources";
 
 const VERIFIED_FILE = "verified.json";
 
@@ -136,7 +136,13 @@ async function downloadFromSources(
   const failures: { source: ModelSourceId; message: string; kind: string }[] = [];
   for (const each of urls) {
     try {
-      await downloadFile(file, target, each.url, { signal, sources }, onProgress);
+      await downloadFile(
+        file,
+        target,
+        each.url,
+        { signal, sources, source: each.source },
+        onProgress,
+      );
       return;
     } catch (error) {
       signal.throwIfAborted();
@@ -162,7 +168,7 @@ async function downloadFile(
   file: ModelFile,
   target: string,
   url: URL,
-  context: { signal: AbortSignal; sources: ModelSources | undefined },
+  context: DownloadContext,
   onProgress: (bytes: number) => void,
 ): Promise<void> {
   const partial = `${target}.partial`;
@@ -205,7 +211,7 @@ async function fetchInto(
   partial: string,
   offset: number,
   url: URL,
-  context: { signal: AbortSignal; sources: ModelSources | undefined },
+  context: DownloadContext,
   onProgress: (bytes: number) => void,
 ): Promise<number> {
   const { sources } = context;
@@ -218,6 +224,10 @@ async function fetchInto(
   };
   const signal = AbortSignal.any([context.signal, stall.signal]);
   const fetcher = sources?.fetch ?? fetch;
+  const allowed = (from: URL, to: URL) =>
+    sources
+      ? sources.redirectAllowed(context.source, url, from, to)
+      : redirectAllowedByDefault(url, from, to);
   const stopped = (error: unknown, what: string) => {
     context.signal.throwIfAborted();
     if (stall.signal.aborted) {
@@ -230,12 +240,68 @@ async function fetchInto(
   };
   awake();
   try {
-    return await fetchAwake(file, partial, offset, url, fetcher, signal, stopped, (bytes) => {
-      awake();
-      onProgress(bytes);
-    });
+    const request = (at: URL) =>
+      fetcher(at, {
+        headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+        redirect: "manual",
+        credentials: "omit",
+        signal,
+      });
+    return await fetchAwake(
+      file,
+      partial,
+      offset,
+      url,
+      request,
+      allowed,
+      signal,
+      stopped,
+      (bytes) => {
+        awake();
+        onProgress(bytes);
+      },
+    );
   } finally {
     clearTimeout(timer);
+  }
+}
+
+interface DownloadContext {
+  signal: AbortSignal;
+  sources: ModelSources | undefined;
+  source: ModelSourceId;
+}
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 5;
+
+// Followed here rather than by `fetch`, so a source can't send a download to a host it doesn't own.
+async function followed(
+  file: ModelFile,
+  url: URL,
+  request: (at: URL) => Promise<Response>,
+  allowed: (from: URL, to: URL) => boolean,
+  stopped: (error: unknown, what: string) => ModelDownloadError,
+): Promise<{ response: Response; at: URL }> {
+  let at = url;
+  for (let hops = 0; ; hops++) {
+    let response: Response;
+    try {
+      response = await request(at);
+    } catch (error) {
+      throw stopped(error, `Couldn't reach ${at.host}`);
+    }
+    const location = REDIRECTS.has(response.status) ? response.headers.get("location") : null;
+    if (location === null) return { response, at };
+    await response.body?.cancel();
+    const next = new URL(location, at);
+    if (hops === MAX_REDIRECTS || !allowed(at, next)) {
+      throw new ModelDownloadError(
+        "network",
+        `${at.host} sent ${file.path} on to ${next.protocol}//${next.host}, which isn't one of its own hosts.`,
+      );
+    }
+    at = next;
   }
 }
 
@@ -244,20 +310,13 @@ async function fetchAwake(
   partial: string,
   offset: number,
   url: URL,
-  fetcher: typeof fetch,
+  request: (at: URL) => Promise<Response>,
+  allowed: (from: URL, to: URL) => boolean,
   signal: AbortSignal,
   stopped: (error: unknown, what: string) => ModelDownloadError,
   onProgress: (bytes: number) => void,
 ): Promise<number> {
-  let response: Response;
-  try {
-    response = await fetcher(url, {
-      headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
-      signal,
-    });
-  } catch (error) {
-    throw stopped(error, `Couldn't reach ${url.host}`);
-  }
+  const { response, at } = await followed(file, url, request, allowed, stopped);
   // A server that ignores the Range header sends the whole file again.
   const resumed =
     response.status === 206 &&
@@ -267,10 +326,21 @@ async function fetchAwake(
     if (response.status === 206 || response.status === 416) await rm(partial, { force: true });
     throw new ModelDownloadError(
       "network",
-      `${url.host} answered HTTP ${response.status} for ${file.path}.`,
+      `${at.host} answered HTTP ${response.status} for ${file.path}.`,
     );
   }
-  if (!response.body) throw new ModelDownloadError("network", `${url.host} sent no data.`);
+  // A short error page with a 200 isn't kept as the file's start, for the next source to resume.
+  const expected = resumed ? file.size - offset : file.size;
+  const length = Number(response.headers.get("content-length") ?? Number.NaN);
+  const encoded = (response.headers.get("content-encoding") ?? "identity") !== "identity";
+  if (!encoded && Number.isFinite(length) && length !== expected) {
+    await response.body?.cancel();
+    throw new ModelDownloadError(
+      "network",
+      `${at.host} sent ${length} bytes for ${file.path}, not the ${expected} recorded.`,
+    );
+  }
+  if (!response.body) throw new ModelDownloadError("network", `${at.host} sent no data.`);
 
   let received = resumed ? offset : 0;
   onProgress(received);

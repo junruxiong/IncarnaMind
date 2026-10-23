@@ -1360,6 +1360,7 @@ export const zhCN = {
   "status.choose": "选择…",
   "status.downloading": "搜索模型",
   "status.downloadFailed.everySource": "未能从任何来源下载搜索模型",
+  "modelSource.tryAgain": "重试",
   "modelSource.details": "详情",
   "modelSource.failed": "{source}：{message}",
   "modelSource.label": "下载来源：",
@@ -2275,7 +2276,7 @@ export const zhCN = {
     "会议的语音模型只在第一次转写会议时下载一次。你说的内容不会发送出去。",
   "privacy.traffic.model-source-modelscope": "从魔搭社区下载内置模型",
   "privacy.traffic.model-source-modelscope.tip":
-    "内置模型需要下载时，IncarnaMind 会同时询问 Hugging Face 和魔搭社区（ModelScope）哪个先响应，并可能从 IncarnaMind 在魔搭社区上的副本下载文件。不会发送你的任何内容。",
+    "内置模型下载前，IncarnaMind 会询问魔搭社区（ModelScope）和 Hugging Face 哪个先响应，以选择从哪里下载。不会发送你的任何内容。",
   "privacy.traffic.model-source-hf-mirror": "从 hf-mirror.com 下载内置模型",
   "privacy.traffic.model-source-hf-mirror.tip":
     "如果无法连接 Hugging Face，内置模型的文件可能从这个镜像下载。不会发送你的任何内容。",

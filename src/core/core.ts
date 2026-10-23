@@ -568,6 +568,7 @@ export function createCore(adapters: CoreAdapters): Core {
     ...(downloads?.proxy && { proxy: downloads.proxy }),
     copies: modelCopies,
     ...(downloads?.stallMs !== undefined && { stallMs: downloads.stallMs }),
+    log: adapters.log ?? silentLogger,
   });
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
@@ -2639,7 +2640,12 @@ export function createCore(adapters: CoreAdapters): Core {
   const otherSources: { id: NetworkTrafficId; service: ExternalService }[] = [
     {
       id: "model-source-modelscope",
-      service: { id: "https://www.modelscope.cn", name: "ModelScope" },
+      service: {
+        id: modelCopies.modelscope
+          ? new URL(modelCopies.modelscope.url).origin
+          : "https://www.modelscope.cn",
+        name: "ModelScope",
+      },
     },
     {
       id: "model-source-hf-mirror",
@@ -2649,7 +2655,7 @@ export function createCore(adapters: CoreAdapters): Core {
       ? [
           {
             id: "model-source-copy" as const,
-            service: { id: new URL(modelCopies.r2).origin, name: "IncarnaMind" },
+            service: { id: new URL(modelCopies.r2.url).origin, name: "IncarnaMind" },
           },
         ]
       : []),

@@ -1403,6 +1403,7 @@ export const en = {
   "status.choose": "Choose…",
   "status.downloading": "Search model",
   "status.downloadFailed.everySource": "Couldn’t download the search model from any source",
+  "modelSource.tryAgain": "Try again",
   "modelSource.details": "Details",
   "modelSource.failed": "{source}: {message}",
   "modelSource.label": "Download source:",
@@ -2363,7 +2364,7 @@ export const en = {
     "The speech model for meetings is downloaded once, the first time a meeting is transcribed. Nothing you say is sent.",
   "privacy.traffic.model-source-modelscope": "Built-in models from ModelScope",
   "privacy.traffic.model-source-modelscope.tip":
-    "When a built-in model needs downloading, IncarnaMind asks Hugging Face and ModelScope which answers first, and may take the files from IncarnaMind’s copy on ModelScope. Nothing of yours is sent.",
+    "Before a built-in model downloads, IncarnaMind asks ModelScope and Hugging Face which answers first, to choose where to download from. Nothing of yours is sent.",
   "privacy.traffic.model-source-hf-mirror": "Built-in models from hf-mirror.com",
   "privacy.traffic.model-source-hf-mirror.tip":
     "If Hugging Face can’t be reached, a built-in model’s files may come from this mirror of it. Nothing of yours is sent.",

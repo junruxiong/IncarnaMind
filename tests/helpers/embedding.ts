@@ -17,6 +17,10 @@ export interface FileBehaviour {
   chunkDelayMs?: number;
   /** Sends this many bytes of the response body, then nothing more, holding the connection open. */
   stallAfter?: number;
+  /** Answers with a redirect to this URL instead. */
+  redirectTo?: string;
+  /** Answers 200 with a short HTML error page instead of the file. */
+  errorPage?: boolean;
 }
 
 export interface ModelServer {
@@ -69,6 +73,15 @@ export async function startModelServer(
     }
     const behaviour = behaviours.get(path) ?? {};
     if (behaviour.held) await held;
+    if (behaviour.redirectTo) {
+      response.writeHead(302, { location: behaviour.redirectTo }).end();
+      return;
+    }
+    if (behaviour.errorPage) {
+      const page = "<html><body>Rate limited</body></html>";
+      response.writeHead(200, { "content-length": String(page.length) }).end(page);
+      return;
+    }
     const body = behaviour.corrupt ? randomBytes(content.byteLength) : content;
     const start = Number(range?.match(/^bytes=(\d+)-$/)?.[1] ?? 0);
     if (start >= body.byteLength) {

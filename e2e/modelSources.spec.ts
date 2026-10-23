@@ -5,7 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
-import { dismissChatSetup, launchApp, setLanguage, setWindowSize, turnOnEmbeddings } from "./app";
+import {
+  dismissChatSetup,
+  launchApp,
+  pointAndClick,
+  setLanguage,
+  setWindowSize,
+  turnOnEmbeddings,
+} from "./app";
 
 let dataDir = "";
 
@@ -35,11 +42,15 @@ const FILE = { path: "model.onnx", size: 10, sha256: "0".repeat(64) };
 const WORDS = {
   en: {
     line: "Couldn’t download the search model from any source",
+    speech: "Couldn’t download the speech model from any source",
+    tryAgain: "Try again",
     modelScope: "ModelScope",
     choices: ["Automatic", "Hugging Face", "ModelScope"],
   },
   "zh-CN": {
     line: "未能从任何来源下载搜索模型",
+    speech: "未能从任何来源下载语音模型",
+    tryAgain: "重试",
     modelScope: "魔搭社区",
     choices: ["自动", "Hugging Face", "魔搭社区"],
   },
@@ -67,7 +78,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const { app, window } = await launchApp(dataDir, {
       modelDownloads: {
         source: { baseUrl: pinned.url, files: [FILE] },
-        copies: { modelscope: `${copy.url}{folder}/` },
+        copies: { modelscope: { url: `${copy.url}{folder}/` } },
       },
     });
     await setWindowSize(app, window, 1280, 800);
@@ -78,7 +89,7 @@ for (const language of ["en", "zh-CN"] as const) {
 
     const row = window.getByTestId("embedding-model-failed");
     await expect(row).toContainText(WORDS[language].line);
-    await expect(row.getByTestId("embedding-model-retry")).toBeVisible();
+    await expect(row.getByTestId("embedding-model-retry")).toHaveText(WORDS[language].tryAgain);
     const sources = window.getByTestId("embedding-model-sources");
     await expect(sources).toHaveCount(0);
 
@@ -118,4 +129,45 @@ test("with one source only, nothing about sources shows", async () => {
   await expect(row.getByTestId("embedding-model-details")).toHaveCount(0);
   await app.close();
   pinned.close();
+});
+
+// protects=the meeting bar does the same for the speech model: when every source fails, its line says so with Try again, and its Details hold each source's error and the download source, whose pick is kept and tried again at once; fails_when=the bar keeps the old line, shows no Details, or the pick doesn't retry; no_claim=the sidebar's lines, which the tests above cover.
+test("the meeting bar's speech model line says every source failed, and its Details pick the source", async () => {
+  requests.length = 0;
+  const pinned = await emptySource("pinned");
+  const copy = await emptySource("modelscope");
+  const { app, window } = await launchApp(dataDir, {
+    modelDownloads: {
+      source: { baseUrl: pinned.url, files: [] },
+      copies: { modelscope: { url: `${copy.url}{folder}/` } },
+      speech: {
+        model: { baseUrl: pinned.url, files: [FILE] },
+        vad: { baseUrl: pinned.url, files: [] },
+      },
+    },
+  });
+  await setWindowSize(app, window, 1280, 800);
+  await dismissChatSetup(window);
+  await window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    await bridge.updateSettings({ device: { meetingNoticeAccepted: true } });
+  });
+  await pointAndClick(window, window.getByTestId("plus-menu"));
+  await pointAndClick(window, window.getByTestId("plus-more"));
+  await pointAndClick(window, window.getByTestId("plus-record-meeting"));
+  const line = window.getByTestId("meeting-transcript-line");
+  await expect(line).toContainText(WORDS.en.speech);
+  await expect(line.getByTestId("meeting-transcript-retry")).toHaveText(WORDS.en.tryAgain);
+  await pointAndClick(window, line.getByTestId("meeting-transcript-details"));
+  const sources = window.getByTestId("meeting-transcript-sources");
+  await expect(sources).toContainText("Hugging Face");
+  await expect(sources).toContainText("ModelScope");
+  const before = requests.length;
+  await window.getByTestId("meeting-transcript-source").selectOption("modelscope");
+  await expect.poll(() => modelSource(window)).toBe("modelscope");
+  await expect.poll(() => requests.length).toBeGreaterThan(before);
+  expect(requests[before]?.server).toBe("modelscope");
+  await app.close();
+  pinned.close();
+  copy.close();
 });

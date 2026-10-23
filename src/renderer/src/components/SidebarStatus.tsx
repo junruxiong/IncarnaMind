@@ -490,7 +490,7 @@ function useStatuses(): Status[] {
     full: rerankingStatus.full,
     ...(rerankingStatus.retry && {
       action: {
-        label: t("status.retry"),
+        label: t(rerankingSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "reranking-model-retry",
         run: () => void retryRerankingDownload(),
       },
@@ -512,7 +512,7 @@ function useStatuses(): Status[] {
         : t(kind === "load" ? "status.modelFailed" : "status.downloadFailed"),
       full: `${full}\n${message}`,
       action: {
-        label: t("status.retry"),
+        label: t(embeddingSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "embedding-model-retry",
         run: () => void retryDownload(),
       },
@@ -527,7 +527,7 @@ function useStatuses(): Status[] {
       ...textRecognition,
       ...(textRecognitionSources.toggle && { details: textRecognitionSources }),
       action: {
-        label: t("status.retry"),
+        label: t(textRecognitionSources.toggle ? "modelSource.tryAgain" : "status.retry"),
         testId: "text-recognition-retry",
         run: () => void retryTextRecognition(),
       },

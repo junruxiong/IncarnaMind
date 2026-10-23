@@ -209,10 +209,14 @@ const fakeScans = fakeEmbedder ? (process.env.INCARNAMIND_TEST_SCANS ?? null) : 
 /** With the fake models, how many scans are read at once (#1502), whatever the computer. */
 const testScansAtOnce = fakeEmbedder ? Number(process.env.INCARNAMIND_TEST_SCANS_AT_ONCE ?? 0) : 0;
 /**
- * With the fake models, the search model's files at a stand-in and IncarnaMind's copies at others
- * (#1578), as JSON, so a smoke test can fail its download at every source.
+ * With the fake models, the search model's (and the speech model's) files at a stand-in and
+ * IncarnaMind's copies at others (#1578), as JSON, so a smoke test can fail a download at every source.
  */
-const testModelDownloads: { source: EmbeddingModelSource; copies: ModelCopies } | null =
+const testModelDownloads: {
+  source: EmbeddingModelSource;
+  copies: ModelCopies;
+  speech?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+} | null =
   fakeEmbedder && process.env.INCARNAMIND_TEST_MODEL_DOWNLOADS
     ? JSON.parse(process.env.INCARNAMIND_TEST_MODEL_DOWNLOADS)
     : null;
@@ -223,8 +227,60 @@ const modelFetch: typeof fetch = (input, init) => {
   if (import.meta.env.MODE === "test" && new URL(url).hostname !== "127.0.0.1") {
     return Promise.reject(new TypeError(`A test build reaches no ${new URL(url).host}.`));
   }
-  return net.fetch(input instanceof URL ? input.href : input, init);
+  if (init?.redirect === "manual") return unfollowed(url, init);
+  return net.fetch(input instanceof URL ? input.href : input, { ...init, credentials: "omit" });
 };
+
+// The core follows a model download's redirects itself, to keep it to the source's own hosts,
+// but net.fetch cancels a redirect it is told not to follow: net.request hands it back.
+function unfollowed(url: string, init: RequestInit): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const request = net.request({
+      url,
+      method: init.method ?? "GET",
+      redirect: "manual",
+      credentials: "omit",
+    });
+    for (const [name, value] of new Headers(init.headers)) request.setHeader(name, value);
+    const { signal } = init;
+    const abort = () => {
+      request.abort();
+      reject(signal?.reason);
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+    request.on("redirect", (status, _method, location) => {
+      request.abort();
+      resolve(new Response(null, { status, headers: { location } }));
+    });
+    request.on("response", (message) => {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(message.headers)) {
+        for (const each of Array.isArray(value) ? value : [value]) headers.append(name, each);
+      }
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          message.on("data", (chunk: Buffer) => controller.enqueue(new Uint8Array(chunk)));
+          message.on("end", () => {
+            signal?.removeEventListener("abort", abort);
+            controller.close();
+          });
+          message.on("aborted", () => controller.error(signal?.reason ?? new Error("Aborted")));
+          message.on("error", (error: Error) => controller.error(error));
+        },
+        cancel() {
+          request.abort();
+        },
+      });
+      resolve(new Response(body, { status: message.statusCode, headers }));
+    });
+    request.on("error", reject);
+    request.end();
+  });
+}
 
 /**
  * Test-only launch flags: the smoke tests transcribe Meetings with a fake
@@ -774,7 +830,7 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
       ? recordingSent(createUtilityProcessTranscriber({ fake: fakeTranscriber }))
       : createUtilityProcessTranscriber(),
     ...(fakeTranscriber && {
-      transcriptionModelSource: {
+      transcriptionModelSource: testModelDownloads?.speech ?? {
         model: { baseUrl: "http://localhost/", files: [] },
         vad: { baseUrl: "http://localhost/", files: [] },
       },

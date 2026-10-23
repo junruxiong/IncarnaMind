@@ -25,8 +25,8 @@ const FOLDER = "multilingual-e5-small";
 const PINNED = "https://huggingface.co/intfloat/multilingual-e5-small/resolve/abc123/";
 const FILE = { path: "onnx/model.onnx", size: 10, sha256: "0".repeat(64) };
 const COPIES: ModelCopies = {
-  modelscope: "https://www.modelscope.cn/models/IncarnaMind/{folder}/resolve/master/",
-  r2: "https://models.example.com/{folder}/",
+  modelscope: { url: "https://www.modelscope.cn/models/IncarnaMind/{folder}/resolve/master/" },
+  r2: { url: "https://models.example.com/{folder}/", hosts: ["cdn.example.net"] },
 };
 
 function probing(answers: { huggingface: boolean; modelscope: boolean }) {
@@ -155,13 +155,31 @@ describe("Where a built-in model's files come from (#1578)", () => {
     ]);
   });
 
-  // protects=a copy that isn't set up is no source: until IncarnaMind's ModelScope and R2 copies exist, a file is tried at Hugging Face and hf-mirror only, and ModelScope isn't offered as a pick; fails_when=an empty copy yields a URL, or the pick lists a source that has nothing; no_claim=the copies' hosts.
-  test("a copy that isn't set up is skipped, and isn't offered", async () => {
+  // protects=a copy that isn't set up is no source: until IncarnaMind's ModelScope and R2 copies exist, a file is tried at Hugging Face and hf-mirror only; fails_when=an empty copy yields a URL; no_claim=the copies' hosts.
+  test("a copy that isn't set up is skipped", async () => {
     const { fetcher } = probing({ huggingface: true, modelscope: false });
-    const sources = sourcesWith(fetcher, { copies: {} });
-    expect(await order(sources)).toEqual(["huggingface", "hf-mirror"]);
-    expect(sources.choices()).toEqual(["auto", "huggingface"]);
-    expect(sourcesWith(fetcher).choices()).toEqual(["auto", "huggingface", "modelscope"]);
+    expect(await order(sourcesWith(fetcher, { copies: {} }))).toEqual(["huggingface", "hf-mirror"]);
+  });
+
+  // protects=a source may send a download on only to its own hosts, never from https to http: Hugging Face to its CDN on hf.co, hf-mirror.com on to Hugging Face, a copy to the hosts its config names; fails_when=a download follows a redirect to any other host, or to plain http; no_claim=which hosts a real CDN uses today.
+  test("a source sends a download on only to its own hosts, and never to http", () => {
+    const { fetcher } = probing({ huggingface: true, modelscope: false });
+    const sources = sourcesWith(fetcher);
+    const pinned = new URL(`${PINNED}onnx/model.onnx`);
+    const to = (href: string) => new URL(href);
+    const hf = (href: string) => sources.redirectAllowed("huggingface", pinned, pinned, to(href));
+    expect(hf("https://us.aws.cdn.hf.co/xet/abc")).toBe(true);
+    expect(hf("https://cdn-lfs.huggingface.co/abc")).toBe(true);
+    expect(hf("https://evil.example.com/abc")).toBe(false);
+    expect(hf("http://us.aws.cdn.hf.co/xet/abc")).toBe(false);
+    expect(hf("https://hf.co.example.com/abc")).toBe(false);
+    const mirror = new URL("https://hf-mirror.com/intfloat/x/resolve/abc/model.onnx");
+    expect(
+      sources.redirectAllowed("hf-mirror", mirror, mirror, to("https://huggingface.co/x")),
+    ).toBe(true);
+    const copy = new URL("https://models.example.com/multilingual-e5-small/model.onnx");
+    expect(sources.redirectAllowed("r2", copy, copy, to("https://cdn.example.net/a"))).toBe(true);
+    expect(sources.redirectAllowed("r2", copy, copy, to("https://us.aws.cdn.hf.co/a"))).toBe(false);
   });
 });
 
@@ -170,7 +188,7 @@ async function twoSources(files: Record<string, number>) {
   const pinned = await startModelServer(files);
   const copy = await startModelServer({}, { server: pinned, folder: FOLDER });
   const port = new URL(copy.source.baseUrl).port;
-  return { pinned, copy, copies: { modelscope: `http://127.0.0.1:${port}/{folder}/` } };
+  return { pinned, copy, copies: { modelscope: { url: `http://127.0.0.1:${port}/{folder}/` } } };
 }
 
 async function download(
@@ -221,7 +239,7 @@ describe("A built-in model downloads from the next source when one fails (#1578)
   test("a stall moves to the next source, which resumes the file where it stopped", async () => {
     const { pinned, copy, copies } = await twoSources({ "model.onnx": 4096 });
     pinned.behave("model.onnx", { stallAfter: 1000 });
-    const { directory, done } = await download(pinned, copies, { stallMs: 200 });
+    const { directory, done } = await download(pinned, copies, { stallMs: 2000 });
     await done;
     expect(copy.requests).toEqual([
       expect.objectContaining({ path: `${FOLDER}/model.onnx`, range: "bytes=1000-" }),
@@ -229,6 +247,67 @@ describe("A built-in model downloads from the next source when one fails (#1578)
     expect(new Uint8Array(await readFile(join(directory, "model.onnx")))).toEqual(
       pinned.contents.get("model.onnx"),
     );
+  });
+
+  // protects=a source that sends a download on to a host that isn't its own is refused, and its error names that host; the next source is used; fails_when=the redirect is followed, or the download stops there; no_claim=the hosts a real source owns, which the rule's own test covers.
+  test("a redirect to another host is refused, and the next source is used", async () => {
+    const { pinned, copy, copies } = await twoSources({ "model.onnx": 2048 });
+    const elsewhere = await startModelServer({ "model.onnx": 2048 });
+    pinned.behave("model.onnx", { redirectTo: `${elsewhere.source.baseUrl}model.onnx` });
+    const sources = sourcesWith(LOCAL_FETCH, { copies });
+    const directory = join(await mkdtemp(join(tmpdir(), "incarnamind-models-")), FOLDER);
+    await downloadModel({
+      directory,
+      source: pinned.source,
+      signal: new AbortController().signal,
+      onProgress: () => {},
+      sources,
+    });
+    expect(elsewhere.requests).toEqual([]);
+    expect(copy.requests.map((each) => each.path)).toEqual([`${FOLDER}/model.onnx`]);
+  });
+
+  // protects=a redirect from https to plain http is refused, so a file's path never goes out unencrypted; fails_when=it is followed; no_claim=Hugging Face's own redirects.
+  test("a redirect from https to http is refused", async () => {
+    const asked: string[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      asked.push(url.href);
+      if (url.protocol === "https:" && url.host === "huggingface.co") {
+        return new Response(null, {
+          status: 302,
+          headers: { location: `http://${url.host}${url.pathname}` },
+        });
+      }
+      throw new TypeError(`${url.host} can't be reached`);
+    };
+    const directory = join(await mkdtemp(join(tmpdir(), "incarnamind-models-")), FOLDER);
+    const error = await failure(
+      downloadModel({
+        directory,
+        source: { baseUrl: PINNED, files: [FILE] },
+        signal: new AbortController().signal,
+        onProgress: () => {},
+        sources: sourcesWith(fetcher, { copies: {} }),
+      }),
+    );
+    expect(asked.some((href) => href.startsWith("http://"))).toBe(false);
+    expect((error as ModelDownloadError).sources?.[0]).toMatchObject({
+      source: "huggingface",
+      message: expect.stringContaining("http://huggingface.co"),
+    });
+  });
+
+  // protects=a 200 whose length isn't the file's (a short error page) is refused before anything is written, so the next source downloads the file once, from its start; fails_when=the page is kept as the file's start and the next source resumes after it; no_claim=a server that sends no length.
+  test("a short error page isn't kept: the next source downloads from the start", async () => {
+    const { pinned, copy, copies } = await twoSources({ "model.onnx": 4096 });
+    pinned.behave("model.onnx", { errorPage: true });
+    const { directory, done } = await download(pinned, copies);
+    await done;
+    expect(copy.requests).toEqual([
+      expect.objectContaining({ path: `${FOLDER}/model.onnx`, range: null }),
+    ]);
+    expect((await readFile(join(directory, "model.onnx"))).byteLength).toBe(4096);
   });
 
   // protects=a source that cuts the file short (a truncated download) moves to the next; fails_when=a short file is installed or the download gives up; no_claim=why the connection dropped.
@@ -299,7 +378,7 @@ describe("A built-in model downloads from the next source when one fails (#1578)
       embeddingModelSource: pinned.source,
       modelDownloads: {
         fetch: LOCAL_FETCH,
-        copies: { modelscope: `${copy.source.baseUrl}{folder}/` },
+        copies: { modelscope: { url: `${copy.source.baseUrl}{folder}/` } },
       },
     });
     await turnOnEmbeddings(core);
