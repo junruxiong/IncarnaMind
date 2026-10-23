@@ -66,9 +66,16 @@ export interface UndoProblem {
 }
 
 export type UndoLineState =
-  | { id: number; change: Undoable; problem?: undefined; note?: undefined }
-  | { id: number; problem: UndoProblem; change?: undefined; note?: undefined }
-  | { id: number; note: Words; busy?: boolean; change?: undefined; problem?: undefined };
+  | { id: number; change: Undoable; problem?: undefined; note?: undefined; shownAt?: undefined }
+  | { id: number; problem: UndoProblem; change?: undefined; note?: undefined; shownAt?: undefined }
+  | {
+      id: number;
+      note: Words;
+      busy?: boolean;
+      shownAt?: string;
+      change?: undefined;
+      problem?: undefined;
+    };
 
 interface UndoState {
   /** The changes ⌘Z takes back, the last one last. */
@@ -193,7 +200,9 @@ export const useUndo = create<UndoState>()((set, get) => {
         set((state) => ({
           undone: change.redo ? [...state.undone, change] : [],
           running: null,
-          ...(note && { line: { id: ++lines, note } }),
+          ...(note && {
+            line: { id: ++lines, note, ...(change.shownAt && { shownAt: change.shownAt }) },
+          }),
         }));
       }),
     redo: () =>

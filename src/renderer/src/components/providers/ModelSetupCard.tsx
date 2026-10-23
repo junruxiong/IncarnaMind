@@ -30,6 +30,7 @@ import {
 import { ProviderForm } from "./ProviderForm";
 import { SendsLine } from "./SendsLine";
 import { SetupReady } from "./SetupReady";
+import { SETUP_UNDO_PLACE } from "./shared";
 
 const CLAUDE_DOWNLOAD = "https://claude.ai/download";
 
@@ -52,7 +53,7 @@ function ChooseAnAi() {
   const [view, setView] = useState<View>(null);
   const [others, setOthers] = useState(false);
   const [providers, setProviders] = useState<ChatProvider[]>([]);
-  const ollama = useOllama(() => undefined, undefined, { localModeUnasked: true });
+  const ollama = useOllama(() => undefined, SETUP_UNDO_PLACE, { localModeUnasked: true });
   const sign = useContinueWithChatGpt({ onSignedIn: () => undefined });
   useEffect(() => {
     // Only to tell the form a key is already saved: the form works with none listed.
