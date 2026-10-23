@@ -186,8 +186,8 @@ export function HealthCard({
   /**
    * Puts the cursor at the next such sentence after it, round to the first; for a Citation, just
    * after its marker, where its state shows, so a key can't take the Citation away. It is
-   * centred, clear of the fade and the badge at the page's foot. A sentence with a check ends as
-   * if its mark were clicked: its card open, the badge's closed.
+   * centred by its own position, not its paragraph's, which can be taller than the page, and clear
+   * of the fade and the badge at the page's foot.
    */
   const goToNext = (part: HealthPart) => {
     if (editor.isDestroyed) return;
@@ -200,11 +200,12 @@ export function HealthCard({
     const at = Math.min(next, doc.content.size);
     editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(doc.resolve(at))));
     editor.view.focus();
-    const shown = cited ? editor.view.nodeDOM(at - 1) : editor.view.domAtPos(at).node;
-    (shown instanceof Element ? shown : shown?.parentElement)?.scrollIntoView({
-      block: "center",
-      behavior: "instant",
-    });
+    const scroller = editor.view.dom.closest(".mind-scroller");
+    if (scroller) {
+      const caret = editor.view.coordsAtPos(cited ? at - 1 : at);
+      const area = scroller.getBoundingClientRect();
+      scroller.scrollTop += (caret.top + caret.bottom) / 2 - (area.top + area.bottom) / 2;
+    }
     const claim = cited
       ? undefined
       : shownClaims(editor.state).find((each) => each.sentence.from <= at && at < each.sentence.to);

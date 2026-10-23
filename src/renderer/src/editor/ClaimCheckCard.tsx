@@ -110,6 +110,7 @@ export function ClaimMark({
   reveal: boolean;
   onRevealed(): void;
 }) {
+  const t = useT();
   const state = claim.shown.state;
   const id = claim.check.id;
   const place = useCardPlace(mindId);
@@ -195,7 +196,10 @@ export function ClaimMark({
             anchor={button}
             placement="bottom-end"
             onDismiss={dismiss}
-            aria-label={label}
+            aria-label={t("claim.card.label", {
+              state: t(`claim.state.${state}`),
+              sentence: comparableSentence(claim.sentence.text),
+            })}
             data-testid="claim-card"
             data-check={state}
             onPointerEnter={() => hold("card", true)}

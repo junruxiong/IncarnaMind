@@ -72,6 +72,29 @@ const screenshot = async (window: Page, name: string) => {
   await window.screenshot({ path: join(SCREENSHOTS, `${name}.png`) });
 };
 
+const checked = (id: string, state: string, text: string, extra: Record<string, unknown> = {}) => ({
+  type: "text",
+  text,
+  marks: [
+    {
+      type: "claimCheck",
+      attrs: {
+        id,
+        request: "check-1",
+        action: "check-against-documents",
+        state,
+        text,
+        scope: { folderId: null, widened: false },
+        versions: [],
+        excluded: [],
+        checkedAt: "2026-10-22T09:00:00.000Z",
+        ...extra,
+      },
+    },
+  ],
+});
+const paragraph = (...content: object[]) => ({ type: "paragraph", content });
+
 async function box(locator: Locator) {
   const found = await locator.boundingBox();
   if (!found) throw new Error("The element isn't visible.");
@@ -104,33 +127,6 @@ for (const language of ["en", "zh-CN"] as const) {
       check: "found",
       checkReason: null,
     };
-    const checked = (
-      id: string,
-      state: string,
-      text: string,
-      extra: Record<string, unknown> = {},
-    ) => ({
-      type: "text",
-      text,
-      marks: [
-        {
-          type: "claimCheck",
-          attrs: {
-            id,
-            request: "check-1",
-            action: "check-against-documents",
-            state,
-            text,
-            scope: { folderId: null, widened: false },
-            versions: [],
-            excluded: [],
-            checkedAt: "2026-10-22T09:00:00.000Z",
-            ...extra,
-          },
-        },
-      ],
-    });
-    const paragraph = (...content: object[]) => ({ type: "paragraph", content });
 
     await newMind(window);
     const editor = window.getByTestId("mind-editor");
@@ -204,7 +200,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(card).toHaveAttribute("data-check", kind);
       const line = card.getByTestId("claim-sentence");
       await expect(line).toHaveText(`“${sentence}”`);
-      // It is the first thing under the verdict's title.
+      expect(await card.getAttribute("aria-label")).toContain(sentence);
       expect(
         await card
           .getByTestId("claim-badge")
@@ -222,7 +218,6 @@ for (const language of ["en", "zh-CN"] as const) {
       expect(shape.lines, "at most two lines").toBeLessThanOrEqual(2);
       expect(shape.clipped, "only a long sentence is cut").toBe(at === 0);
 
-      // While the card is open the sentence has the accent outline, and the mark is the open one.
       await expect(outlined.first()).toBeVisible();
       const around = await outlinesWords(paragraphOf(sentence));
       expect(around.encloses, "it encloses the sentence").toBe(true);
@@ -240,14 +235,12 @@ for (const language of ["en", "zh-CN"] as const) {
       );
       await screenshot(window, `card-${kind}-${language}-900`);
 
-      // Esc closes the card and takes the outline off.
       await window.keyboard.press("Escape");
       await expect(card).toHaveCount(0);
       await expect(outlined).toHaveCount(0);
       await expect(mark).not.toHaveAttribute("data-open", "true");
     }
 
-    // A sentence edited after its check shows its words as they are now.
     const edited = `${words.recheck.slice(0, 2)}EDITED${words.recheck.slice(2)}`;
     await editor.evaluate((dom, sentence) => {
       const { editor: current } = dom as unknown as { editor: Editor };
@@ -262,7 +255,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await window.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
 
-    // A mark on a sentence that wraps over three lines sits on its first line.
     const first = paragraphOf(words.supported);
     const lineHeight = await first.evaluate((element) =>
       Number.parseFloat(getComputedStyle(element).lineHeight),
@@ -273,7 +265,6 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(middle).toBeGreaterThanOrEqual(page.y);
     expect(middle).toBeLessThanOrEqual(page.y + lineHeight);
 
-    // Hovering or focusing a mark shows its card, and the sentence is outlined as long as it shows.
     await marks.nth(1).focus();
     await expect(card).toHaveAttribute("data-check", "unsupported");
     expect((await outlinesWords(paragraphOf(words.unsupported))).encloses).toBe(true);
@@ -288,7 +279,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card).toHaveCount(0);
     await expect(outlined).toHaveCount(0);
 
-    // Next: the unsupported sentence is pushed out of sight, and Next brings it back with its card open.
     await editor.evaluate(
       (dom, filler) => {
         const { editor: current } = dom as unknown as { editor: Editor };
@@ -302,7 +292,7 @@ for (const language of ["en", "zh-CN"] as const) {
       element.scrollTop = 0;
     });
     const unsupported = paragraphOf(words.unsupported);
-    // Shown clear of the page's top and of the fade and the badge at its foot.
+    // Clear of the page's top and of the fade and the badge at its foot.
     const inView = async () => {
       const [view, target] = await Promise.all([box(scroller), box(unsupported)]);
       return target.y >= view.y + 64 && target.y + target.height <= view.y + view.height - 64;
@@ -321,7 +311,6 @@ for (const language of ["en", "zh-CN"] as const) {
     await expect(card).toHaveCount(0);
     await expect(outlined).toHaveCount(0);
 
-    // The same from the keyboard alone: the badge, then a row.
     await window.getByTestId("check-badge-open").focus();
     await window.keyboard.press("Enter");
     await expect(health).toBeVisible();
@@ -333,6 +322,75 @@ for (const language of ["en", "zh-CN"] as const) {
     await window.keyboard.press("Escape");
     await expect(card).toHaveCount(0);
     await expect(outlined).toHaveCount(0);
+    await app.close();
+  });
+}
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`Next shows a sentence in a paragraph taller than the page (${language})`, async () => {
+    test.setTimeout(120_000);
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window);
+    await setLanguage(window, language);
+    await setWindowSize(app, window, 900, 800);
+    const bird = (at: number) => (language === "en" ? `Bird ${at} sings.` : `第${at}只鸟在唱歌。`);
+    const run = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, at) => bird(from + at)).join(
+        language === "en" ? " " : "",
+      );
+    const sentence = bird(225);
+
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.evaluate(
+      (dom, content) => {
+        (dom as unknown as { editor: Editor }).editor.commands.insertContentAt(0, content);
+      },
+      [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: `${run(1, 224)}${language === "en" ? " " : ""}` },
+            checked("tall-1", "unsupported", sentence),
+            { type: "text", text: `${language === "en" ? " " : ""}${run(226, 230)}` },
+          ],
+        },
+      ],
+    );
+    await expect(window.getByTestId("claim-mark")).toHaveCount(1);
+    const scroller = window.locator(".mind-scroller:visible");
+    await scroller.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const [view, page, before] = await Promise.all([
+      box(scroller),
+      box(editor.locator(":scope > p").first()),
+      box(window.locator('[data-claim-check="tall-1"]')),
+    ]);
+    expect(page.height, "the paragraph is taller than the page").toBeGreaterThan(view.height);
+    expect(before.y, "the sentence starts below the page").toBeGreaterThan(view.y + view.height);
+
+    await pointAndClick(window, (await checkCard(window)).getByTestId("health-unsupported"));
+    const card = window.getByTestId("claim-card");
+    await expect(card).toHaveAttribute("data-check", "unsupported");
+    await expect(card.getByTestId("claim-sentence")).toHaveText(`“${sentence}”`);
+    const outlines = window.getByTestId("claim-outline");
+    await expect(outlines.first()).toBeVisible();
+    await expect
+      .poll(async () => {
+        const [area, boxes] = await Promise.all([
+          box(scroller),
+          outlines.evaluateAll((all) =>
+            all.map((element) => element.getBoundingClientRect().toJSON()),
+          ),
+        ]);
+        return (
+          boxes.length > 0 &&
+          boxes.every((each) => each.top >= area.y && each.bottom <= area.y + area.height)
+        );
+      })
+      .toBe(true);
     await app.close();
   });
 }
