@@ -29,6 +29,7 @@ import {
 } from "../../answerStepWords";
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
+import { namedMind } from "../../changeProblems";
 import { commandCallText } from "../../commandFacts";
 import { NO_SCOPE } from "../../composer";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
@@ -54,7 +55,7 @@ import {
 import { ProblemLine } from "../ProblemLine";
 import { AnswerWait } from "./AnswerWait";
 import { askCallText } from "./AskCall";
-import { mindCallText, namedMind } from "./MindCall";
+import { mindCallText } from "./MindCall";
 
 /** Sources shown under a search before "+N more". */
 const SHOWN_SOURCES = 3;

@@ -223,7 +223,6 @@ function storedSteps(value: string | null): AnswerSteps | null {
     careful,
     unbackedClaims,
     example,
-    withoutMindTools,
     coverage,
     writtenFrom,
     stillReading,
@@ -258,7 +257,6 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
     ...(example === true && { example }),
-    ...(withoutMindTools === true && { withoutMindTools }),
     ...(storedCoverage(coverage) ?? {}),
     ...(isRecord(writtenFrom) &&
       isCount(writtenFrom.documents) &&
