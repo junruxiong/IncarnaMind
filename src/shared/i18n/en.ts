@@ -1409,6 +1409,16 @@ export const en = {
   "tagging.problem.unknown": "Couldn’t tag, and the AI model’s service didn’t say why.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
+  "status.downloadFailed.everySource": "Couldn’t download the search model from any source",
+  "modelSource.tryAgain": "Try again",
+  "modelSource.details": "Details",
+  "modelSource.failed": "{source}: {message}",
+  "modelSource.label": "Download source:",
+  "modelSource.auto": "Automatic",
+  "modelSource.huggingface": "Hugging Face",
+  "modelSource.modelscope": "ModelScope",
+  "modelSource.hfMirror": "hf-mirror.com",
+  "modelSource.copy": "IncarnaMind’s copy",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn’t start",
   "status.rerankDownloading": "Search setup",
@@ -2373,6 +2383,15 @@ export const en = {
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.tip":
     "The speech model for meetings, and the models that tell speakers apart, are downloaded once, the first time a meeting is recorded or transcribed. Nothing you say is sent.",
+  "privacy.traffic.model-source-modelscope": "Built-in models from ModelScope",
+  "privacy.traffic.model-source-modelscope.tip":
+    "Before a built-in model downloads, IncarnaMind asks ModelScope and Hugging Face which answers first, to choose where to download from. Nothing of yours is sent.",
+  "privacy.traffic.model-source-hf-mirror": "Built-in models from hf-mirror.com",
+  "privacy.traffic.model-source-hf-mirror.tip":
+    "If Hugging Face can’t be reached, a built-in model’s files may come from this mirror of it. Nothing of yours is sent.",
+  "privacy.traffic.model-source-copy": "Built-in models from IncarnaMind’s copy",
+  "privacy.traffic.model-source-copy.tip":
+    "The last source for a built-in model’s files. Nothing of yours is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.tip":
     "When you choose a local model, Ollama downloads it from its library.",
@@ -4402,6 +4421,8 @@ export const en = {
   "meetings.transcript.savedIn": "Transcript saved in {folder}",
   "meetings.transcript.open": "Open transcript",
   "meetings.transcript.empty": "Nothing to transcribe, so no transcript was saved.",
+  "meetings.transcript.downloadFailed.everySource":
+    "Couldn’t download the speech model from any source",
   "meetings.transcript.downloadFailed": "The speech model couldn’t be downloaded: {message}",
   "meetings.transcript.engineStopped": "Transcription stopped.",
   "meetings.transcript.saveFailed": "The transcript couldn’t be saved: {message}",
