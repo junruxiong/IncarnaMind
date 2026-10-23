@@ -9,10 +9,12 @@ import { DOMSerializer, Fragment } from "@tiptap/pm/model";
 import {
   CITATION_NODE,
   type CitationAttributes,
+  type CitationCheckReason,
   type Document,
   type SelectedPart,
 } from "../../../core/api";
 import type { NodeJSON } from "../../../shared/blockJson";
+import type { MessageKey } from "../../../shared/i18n";
 import { mindName } from "../../../shared/naming";
 import { type AddTarget, addInEditor } from "../addToNote";
 import { readMindHandle } from "../commands/handles";
@@ -23,6 +25,7 @@ import { addFootnotes, citationsIn, copiedText, wordFootnoteHtml } from "../edit
 import { offerEditorUndo } from "../editor/editorUndo";
 import { noteExtensions } from "../editor/noteSchema";
 import { whenMindEditor } from "../editor/openEditors";
+import { translateNow } from "../i18n";
 import { useNotices } from "../notices";
 import { useAppStore } from "../store";
 
@@ -35,8 +38,20 @@ export interface ViewerSelection {
 /** How long a Mind just opened has to show its editor before the quote goes in. */
 const OPEN_WAIT_MS = 5000;
 
+/** Why words that weren't found where they were selected can't be cited, by the check's reason. */
+const REFUSED: Partial<Record<CitationCheckReason, MessageKey>> = {
+  "too-many-pages": "viewer.selection.refused.pages",
+  "no-text": "viewer.selection.refused.noText",
+};
+
 async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> {
   const cited = await core.citeSelection({ documentId: document.id, parts });
+  // Only words found where they were selected are cited: a refused Citation's next check could
+  // find the same words somewhere else and move it there.
+  if (cited.check !== "found") {
+    const reason = cited.checkReason && REFUSED[cited.checkReason];
+    throw new Error(translateNow(reason ?? "viewer.selection.refused"));
+  }
   const citation: CitationAttributes = {
     passageId: cited.passageId,
     documentId: document.id,

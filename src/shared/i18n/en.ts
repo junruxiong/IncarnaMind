@@ -1119,6 +1119,12 @@ export const en = {
   "viewer.selection.copy": "Copy with citation",
   "viewer.selection.added": "Added a quote to “{mind}”",
   "viewer.selection.copied": "Copied with its citation",
+  "viewer.selection.refused":
+    "Couldn’t cite these words: the Document’s text where you selected them doesn’t have them.",
+  "viewer.selection.refused.pages":
+    "Couldn’t cite these words: a Citation covers two pages at most.",
+  "viewer.selection.refused.noText":
+    "Couldn’t cite these words: the Document has no text there to check them against.",
   "command.viewer.selection.addToNote": "Add the selected text to note",
   "command.viewer.selection.copy": "Copy the selected text with its citation",
   "viewer.mark.found": "Citation {number}: quote found",
