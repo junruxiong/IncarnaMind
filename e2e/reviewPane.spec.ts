@@ -315,7 +315,16 @@ test("Accept and Reject on the selected card act at once with Undo, from the mou
   await expect(cards.nth(4)).toHaveAttribute("data-selected", "true");
   await palette("Accept all changes from Luis Ortega");
   await expect(cards.nth(4)).toHaveAttribute("data-state", "accepted");
-  await expect(pane.locator('[data-testid="review-change"][data-state="waiting"]')).toHaveCount(5);
+  const waiting = pane.locator('[data-testid="review-change"][data-state="waiting"]');
+  await expect(waiting).toHaveCount(5);
+  // ⌘Z and ⇧⌘Z in the pane take it back and do it again.
+  await expect(pane.locator("[data-review-id]:focus")).toHaveCount(1);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(cards.nth(4)).toHaveAttribute("data-state", "waiting");
+  await expect(waiting).toHaveCount(6);
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(cards.nth(4)).toHaveAttribute("data-state", "accepted");
+  await expect(waiting).toHaveCount(5);
 
   // In Unresolved, a card decided leaves; the last leaves nothing to review.
   await pointAndClick(window, pane.getByTestId("review-filter-unresolved").locator(".."));

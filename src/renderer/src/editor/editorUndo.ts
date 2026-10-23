@@ -51,16 +51,36 @@ export function asOneStep<T>(editor: Editor, change: () => T): T {
  */
 export function offerEditorUndo(editor: Editor, said: WordsInLine, shownAt?: string): void {
   const manager = undoStackOf(editor);
-  const step = manager?.undoStack.at(-1);
+  let step = manager?.undoStack.at(-1);
   if (!manager || step === undefined) return;
+  let redone: UndoStep | undefined;
+  // Its own Undo and Redo move the note's stack too: only someone else's step makes it stale.
+  let stepping = false;
+  const inStep = (run: () => void) => {
+    stepping = true;
+    try {
+      run();
+    } finally {
+      stepping = false;
+    }
+  };
   const change: Undoable = {
     said,
     undo: async () => {
-      if (!editor.isDestroyed && manager.undoStack.at(-1) === step) editor.commands.undo();
+      if (editor.isDestroyed || manager.undoStack.at(-1) !== step) return;
+      inStep(() => editor.commands.undo());
+      redone = manager.redoStack.at(-1);
+    },
+    // From outside the text too (#697: ⇧⌘Z in the reviewing pane), as long as nothing came after.
+    redo: async () => {
+      if (editor.isDestroyed || redone === undefined || manager.redoStack.at(-1) !== redone) return;
+      inStep(() => editor.commands.redo());
+      step = manager.undoStack.at(-1);
     },
     ...(shownAt && { shownAt }),
   };
   const stale = () => {
+    if (stepping) return;
     manager.off("stack-item-added", stale);
     manager.off("stack-item-popped", stale);
     editor.off("destroy", stale);
