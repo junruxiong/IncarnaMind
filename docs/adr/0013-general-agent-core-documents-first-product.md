@@ -107,7 +107,7 @@ An edit the User asks for applies at once, with one Undo and a line over it sayi
 The 2026-10-16 amendment's tagging by `routeRequest` is gone: keywords couldn't cover how Users ask ("帮我总结一下这个知识库" fell through), and requests it left unclear were answered in the panel. Every turn in the assistant now has the Minds' Tools, and the model decides by one rule in its instructions: a piece of writing goes into the empty Mind in front or a new Mind, a change to the User's text is made in place, and a question is answered in the reply.
 
 - **Every change the assistant makes applies at once,** in every Mind it touches, with one Undo, and the Answer's line says so. A change in a second Mind no longer waits. The guard still holds back an assistant change that would take out most of the User's own text, and a rewrite over words the User typed since. The core still writes them as Proposals, tagged by what they are (written or edited); the window that asked accepts them.
-- **A claim needs its command.** A reply that says it wrote or changed something no call did, or names a fix or a count its edits didn't make, is asked about once. If it still claims it, the reply is dropped and the Answer says what was written, or that nothing was.
+- **A claim needs its command.** A reply that says it wrote or changed something no call did, or names a fix or a count its edits didn't make, is asked about once, with the record of what the calls did, where a change that applies at once reads as applied. If it still claims it, the reply stays, with a line under it that says nothing was written, or that not every change it describes was made, and Try again.
 
 ## Amendment, 2026-10-18: model-written code in a sandbox runs without asking (ADR-0023)
 
