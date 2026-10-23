@@ -702,6 +702,55 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     },
   );
 
+  test.each([
+    {
+      language: "en" as const,
+      one: "Unsupported: I didn't find this in “Okoro agreement”.",
+      two: "Unsupported: I didn't find this in “Okoro agreement” or 1 more.",
+    },
+    {
+      language: "zh-CN" as const,
+      one: "无依据：未在“Okoro agreement”中找到。",
+      two: "无依据：未在“Okoro agreement”等 2 项中找到。",
+    },
+  ])(
+    // protects=the Word comment of a sentence checked in the Mind's chosen scope names that scope, as its card does (#1623); fails_when=it says All Documents, or another wording than the card's; no_claim=the card itself (e2e).
+    "$language: a sentence checked in the Mind's chosen scope says where it looked, as its card does",
+    async ({ language, one, two }) => {
+      const { core, mindId, client } = await setUp({
+        body: paragraph("Margins widened in 2026.") + paragraph("Costs fell in 2025."),
+      });
+      await core.updateSettings({ user: { language } });
+      const okoro = await core.saveTextAsDocument({ name: "Okoro agreement", text: "Notice." });
+      const adeyemi = await core.saveTextAsDocument({ name: "Adeyemi agreement", text: "Leave." });
+      const inScope = (value: string, documentIds: string[]) => {
+        const marked = checked(value, "unsupported", null);
+        const [mark] = marked.marks;
+        if (!mark) throw new Error("No mark.");
+        const scope = {
+          folderId: null,
+          widened: false,
+          chosen: { folderIds: [], tagIds: [], documentIds },
+        };
+        return { ...marked, marks: [{ ...mark, attrs: { ...mark.attrs, scope } }] };
+      };
+      editMind(client, ([first, second]) => [
+        { ...(first as JSONContent), content: [inScope("Margins widened in 2026.", [okoro.id])] },
+        {
+          ...(second as JSONContent),
+          content: [inScope("Costs fell in 2025.", [okoro.id, adeyemi.id])],
+        },
+      ]);
+      await client.settled();
+
+      const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+      const comments = textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
+
+      expect(comments).toContain(one);
+      expect(comments).toContain(two);
+    },
+  );
+
   test("with the option off the file is the one it was", async () => {
     const { core, bytes, mindId, client } = await setUp({
       body: paragraph("Halden held cash of £192.9m."),

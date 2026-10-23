@@ -542,14 +542,20 @@ describe("What the check record can't know", () => {
     expect(rowsOf(zh)[0]?.文件).toBe("文档已删除");
   });
 
-  test("the Documents searched are the ones the checks searched: a Folder, everything, or a Folder since deleted", async () => {
+  test("the Documents searched are the ones the checks searched: a Folder, everything, a Folder since deleted, or the Mind's chosen scope", async () => {
     const setup = await setUp();
     const own = { folderId: setup.folderId, widened: false };
     const gone = await setup.core.createLibraryGroup({ name: "Old harbours", description: "" });
+    const chosen = {
+      folderId: setup.folderId,
+      widened: false,
+      chosen: { folderIds: [], tagIds: [], documentIds: [setup.tides.id] },
+    };
     const checks = [
       ["Spring tides come at new moon.", own],
       ["Neap tides are weaker.", { folderId: null, widened: true }],
       ["Tidal ranges differ between harbours.", { folderId: gone.id, widened: false }],
+      ["High water comes later each day.", chosen],
     ] as const;
     writeMind(setup.client, [
       paragraph(
@@ -569,7 +575,7 @@ describe("What the check record can't know", () => {
     const csv = readFileSync((await saveRecord(setup, "csv")).path, "utf8");
 
     expect(summaryOf(csv).get("Documents searched")).toBe(
-      "Harbours; All Documents; A deleted Folder",
+      "Harbours; All Documents; A deleted Folder; Tides",
     );
   });
 

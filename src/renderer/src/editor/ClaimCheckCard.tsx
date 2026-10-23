@@ -577,12 +577,21 @@ function ClaimCard({
         </p>
       )}
       {check.excluded.map((left) => {
-        const document =
-          left.reason === "own-file" && documents.find((each) => each.id === left.documentId);
+        const document = documents.find((each) => each.id === left.documentId);
+        const name = left.documentName || document?.name || "";
+        // The file being checked says every sentence of it: only where nothing else did is it news.
+        if (left.reason === "checked-document" && state === "unsupported") {
+          return (
+            <p key={left.documentId} data-testid="claim-left-out" className="citation-card-note">
+              {t("evidence.excluded.checked", { name })}
+            </p>
+          );
+        }
         return (
+          left.reason === "own-file" &&
           document && (
             <CountItLine key={left.documentId} document={document} testId="claim-left-out">
-              {t("evidence.excluded.ownFile", { name: left.documentName || document.name })}
+              {t("evidence.excluded.ownFile", { name })}
             </CountItLine>
           )
         );
