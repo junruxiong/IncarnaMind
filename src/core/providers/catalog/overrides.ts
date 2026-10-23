@@ -41,6 +41,12 @@ const DEEPSEEK_PEAK: OffPeak = {
 /** Kimi fixes its sampling (any other temperature is an error) and rejects a forced Tool choice. */
 const KIMI = { temperature: false, forcedToolChoice: false } as const;
 
+/**
+ * Its checks keep their verdicts when they start with the search of the sentence in English, not
+ * in Chinese (#1635, the repeated-checks evaluation, 2026-10-23).
+ */
+const KIMI_K2_6 = { checkSearchFirst: ["en"] } as const;
+
 /** GLM takes JSON mode but no JSON schema, and only automatic Tool choice. */
 const GLM = { structuredOutput: "json_object", forcedToolChoice: false } as const;
 
@@ -79,7 +85,13 @@ export const OVERRIDES: CatalogOverrides = {
       "claude-fable-5": { thinkingOff: CLAUDE_LOW_EFFORT },
       "claude-fable-5-1": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
       "claude-opus-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_LOW_EFFORT },
-      "claude-sonnet-5-5": { forcedToolChoice: false, thinkingOff: CLAUDE_BETWEEN_TOOLS },
+      // Its checks keep their verdicts when they start with the search of the sentence in Chinese,
+      // not in English (#1635, the repeated-checks evaluation, 2026-10-23); Haiku 5.5's in neither.
+      "claude-sonnet-5-5": {
+        forcedToolChoice: false,
+        thinkingOff: CLAUDE_BETWEEN_TOOLS,
+        checkSearchFirst: ["zh-CN"],
+      },
       "claude-haiku-5-5": {
         price: {
           currency: "USD",
@@ -158,9 +170,10 @@ export const OVERRIDES: CatalogOverrides = {
       "qwen3.8-flash": { price: yuan(0.8, 2.7) },
     },
     kimi: {
-      "kimi-k2.6": { price: yuan(6.5, 27, 1.1) },
+      "kimi-k2.6": { price: yuan(6.5, 27, 1.1), ...KIMI_K2_6 },
       "kimi-k3": { price: yuan(20, 100, 2) },
     },
+    "kimi/intl": { "kimi-k2.6": KIMI_K2_6 },
     glm: {
       "glm-5.3": { price: yuan(8, 28) },
       "glm-5.3-flash": { price: yuan(0.8, 2.8) },

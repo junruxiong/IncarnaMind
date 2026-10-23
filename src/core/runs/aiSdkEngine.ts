@@ -37,7 +37,7 @@ import {
   contextOverflow,
   refusesFeature,
 } from "../providers/providerErrors";
-import type { RunEngine, RunEvent, RunMessage, RunRequest, RunTool } from "./engine";
+import type { RunEngine, RunEvent, RunMessage, RunRequest, RunTool, RunToolCall } from "./engine";
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -387,8 +387,41 @@ function failure(
   return { type: "failed", error: classifyProviderError(error) };
 }
 
+async function* primedStep(
+  request: RunRequest,
+  calls: readonly RunToolCall[],
+  canCallAgain: () => boolean,
+): AsyncGenerator<RunEvent, RunMessage[]> {
+  const results: RunMessage[] = [];
+  for (const call of calls) {
+    yield { type: "tool-call", ...call };
+    const each = request.tools.find((offered) => offered.name === call.tool);
+    let result: string;
+    let ok = true;
+    try {
+      if (!each) throw new Error(`No Tool is called ${call.tool}.`);
+      result = await gated(each, request).call(forTool(call.input, each.inputSchema), {
+        toolCallId: call.id,
+        signal: request.signal,
+        canCallAgain,
+      });
+    } catch (error) {
+      if (request.signal.aborted) return results;
+      ok = false;
+      result = error instanceof Error ? error.message : String(error);
+    }
+    yield { type: "tool-result", id: call.id, ok };
+    results.push({ role: "tool", id: call.id, tool: call.tool, result, ok });
+  }
+  yield { type: "step-finished", usage: {} };
+  return [{ role: "assistant", text: "", toolCalls: calls }, ...results];
+}
+
 async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
-  const { signal, window, maxSteps } = request;
+  const { signal, window } = request;
+  const primedCalls = request.maxSteps > 1 ? (request.primed ?? []) : [];
+  // The calls the Run starts with are its first step: its model has one fewer.
+  const maxSteps = request.maxSteps - (primedCalls.length > 0 ? 1 : 0);
   let canCallAgain = maxSteps > 2;
   /** The step now drawn is one that must write: a call in it is refused. */
   let writing = false;
@@ -398,7 +431,10 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     () => canCallAgain && (window === undefined || window.canCallTools()),
     () => writing,
   );
-  const initial = toModelMessages(request.messages);
+  const primed =
+    primedCalls.length > 0 ? yield* primedStep(request, primedCalls, () => canCallAgain) : [];
+  if (signal.aborted) return;
+  const initial = toModelMessages([...request.messages, ...primed]);
   /** Steering messages, where each was taken among the responses. */
   const inserted: { at: number; message: ModelMessage }[] = [];
 
@@ -523,7 +559,7 @@ async function* run(request: RunRequest): AsyncGenerator<RunEvent> {
     }
     if (signal.aborted) return;
     const messages = fromModelMessages(splice(await result.responseMessages, inserted));
-    yield { type: "finished", messages };
+    yield { type: "finished", messages: [...primed, ...messages] };
   } catch (error) {
     if (signal.aborted) return;
     yield failure(error, request, produced);

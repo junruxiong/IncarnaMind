@@ -176,6 +176,50 @@ describe("The language of a check's sentence", () => {
   });
 });
 
+describe("A check that starts with the search of its sentence (#1635)", () => {
+  const CHAO = { name: "潮汐.md", contents: "# 潮汐\n\n大潮出现在新月和满月的时候。" };
+  const ZH = "大潮出现在新月和满月时。";
+  const ZH_PLANS: Record<string, Plan> = {
+    [ZH]: {
+      verdict: "supported",
+      quote: "大潮出现在新月和满月的时候",
+      says: "潮汐说大潮在新月和满月时出现。",
+    },
+  };
+
+  // protects=a check starts with the search of its sentence only on a model and in a language where that was measured to keep the verdicts, and the model then searches no more for it; fails_when=every check starts with it, none does, or the model is asked to search again; no_claim=the verdicts, which the repeated-checks evaluation measures.
+  test.each([
+    ["claude-sonnet-5-5", "Chinese", true],
+    ["claude-sonnet-5-5", "English", false],
+    ["claude-haiku-5-5", "Chinese", false],
+  ] as const)("on %s, in %s, it does: %s", async (modelId, language, starts) => {
+    const calls: ModelCall[] = [];
+    const chinese = language === "Chinese";
+    const { core } = await setUpWithDocuments(checkingModelOf(chinese ? ZH_PLANS : PLANS, calls), [
+      chinese ? CHAO : TIDES,
+    ]);
+    const provider = await core.saveChatProvider({
+      kind: "anthropic",
+      modelId,
+      apiKey: "sk-ant-test",
+    });
+    if (provider.service) await core.allowDataFlow("checks", provider.service.id);
+
+    const result = await core.checkClaim({
+      claim: chinese ? ZH : SUPPORTED,
+      model: { providerId: provider.id, modelId },
+    });
+
+    expect(result.verdict).toBe("supported");
+    const checks = calls.filter(isCheckRun);
+    expect(checks[0]?.results.map((each) => each.id)).toEqual(starts ? ["primed_1"] : []);
+    const searches = checks.flatMap((call) =>
+      call.results.filter((each) => each.tool === "search_documents"),
+    );
+    expect(new Set(searches.map((each) => each.id)).size).toBe(1);
+  });
+});
+
 describe("Find support", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);

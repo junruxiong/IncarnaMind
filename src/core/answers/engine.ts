@@ -374,6 +374,8 @@ export interface AnswerRequest {
   streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
+  /** Calls a model with Tools starts with, as its own first step (see `RunRequest.primed`). */
+  primed?: readonly { tool: string; input: Record<string, unknown> }[];
   /** What a search says of the Answer's language after its Passages (see `DocumentToolsHooks`). */
   languageNote?(): string | null;
   /**
@@ -1692,8 +1694,15 @@ async function* toolLoop(
   const runTools = tools.map(tracked);
   async function* runs(): AsyncGenerator<RunEvent> {
     let history: readonly RunMessage[] = messages.map(runMessage);
+    const primed = (request.primed ?? []).map((call, index) => ({
+      id: `primed_${index + 1}`,
+      ...call,
+    }));
     for (;;) {
-      yield* engine.run(runRequest(history, maxSteps - steps));
+      yield* engine.run({
+        ...runRequest(history, maxSteps - steps),
+        ...(steps === 0 && primed.length > 0 && { primed }),
+      });
       if (!again) return;
       history = [...history, ...again];
       again = null;

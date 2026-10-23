@@ -41,8 +41,13 @@ import type {
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
 import type { Language } from "../../language";
-import { calculates, givesStructuredOutput } from "../../providers/capabilities";
+import {
+  calculates,
+  givesStructuredOutput,
+  searchesCheckFirst,
+} from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
+import { DOCUMENT_TOOLS } from "../../tools";
 import {
   answerLanguage,
   type CalculationSession,
@@ -58,6 +63,7 @@ import {
   answerTemperature,
   type CiteOptions,
   type DocumentLanguage,
+  searchLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
 import { figuresMatch, nearestLine } from "./nearest";
@@ -301,6 +307,12 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         opinions.documentIds.has(evidence.documentId ?? ""),
     });
 
+    // Only where it was measured to keep the verdicts: after a search of the sentence's own words
+    // Claude Haiku 5.5 took "Staff" for "the Employee" more often (#1635). Documents in another
+    // language than the sentence are searched in theirs, which only the model can do.
+    const searchesFirst =
+      searchesCheckFirst(model.capabilities, answerLanguage(request.claim)) &&
+      !searchLanguage(request.claim, deps.documents.searchableLanguages(scope.documentIds));
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
@@ -313,6 +325,9 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       documents: tools,
       tools: [],
       toolSet: "check",
+      ...(searchesFirst && {
+        primed: [{ tool: DOCUMENT_TOOLS.search, input: { query: request.claim.trim() } }],
+      }),
       thirdParty: request.thirdParty ?? [],
       support: model.support,
       structuredOutput: givesStructuredOutput(model.capabilities),

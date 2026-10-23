@@ -89,6 +89,14 @@ export interface RunRequest {
   /** Offered by name, in this order; each name once. */
   tools: readonly RunTool[];
   /**
+   * Calls of the offered Tools the Run starts with, as its model's first step would make them
+   * (#1635: a check's search of its sentence): the engine gates and runs them as it runs a
+   * model's, streams their events and a "step-finished" with no usage, and its first model call
+   * reads them as calls it made itself. They count as a step of `maxSteps`; with fewer than two,
+   * none is made.
+   */
+  primed?: readonly RunToolCall[];
+  /**
    * Model calls at most. The last one must write: it is told so, capped, and may call no Tool
    * (`lastStep`). One that calls one anyway has it refused, and gets one more call; a Run whose
    * model calls a Tool then too ends there, with no text.
