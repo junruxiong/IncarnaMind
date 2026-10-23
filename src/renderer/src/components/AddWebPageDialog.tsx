@@ -213,7 +213,6 @@ function AddressResult({
       {problem && reason && heldInLocalMode(problem) && (
         <ProblemLine
           testId="add-web-page-problem"
-          title={problem.message}
           action={{
             label: t("webPages.localMode.once"),
             testId: "add-web-page-fetch-once",

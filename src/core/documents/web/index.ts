@@ -172,7 +172,10 @@ export function createWebPages(options: WebPagesOptions) {
     const site = URL.parse(address)?.host ?? address;
     return failed(
       address,
-      new WebPageError("local-mode", `Local mode is on, so ${site} isn't contacted.`),
+      new WebPageError(
+        "local-mode",
+        `“Keep everything on this computer” is on, so ${site} isn't contacted.`,
+      ),
     );
   };
 
@@ -286,6 +289,17 @@ export function createWebPages(options: WebPagesOptions) {
     looks = looks
       .then(async () => {
         if (signal.aborted) return;
+        if (options.localOnly?.()) {
+          recordLook(
+            db,
+            documentId,
+            contentHash,
+            { status: "failed", failure: "local-mode" },
+            now(),
+          );
+          documents.announce(documentId);
+          return;
+        }
         const made = await look.render(address).catch((error: unknown) => ({
           failure: "failed" as const,
           message: error instanceof Error ? error.message : String(error),
@@ -328,9 +342,16 @@ export function createWebPages(options: WebPagesOptions) {
 
   const startLook = (documentId: string, contentHash: string, address: string) => {
     if (!options.look) return;
-    recordLook(db, documentId, contentHash, { status: "saving" }, now());
+    const held = options.localOnly?.() === true;
+    recordLook(
+      db,
+      documentId,
+      contentHash,
+      held ? { status: "failed", failure: "local-mode" } : { status: "saving" },
+      now(),
+    );
     documents.announce(documentId);
-    queueLook(documentId, contentHash, address);
+    if (!held) queueLook(documentId, contentHash, address);
   };
 
   // Looks being made when the app last quit were asked for: they are made now, once. One that

@@ -208,12 +208,12 @@ test("with “Keep everything on this computer” on, a link pasted in the sideb
   await paste(window, `${site}/tea-pasted`);
   const problem = window.locator('[data-testid^="web-page-problem"]');
   await expect(problem).toContainText(
-    "“Keep everything on this computer” is on, so this page isn’t fetched: it would contact",
+    "Not fetched: “Keep everything on this computer” is on. It would contact",
   );
   expect(hits).toEqual([]);
-  await expect(problem.getByRole("button", { name: "Keep it on" })).toBeVisible();
+  await expect(problem.getByRole("button", { name: "Don’t fetch" })).toBeVisible();
   await setLanguage(window, "zh-CN");
-  await expect(problem).toContainText("已开启“所有内容都留在这台电脑上”，所以没有抓取这个网页");
+  await expect(problem).toContainText("未抓取：已开启“所有内容都留在这台电脑上”。抓取会连接");
   await expect(problem.getByTestId("web-page-fetch-once")).toHaveText("只抓取这一次");
   await setLanguage(window, "en");
 
@@ -274,10 +274,10 @@ test("with “Keep everything on this computer” on, a web page by address isn'
   const dialog = await addWebPages(window, [address]);
   const problem = dialog.getByTestId("add-web-page-problem");
   await expect(problem).toContainText(
-    `“Keep everything on this computer” is on, so this page isn’t fetched: it would contact 127.0.0.1:${port}.`,
+    `Not fetched: “Keep everything on this computer” is on. It would contact 127.0.0.1:${port}.`,
   );
   await expect(problem.getByTestId("add-web-page-fetch-once")).toHaveText("Fetch this page once");
-  await expect(problem.getByTestId("add-web-page-keep-local")).toHaveText("Keep it on");
+  await expect(problem.getByTestId("add-web-page-keep-local")).toHaveText("Don’t fetch");
   await screenshot(window, "web-page-local-mode");
   expect(hits).toEqual([]);
   await window.evaluate(() => document.documentElement.setAttribute("lang", "zh-CN"));
@@ -296,7 +296,7 @@ test("with “Keep everything on this computer” on, a web page by address isn'
     }),
   ).toBe(true);
 
-  // Kept: the line goes, and nothing is fetched.
+  // Not fetched: the line goes.
   const second = await addWebPages(window, [`${site}/tea?again`]);
   await second.getByTestId("add-web-page-keep-local").click();
   await expect(second.getByTestId("add-web-page-problem")).toHaveCount(0);

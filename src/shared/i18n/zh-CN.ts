@@ -1073,6 +1073,8 @@ export const zhCN = {
   "viewer.web.look.failed.unreachable": "未能保存网页原貌：网页无法加载。",
   "viewer.web.look.failed.too-large": "未能保存网页原貌：生成的 PDF 会超过 50 MB。",
   "viewer.web.look.failed.stopped": "未能保存网页原貌：生成时 IncarnaMind 停止了运行。",
+  "viewer.web.look.failed.local-mode":
+    "未保存网页原貌：已开启“所有内容都留在这台电脑上”。保存会从网站加载网页。",
   "viewer.web.look.failed.failed": "未能保存网页原貌。",
   "viewer.web.pictureNotSaved": "未随网页保存",
   "viewer.docx.comment": "{author} 的批注",
@@ -1417,10 +1419,9 @@ export const zhCN = {
   "webPages.reason.not-public": "它在这台电脑或局域网上",
   "webPages.reason.too-many-redirects": "跳转次数太多",
   "webPages.reason.local-mode": "已开启“所有内容都留在这台电脑上”",
-  "webPages.localMode":
-    "已开启“所有内容都留在这台电脑上”，所以没有抓取这个网页：它会连接到 {site}。",
+  "webPages.localMode": "未抓取：已开启“所有内容都留在这台电脑上”。抓取会连接 {site}。",
   "webPages.localMode.once": "只抓取这一次",
-  "webPages.localMode.keep": "保持开启",
+  "webPages.localMode.keep": "不抓取",
   "webPages.reason.not-from-search": "联网搜索没有返回这个网址",
   "webPages.fetchAgain": "重新抓取",
   "webPages.openLive": "打开原网页",

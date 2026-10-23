@@ -1102,6 +1102,8 @@ export const en = {
     "The page as it looks wasn’t kept: its PDF would be over 50 MB.",
   "viewer.web.look.failed.stopped":
     "The page as it looks wasn’t kept: IncarnaMind stopped while making it.",
+  "viewer.web.look.failed.local-mode":
+    "Not kept as it looks: “Keep everything on this computer” is on. It would load the page from its site.",
   "viewer.web.look.failed.failed": "The page as it looks wasn’t kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
@@ -1465,9 +1467,9 @@ export const en = {
   "webPages.reason.not-from-search": "the web search didn’t return it",
   "webPages.reason.local-mode": "“Keep everything on this computer” is on",
   "webPages.localMode":
-    "“Keep everything on this computer” is on, so this page isn’t fetched: it would contact {site}.",
+    "Not fetched: “Keep everything on this computer” is on. It would contact {site}.",
   "webPages.localMode.once": "Fetch this page once",
-  "webPages.localMode.keep": "Keep it on",
+  "webPages.localMode.keep": "Don’t fetch",
   "webPages.fetchAgain": "Fetch again",
   "webPages.openLive": "Open the live page",
   "webPages.copyAddress": "Copy address",

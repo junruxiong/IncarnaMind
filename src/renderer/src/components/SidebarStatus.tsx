@@ -571,7 +571,9 @@ function useStatuses(): Status[] {
       testId: `web-page-problem:${problem.key}`,
       tone: refused ? "waiting" : "error",
       short,
-      full: `${fullMessage}\n${problem.address}\n${problem.message}`,
+      full: held
+        ? `${fullMessage}\n${problem.address}`
+        : `${fullMessage}\n${problem.address}\n${problem.message}`,
       ...(refused
         ? {}
         : {

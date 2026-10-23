@@ -2789,10 +2789,17 @@ export type WebPageLook =
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
  * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
- * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "local-mode",
+ * "Keep everything on this computer" is on, so the page wasn't loaded; "failed",
  * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
+export type WebPageLookFailure =
+  | "timed-out"
+  | "unreachable"
+  | "too-large"
+  | "stopped"
+  | "local-mode"
+  | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
