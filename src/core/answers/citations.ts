@@ -570,6 +570,7 @@ export function citeSelection(
   const { units, matching, inRange } = version;
   const refused = (check: CheckResult, range: PageRange, quote = all): CitedSelection => ({
     ...version.result(check, range, quote),
+    ...(range.pageFrom === null && { location: null }),
     quote,
   });
   const around = { before: input.parts[0]?.before, after: input.parts.at(-1)?.after };
@@ -647,7 +648,8 @@ export function citeSelection(
   const first = kept[0];
   const last = kept.at(-1);
   if (!first || !last) return refused(NOT_ON_PAGES, selected);
-  const range = { pageFrom: first.unit, pageTo: last.unit };
+  const pages = kept.map((part) => part.unit);
+  const range = { pageFrom: Math.min(...pages), pageTo: Math.max(...pages) };
   const text = kept.map((part) => part.text).join("\n");
   const covered = inRange(range);
   const [start, end] = [covered[0], covered.at(-1)];
