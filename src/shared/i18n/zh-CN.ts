@@ -1843,7 +1843,7 @@ export const zhCN = {
   "providers.form.save": "使用此服务",
   "providers.sendsLine": "会把你的问题和文档内容发送给 {provider}。",
   "providers.sends.chat":
-    "你的问题、你所在或在问题中提到的 Mind、相关段落及其文档名称和页码、最多 50 个文档的名称、命令找到的内容，以及会议的转写稿",
+    "你的问题、你所在或在问题中提到的 Mind、相关段落及其文档名称和页码、问题或命令找到的文档的名称、文件夹和标签（最多 50 个），以及会议的转写稿",
   "providers.sends.checks": "你核对的每一句话",
   "providers.sends.suggestions": "写作建议时你停下的那一段",
   "providers.sends.edits": "你让助手修改的文字",

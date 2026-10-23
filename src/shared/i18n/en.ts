@@ -1913,7 +1913,7 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
-    "your Questions, the Mind you’re in or one you name, matching passages with their Document names and pages, up to 50 Document names, what a command finds, and a Meeting’s Transcript",
+    "your Questions, the Mind you’re in or one you name, matching passages with their Document names and pages, the names, Folders and Tags of the Documents a Question or a command finds (up to 50), and a Meeting’s Transcript",
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
