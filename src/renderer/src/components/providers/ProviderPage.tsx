@@ -23,6 +23,7 @@ import { formatMoney, formatSpent, joinMeta, setAsideText } from "../../cost";
 import { errorMessage } from "../../errors";
 import { useLanguage, useT } from "../../i18n";
 import { type KeyRefusal, useKeyRefusals } from "../../keyRefusals";
+import { clearModelFailure } from "../../modelHealth";
 import { useModelNames } from "../../modelNames";
 import { useAppStore } from "../../store";
 import { KeyCharacterLine } from "../KeyCharacterLine";
@@ -39,6 +40,7 @@ import {
   successTextClass,
 } from "../ui";
 import { KeyCheckLine, useKeyCheck } from "./keyCheck";
+import { LocalModeUnavailable } from "./LocalModeUnavailable";
 import { OtherModels } from "./OtherModels";
 import { KeyRefusedLine, ProviderSendsLine, TestResult } from "./ProviderForm";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
@@ -176,6 +178,7 @@ export function ProviderPage({
       });
       key.clear();
       setResult(null);
+      clearModelFailure(saved.id);
       if (refused) useKeyRefusals.getState().saved(saved);
     } catch (failure) {
       setKeyError(errorMessage(failure, t));
@@ -269,6 +272,8 @@ export function ProviderPage({
           </button>
         )}
       </header>
+
+      {provider.service && provider.kind !== "ollama" && <LocalModeUnavailable />}
 
       {provider.service ? (
         <ProviderSendsLine
