@@ -274,6 +274,22 @@ describe("citeSelection", () => {
       expect(cited.location).toEqual({ kind: "lines", from: 3, to: 3 });
     });
 
+    test("words a long file has in many places aren't cited", async () => {
+      const core = startCore(await createTempDataFolder());
+      const lines = Array.from(
+        { length: 3000 },
+        (_, index) => `Reading ${index} rose at the gauge.`,
+      );
+      const document = await addPaper(core, Buffer.from(lines.join("\n")), "Gauge log.txt");
+
+      const cited = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: null, text: "rose at the gauge." }],
+      });
+
+      expect(cited).toMatchObject({ check: "not-found", pageFrom: null });
+    });
+
     test("in a text file, two same lines that nothing around tells apart aren't cited", async () => {
       const core = startCore(await createTempDataFolder());
       const lines = [

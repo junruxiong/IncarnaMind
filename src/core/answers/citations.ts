@@ -473,12 +473,22 @@ function withoutRunningLines(part: SelectedPart, unit: PageText, matching: Match
   return part.text;
 }
 
+// Looked for a window at a time, so a Document's length costs once over, not once for each place.
+const PLACES_WINDOW = 20_000;
+// More places than this are too many to tell apart: they aren't cited.
+const MOST_PLACES = 50;
+
 function placesOf(text: string, quote: string, options: MatchOptions): TextRange[][] {
   const places: TextRange[][] = [];
-  for (let from = 0; from < text.length; ) {
-    const found = findQuote(text.slice(from), quote, options);
+  const overlap = quote.length * 2 + 200;
+  for (let from = 0; from < text.length && places.length <= MOST_PLACES; ) {
+    const found = findQuote(text.slice(from, from + PLACES_WINDOW + overlap), quote, options);
     const first = found?.[0];
-    if (!found || !first) break;
+    // A place that starts in the overlap is found again from the next window.
+    if (!found || !first || first.start >= PLACES_WINDOW) {
+      from += PLACES_WINDOW;
+      continue;
+    }
     places.push(found.map((range) => ({ start: range.start + from, end: range.end + from })));
     from += first.start + 1;
   }
@@ -589,11 +599,16 @@ export function citeSelection(
     });
     const [one] = cited;
     const unread = foldRadicals(readableQuoteText(text));
-    if (!one || cited.some((each) => each.location !== one.location)) {
+    if (
+      !one ||
+      places.length > MOST_PLACES ||
+      cited.some((each) => each.location !== one.location)
+    ) {
       return refused(NOT_ON_PAGES, otherwise, unread);
     }
-    const pageFrom = one.covered[0]?.page ?? null;
-    const pageTo = one.covered.at(-1)?.page ?? null;
+    const whole = one.covered[0]?.kind === "text";
+    const pageFrom = whole ? null : (one.covered[0]?.page ?? null);
+    const pageTo = whole ? null : (one.covered.at(-1)?.page ?? null);
     const range = { pageFrom, pageTo };
     if (pageFrom !== null && pageTo !== null && pageTo - pageFrom + 1 > MAX_CITED_PAGES) {
       return refused({ check: "not-found", checkReason: "too-many-pages" }, otherwise, unread);
@@ -614,8 +629,9 @@ export function citeSelection(
   }
   // A whole TXT or Markdown file stored before Units is checked as one text.
   if (units.length === 1 && units[0]?.kind === "text") return citeIn(nowhere, raw);
-  if (known.length === 0)
+  if (known.length === 0) {
     return citeAt(units, placesIn(units, raw, around, matching), nowhere, raw);
+  }
   if (known.length < input.parts.length) return refused(NOT_ON_PAGES, selected);
   // A page at each end may hold nothing but a running header or footer: more can't be cited.
   if (selected.pageTo !== null && selected.pageFrom !== null) {
