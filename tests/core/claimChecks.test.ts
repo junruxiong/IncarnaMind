@@ -361,6 +361,32 @@ describe("One claim check", () => {
     });
   });
 
+  // protects=a request after the model's verdict that the provider rate-limits leaves the sentence not checked on the limit's reason, so the run tries it again: a contradiction is never shown unconfirmed, nor a verdict without its evidence (#1618); fails_when=the sentence is Contradicted or Supported without the request that confirms it; no_claim=the run's pauses, which runItems' tests cover.
+  test.each([
+    ["the contradiction's confirmation", CONTRADICTED, "Compare a sentence"],
+    ["the evidence asked for again", SUPPORTED, "You checked a sentence"],
+  ])(
+    "%s rate-limited leaves the sentence not checked, on the rate limit",
+    async (_, claim, asked) => {
+      const plans: Record<string, Plan> = {
+        ...PLANS,
+        [SUPPORTED]: { verdict: "supported" },
+      };
+      const model = scriptedModel((call) => checkReply(call, plans), {
+        generate: (call) =>
+          call.system.startsWith(asked)
+            ? { error: { status: 429, message: "Too many requests." } }
+            : checkGenerate(plans)(call),
+      });
+      const { core } = await setUpWithDocuments(model, [TIDES]);
+
+      expect(await core.checkClaim({ claim })).toMatchObject({
+        verdict: "not-checked",
+        reason: "rate-limit",
+      });
+    },
+  );
+
   // protects=a sentence found unsupported keeps the nearest line the Run read when that line states another value for the same thing, and the verdict stays unsupported; fails_when=the line is lost, the verdict says contradicted, or an unrelated sentence gets a line; no_claim=how a real model words its judgement.
   test("an unsupported sentence keeps the nearest line that says something different (#770)", async () => {
     const different = { verdict: "unsupported" as const };

@@ -50,10 +50,9 @@ import type { PreparedChatModel } from "../../providers/chat";
 import { RunItemError, runItems } from "../../runs/stop";
 import { type MarkJSON, type NodeJSON, syncContent, topLevelBlocks } from "../blocks";
 import { type ClaimCheckRequest, recordJudged, runFailureOf } from "./claimCheck";
+import { claimsAtOnce } from "./runChecks";
 import { markSentence } from "./sentences";
 import type { CheckScope } from "./verify";
-
-const CLOUD_SENTENCES_AT_ONCE = 3;
 
 const UNCHECKED: ReadonlySet<string> = new Set(["question", "codeBlock", "blockMath", "heading"]);
 
@@ -517,7 +516,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
         const nodes = uncovered ? await cutOf(blocks, sentence, uncovered, prepared, signal) : null;
         return { result, uncovered, nodes };
       },
-      { concurrency: prepared.provider.service ? CLOUD_SENTENCES_AT_ONCE : 1, signal },
+      { concurrency: claimsAtOnce(prepared), signal },
     );
     if (signal.aborted) return null;
 
