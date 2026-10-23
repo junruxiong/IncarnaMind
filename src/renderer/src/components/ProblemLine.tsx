@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactNode, Ref } from "react";
 import { ExclamationIcon } from "../viewer/icons";
 import { MetaLine } from "./MetaLine";
 
@@ -19,16 +19,26 @@ export function ProblemMark({ className = "mr-1.5 inline align-[-2px]" }: { clas
 /** The one action a problem offers. */
 export interface ProblemAction {
   label: string;
+  /** What a screen reader says, where the label alone doesn't name what it acts on ("Change"). */
+  ariaLabel?: string;
   onClick(event: MouseEvent<HTMLButtonElement>): void;
   testId?: string;
   /** Not while it is already running. */
   disabled?: boolean;
 }
 
-export function LineAction({ action }: { action: ProblemAction }) {
+export function LineAction({
+  action,
+  ref,
+}: {
+  action: ProblemAction;
+  ref?: Ref<HTMLButtonElement>;
+}) {
   return (
     <button
+      ref={ref}
       type="button"
+      aria-label={action.ariaLabel}
       data-testid={action.testId}
       disabled={action.disabled}
       onClick={action.onClick}

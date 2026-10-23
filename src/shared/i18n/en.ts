@@ -1905,6 +1905,9 @@ export const en = {
   "providers.form.baseUrlHint":
     "For example https://api.deepseek.com/v1 or http://localhost:1234/v1",
   "providers.form.model": "Model",
+  "providers.form.modelLine": "Model: {model}",
+  "providers.form.change": "Change",
+  "providers.form.changeModel": "Change the model",
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
