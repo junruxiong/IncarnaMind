@@ -86,6 +86,8 @@ import { plainText } from "../../mindText";
 import { insertBlocks } from "../../noteAdding";
 import {
   citationsDropped,
+  citationsOver,
+  droppedOf,
   type OwnApplied,
   type OwnWaiting,
   ownAppliedIn,
@@ -1010,6 +1012,12 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     ids: string[];
     made: boolean;
     origin: BlockOrigin;
+    /**
+     * Puts the first Blocks in place of the text the call revises (edit_mind's content), its
+     * request recorded: their ids, or null when that text changed since it was read. Without
+     * it, the first go in after `anchor`, as the rest always do.
+     */
+    replace?(note: Y.XmlFragment, first: readonly NodeJSON[]): string[] | null;
   }
 
   const writerFor = (mind: ChangeableMind, after: string | null, made: boolean): Writer => {
@@ -1040,6 +1048,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     if (fresh.length === 0) return;
     const first = writer.written === 0;
     if (first && !writer.made) minds.checkpoint(writer.mind.id);
+    let wrote = false;
     minds.edit(writer.mind.id, (note) => {
       const anchor = note
         .toArray()
@@ -1047,13 +1056,18 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           (each): each is Y.XmlElement =>
             each instanceof Y.XmlElement && writer.anchor !== null && idOf(each) === writer.anchor,
         );
-      const ids = insertBlocks(note, fresh, { after: anchor ?? null, request: writer.request });
+      const ids =
+        first && writer.replace
+          ? writer.replace(note, fresh)
+          : insertBlocks(note, fresh, { after: anchor ?? null, request: writer.request });
+      if (!ids) return;
+      wrote = true;
       writer.anchor = ids.at(-1) ?? writer.anchor;
       writer.ids.push(...ids);
       const doc = note.doc;
       if (!doc) return;
       setOrigins(doc, ids, writer.origin);
-      if (first) {
+      if (first && !writer.replace) {
         const tag = requestedIn(writer.mind.id, writer.made);
         recordProposalRequest(doc, writer.request, {
           source: "answer-added",
@@ -1064,7 +1078,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         });
       }
     });
-    writer.written = blocks.length;
+    if (wrote) writer.written = blocks.length;
   };
 
   /**
@@ -1244,7 +1258,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       0,
       firstUnrecorded < 0 ? -1 : Math.min(firstUnrecorded, blocks.length - 1),
     );
-    stream.copy = repeatIn(writer, ready);
+    // A revision of the assistant's own text repeats it by design.
+    stream.copy = writer.replace ? null : repeatIn(writer, ready);
     if (stream.copy !== null) {
       withdraw(writer);
       minds.writing(writer.mind.id, null);
@@ -1648,6 +1663,52 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   };
 
   /**
+   * Puts `revised` in place of `over`'s Blocks, as Proposals of `request` linked back to the
+   * Answer (see `writeOver`); null when those Blocks changed since they were read.
+   */
+  const replaceStretch = (
+    note: Y.XmlFragment,
+    mindId: string,
+    over: OwnWaiting | OwnApplied,
+    revised: Y.XmlElement[],
+    request: string,
+    asWrite: boolean,
+  ): string[] | null => {
+    const asked =
+      over.kind === "own"
+        ? requestedIn(mindId, false) !== null && ownAsked(note, over)
+        : (requested?.change === "edit" || asWrite) && requestedIn(mindId, false) !== null;
+    const written =
+      over.kind === "own"
+        ? replaceOwn(note, over, revised, request)
+        : replaceApplied(note, over, revised, request);
+    const doc = note.doc;
+    if (!written || !doc) return written;
+    setOrigins(doc, written, options.origin);
+    recordProposalRequest(doc, request, {
+      source: "answer-added",
+      providerId: options.prepared.provider.id,
+      modelId: options.prepared.modelId,
+      createdAt: options.now().toISOString(),
+      ...(asked && { requested: asWrite ? ("write" as const) : ("edit" as const) }),
+    });
+    return written;
+  };
+
+  /**
+   * By call: edit_mind's content coming in as the model writes it (#1635), each finished
+   * paragraph put in place of the assistant's own text it revises, read as the call began:
+   * that text, its words for the result's lengths, and its Citations.
+   */
+  interface Revising {
+    writer: Writer;
+    over: OwnWaiting | OwnApplied;
+    before: string;
+    cited: string[];
+  }
+  const revisions = new Map<string, Revising>();
+
+  /**
    * `edit_mind` with new text: it takes the place of the assistant's own text over the
    * stretch, cited as an Answer is: its changes still waiting (`own`), revised in place, or
    * its text already in the Mind (`applied`), proposed to be replaced (#1061).
@@ -1659,39 +1720,46 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     markdown: string,
     retry: boolean,
     { again = "call edit_mind again", asWrite = false } = {},
+    streamed: Revising | null = null,
   ): Written & { change: MindChange; dropped: number } => {
     const alone = withoutPointersBack(markdown);
     const content = options.blocksOf(alone.markdown);
     const { blocks, cited, notFound, unrecorded, searchTalk, ...notes } = content;
-    if (blocks.some(unmadeTable)) throw noTable(mind);
+    const takeBack = () => {
+      if (!streamed) return;
+      withdraw(streamed.writer);
+      minds.writing(mind.id, null);
+    };
+    if (blocks.some(unmadeTable)) {
+      takeBack();
+      throw noTable(mind);
+    }
     logPointersLeft(alone.left, mind.id, toolCallId);
     const uncited = uncitedIn(mind, content, again, { answer: false, retry });
-    if (uncited) throw uncited;
-    const dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
-    const request = randomUUID();
-    minds.checkpoint(mind.id);
-    const ids = minds.edit(mind.id, (note) => {
-      const asked =
-        over.kind === "own"
-          ? requestedIn(mind.id, false) !== null && ownAsked(note, over)
-          : (requested?.change === "edit" || asWrite) && requestedIn(mind.id, false) !== null;
-      const revised = blocks.map(createElement);
-      const written =
-        over.kind === "own"
-          ? replaceOwn(note, over, revised, request)
-          : replaceApplied(note, over, revised, request);
-      const doc = note.doc;
-      if (!written || !doc) return written;
-      setOrigins(doc, written, options.origin);
-      recordProposalRequest(doc, request, {
-        source: "answer-added",
-        providerId: options.prepared.provider.id,
-        modelId: options.prepared.modelId,
-        createdAt: options.now().toISOString(),
-        ...(asked && { requested: asWrite ? ("write" as const) : ("edit" as const) }),
-      });
-      return written;
-    });
+    if (uncited) {
+      takeBack();
+      throw uncited;
+    }
+    // What streamed in holds the pointers taken out of the whole text: it is written again.
+    const going = streamed && alone.removed === 0 ? streamed : null;
+    if (!going) takeBack();
+    let request: string;
+    let dropped: number;
+    let ids: string[] | null;
+    if (going) {
+      writeMore(going.writer, blocks);
+      minds.writing(mind.id, null);
+      request = going.writer.request;
+      dropped = droppedOf(going.cited, blocks);
+      ids = going.writer.written > 0 ? going.writer.ids : null;
+    } else {
+      dropped = minds.read(mind.id, (note) => citationsDropped(note, over, blocks));
+      request = randomUUID();
+      minds.checkpoint(mind.id);
+      ids = minds.edit(mind.id, (note) =>
+        replaceStretch(note, mind.id, over, blocks.map(createElement), request, asWrite),
+      );
+    }
     if (!ids) {
       throw new Refusal(
         { kind: "changed", mindId: mind.id },
@@ -1743,6 +1811,75 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
       waitingMessage(mind.name, waiting.count, waiting.mixed),
     );
 
+  // Only once a part is named, whole, before the content: without one the call may still name it.
+  const openRevision = (toolCallId: string, fields: ReturnType<typeof partialFields>) => {
+    const named = fields.get("mind");
+    const part = fields.get("part");
+    if (!part?.done || (named && !named.done) || fields.has("instruction")) return null;
+    const mind = targetOf({ mind: named?.value });
+    if (mind instanceof Refusal || wantsNewMind(mind)) return null;
+    const read = minds.read(mind.id, (note) => {
+      const stretch = stretchOf(note, part.value, options.language, [], null);
+      if ("why" in stretch) return null;
+      const waiting = waitingIn(note, stretch.from, stretch.to);
+      if (waiting.kind === "mixed" || waiting.kind === "other") return null;
+      const over = waiting.kind === "own" ? waiting : ownAppliedIn(note, stretch.from, stretch.to);
+      return over && { over, before: stretchText(note, stretch), cited: citationsOver(note, over) };
+    });
+    if (!read) return null;
+    const request = randomUUID();
+    const writer: Writer = {
+      mind,
+      named: null,
+      request,
+      anchor: read.over.blockIds.at(-1) ?? null,
+      written: 0,
+      ids: [],
+      made: false,
+      origin: options.origin,
+      replace: (note, first) =>
+        replaceStretch(note, mind.id, read.over, first.map(createElement), request, false),
+    };
+    revisions.set(toolCallId, { writer, ...read });
+    return { writer, created: false };
+  };
+
+  /** What streamed in for an edit_mind call, if it went into the Mind the call names; elsewhere, it is taken back. */
+  const revisionOf = (toolCallId: string, mindId: string | null): Revising | null => {
+    streams.delete(toolCallId);
+    ended.add(toolCallId);
+    const revising = revisions.get(toolCallId) ?? null;
+    revisions.delete(toolCallId);
+    if (!revising || revising.writer.mind.id === mindId) return revising;
+    withdraw(revising.writer);
+    minds.writing(revising.writer.mind.id, null);
+    return null;
+  };
+
+  const wroteOver = async (
+    toolCallId: string,
+    mind: ChangeableMind,
+    over: OwnWaiting | OwnApplied,
+    before: string,
+    markdown: string,
+    signal: AbortSignal,
+    retry: boolean,
+    streamed: Revising | null,
+  ): Promise<string> => {
+    const written = writeOver(toolCallId, mind, over, markdown, retry, {}, streamed);
+    const checked = await checkWritten(toolCallId, written, signal);
+    const went = ` (${lengths(before, markdown)})`;
+    return [
+      over.kind === "own"
+        ? revisedText(mind, written.change, went)
+        : `Proposed your new text in place of your own in “${mind.name}”${went}. ${outcomeOf(mind, written.change.request)}`,
+      ...tableNotes(written.change),
+      ...writtenNotes(written),
+      ...droppedSaid(written.dropped),
+      ...checkedNotes(checked),
+    ].join(" ");
+  };
+
   const edit: Tool = {
     name: MIND_TOOLS.edit,
     description:
@@ -1773,10 +1910,24 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
     providerTool: MIND_TOOLS.edit,
     effects: effectOn("write"),
     untrustedResult: false,
+    streamInput(toolCallId, input) {
+      streamContent(toolCallId, input, (fields) => openRevision(toolCallId, fields));
+    },
     async call(input, { toolCallId, signal, canCallAgain }) {
       const markdown = optional(input.content);
       const instruction = markdown === null ? text(input.instruction, "instruction") : "";
-      const mind = found(targetOf(input));
+      const target = targetOf(input);
+      // What streamed in stands where the text it revises was: that text was read as it began.
+      const streamed =
+        markdown === null
+          ? null
+          : revisionOf(toolCallId, target instanceof Refusal ? null : target.id);
+      const mind = found(target);
+      if (markdown !== null && streamed) {
+        const { over, before } = streamed;
+        const retry = canCallAgain?.() ?? true;
+        return wroteOver(toolCallId, mind, over, before, markdown, signal, retry, streamed);
+      }
       const part = optional(input.part);
       // The selection counts only in the Mind it is in, and only when no section is named.
       const selected = focused?.mindId === mind.id && part === null ? focused.blockIds : [];
@@ -1811,18 +1962,8 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
           );
         }
         const before = minds.read(mind.id, (blocks) => stretchText(blocks, stretch));
-        const written = writeOver(toolCallId, mind, over, markdown, canCallAgain?.() ?? true);
-        const checked = await checkWritten(toolCallId, written, signal);
-        const went = ` (${lengths(before, markdown)})`;
-        return [
-          over.kind === "own"
-            ? revisedText(mind, written.change, went)
-            : `Proposed your new text in place of your own in “${mind.name}”${went}. ${outcomeOf(mind, written.change.request)}`,
-          ...tableNotes(written.change),
-          ...writtenNotes(written),
-          ...droppedSaid(written.dropped),
-          ...checkedNotes(checked),
-        ].join(" ");
+        const retry = canCallAgain?.() ?? true;
+        return wroteOver(toolCallId, mind, over, before, markdown, signal, retry, null);
       }
       // Only a request for an edit rewrites the User's text at once; one to write waits there (#880).
       const tag =

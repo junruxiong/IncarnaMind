@@ -332,8 +332,21 @@ export function citationsDropped(
   over: Pick<OwnWaiting, "blockIds" | "fingerprint">,
   revised: readonly NodeJSON[],
 ): number {
+  return droppedOf(citationsOver(blocks, over), revised);
+}
+
+/** The Citations in `over`'s Blocks, as `citationsDropped` counts them; none once they have changed. */
+export function citationsOver(
+  blocks: Y.XmlFragment,
+  over: Pick<OwnWaiting, "blockIds" | "fingerprint">,
+): string[] {
+  return (blocksOf(blocks, over) ?? []).flatMap(citationsIn);
+}
+
+/** How many of the Citations `cited` `revised` leaves out. */
+export function droppedOf(cited: readonly string[], revised: readonly NodeJSON[]): number {
   const kept = new Set(revised.flatMap(citationsIn));
-  return (blocksOf(blocks, over) ?? []).flatMap(citationsIn).filter((key) => !kept.has(key)).length;
+  return cited.filter((key) => !kept.has(key)).length;
 }
 
 /** Whether the User asked for all of the text `own` holds (#880): a revision of it is asked for too. */

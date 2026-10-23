@@ -232,6 +232,62 @@ describe("The assistant revises its own changes still waiting", { timeout: 30_00
     expect(changesIn(second)).toEqual([expect.objectContaining({ revised: true, proposals: 2 })]);
   });
 
+  // protects=edit_mind's new text for its own waiting section goes in as the model writes it, each finished paragraph in that section's place, and ends as the same one version as when it comes whole (#1635); fails_when=nothing shows until the call is whole, the old section stays beside the new paragraphs, or the end differs from the whole call's; no_claim=a real model's input order, which streams only when the part comes before the content.
+  test("new text for its own waiting section goes in as it is written, in that section's place", async () => {
+    const longer =
+      "## Summary\n\nThe paper is about spring tides and their causes.\n\nThe moon drives them twice a month.\n\nNeap tides come between.";
+    const input = { mind: "Tide notes", part: "Summary", content: longer };
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const model = scriptedModel((call): ScriptedReply => {
+      if (asked(call).endsWith("write a summary page")) {
+        return called(call, "create_mind")
+          ? { text: "Made “Tide notes”." }
+          : {
+              calls: [
+                { tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } },
+              ],
+            };
+      }
+      if (called(call, "edit_mind")) return { text: "Rewrote the summary in “Tide notes”." };
+      // Held in the third paragraph: the heading and the first paragraph are finished.
+      const after = JSON.stringify(input).indexOf("The moon") + 8;
+      return {
+        calls: [{ tool: "edit_mind", input, streamInput: true }],
+        pause: { after, until: held },
+      };
+    });
+    const { core, mind } = await setUp(model);
+    const first = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+    const page = await madeBy(core, first);
+
+    const second = askAssistant(core, {
+      text: "make it longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+    await expect
+      .poll(() => shownWithChanges(page))
+      .toEqual(["+ Summary", "+ The paper is about spring tides and their causes."]);
+    release();
+    const answer = await second;
+
+    await page.settled();
+    expect(shownWithChanges(page)).toEqual([
+      "+ Summary",
+      "+ The paper is about spring tides and their causes.",
+      "+ The moon drives them twice a month.",
+      "+ Neap tides come between.",
+    ]);
+    expect(changesIn(answer)).toEqual([expect.objectContaining({ revised: true, proposals: 4 })]);
+    // Its lengths are of the text it revised, read before the first paragraph took its place.
+    expect(lastResult(model)).toMatch(
+      /^Revised your own text in “Tide notes” \(from 7 to 21 words\)/,
+    );
+  });
+
   // protects=asked to change all of a Mind where its own waiting text sits beside the User's, the assistant is told to name the section, and revises only its own; fails_when=the User's text is changed, or nothing is done; no_claim=none beyond protects.
   test("its waiting section beside the User's text is revised once the section is named", async () => {
     const model = scriptedModel((call): ScriptedReply => {
@@ -523,8 +579,11 @@ describe("The owner's four turns", { timeout: 30_000 }, () => {
 });
 
 describe("Taking back a revision", { timeout: 30_000 }, () => {
-  /** "write a summary page", then "make it longer" as new text for it; `again` scripts the Answer written again. */
-  async function revised(again: () => ScriptedReply) {
+  /**
+   * "write a summary page", then "make it longer" as new text for it, `streamed` as the model
+   * writes it; `again` scripts the Answer written again.
+   */
+  async function revised(again: () => ScriptedReply, streamed = false) {
     let regenerating = false;
     const model = scriptedModel((call): ScriptedReply => {
       if (regenerating) return again();
@@ -546,8 +605,10 @@ describe("Taking back a revision", { timeout: 30_000 }, () => {
                 input: {
                   mind: "Tide notes",
                   part: "Summary",
-                  content: "## Summary\n\nThe paper is about spring tides and the moon.",
+                  content:
+                    "## Summary\n\nThe paper is about spring tides and the moon.\n\nNeap tides come between.",
                 },
+                streamInput: streamed,
               },
             ],
           };
@@ -576,6 +637,55 @@ describe("Taking back a revision", { timeout: 30_000 }, () => {
     };
     return { page, before, second, regenerate };
   }
+
+  // protects=a revision that streamed in but is refused once whole (here, a table it couldn't make) is taken back, and the page is exactly as it was (#1635); fails_when=the streamed paragraphs stay, or the old text doesn't come back; no_claim=the refusal's words.
+  test("a revision refused once whole is taken back, though it had streamed in", async () => {
+    const input = {
+      mind: "Tide notes",
+      part: "Summary",
+      content:
+        "## Summary\n\nThe paper is about spring tides.\n\nThe moon drives them.\n\n| Tide | Height |\n| Spring | High |",
+    };
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const model = scriptedModel((call): ScriptedReply => {
+      if (asked(call).endsWith("write a summary page")) {
+        return called(call, "create_mind")
+          ? { text: "Made “Tide notes”." }
+          : {
+              calls: [
+                { tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } },
+              ],
+            };
+      }
+      if (called(call, "edit_mind")) return { text: "The table couldn't be made." };
+      return {
+        calls: [{ tool: "edit_mind", input, streamInput: true }],
+        pause: { after: JSON.stringify(input).indexOf("| Tide") + 3, until: held },
+      };
+    });
+    const { core, mind } = await setUp(model);
+    const first = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+    const page = await madeBy(core, first);
+    await page.settled();
+    const before = exactly(page);
+
+    const second = askAssistant(core, {
+      text: "make it longer",
+      mindId: mind.id,
+      conversationId: first.conversationId,
+    });
+    await expect
+      .poll(() => shownWithChanges(page))
+      .toEqual(["+ Summary", "+ The paper is about spring tides.", "+ The moon drives them."]);
+    release();
+    await second;
+
+    await page.settled();
+    expect(exactly(page)).toEqual(before);
+  });
 
   // protects=a revision of the page saves a Checkpoint of it first, as any change the assistant makes does; fails_when=none is saved, so the old version can't be restored from history; no_claim=what the Checkpoint holds.
   test("a revision saves a Checkpoint of the page first", async () => {
@@ -619,28 +729,35 @@ describe("Taking back a revision", { timeout: 30_000 }, () => {
   });
 
   // protects=Reject all on the Answer that revised its own waiting text puts back exactly what was there, still waiting as the first Answer's; fails_when=the old text is lost, comes back changed, or comes back as the second Answer's; no_claim=none beyond protects.
-  test("Reject all on the revising Answer brings back exactly what was there", async () => {
-    const { page, before, second } = await revised(() => ({ text: "Unused." }));
-    const request = changesIn(second)[0]?.request ?? "";
+  test.each([false, true])(
+    "Reject all on the revising Answer brings back exactly what was there (streamed: %s)",
+    async (streamed) => {
+      const { page, before, second } = await revised(() => ({ text: "Unused." }), streamed);
+      const request = changesIn(second)[0]?.request ?? "";
 
-    page.doc.transact(() =>
-      resolveProposals(page.blocks, (ref) => ref.request === request, "reject"),
-    );
-    await page.settled();
+      page.doc.transact(() =>
+        resolveProposals(page.blocks, (ref) => ref.request === request, "reject"),
+      );
+      await page.settled();
 
-    expect(exactly(page)).toEqual(before);
-  });
+      expect(exactly(page)).toEqual(before);
+    },
+  );
 
   // protects=Regenerate on the Answer that revised its own waiting text takes the revision back first, so the Mind is exactly as it was before it; fails_when=both versions stay, or the first is lost; no_claim=what the Answer written again does.
-  test("Regenerate on the revising Answer brings back exactly what was there", async () => {
-    const { page, before, regenerate } = await revised(() => ({
-      text: "There is nothing to add.",
-    }));
+  test.each([false, true])(
+    "Regenerate on the revising Answer brings back exactly what was there (streamed: %s)",
+    async (streamed) => {
+      const { page, before, regenerate } = await revised(
+        () => ({ text: "There is nothing to add." }),
+        streamed,
+      );
 
-    await regenerate();
+      await regenerate();
 
-    expect(exactly(page)).toEqual(before);
-  });
+      expect(exactly(page)).toEqual(before);
+    },
+  );
 
   // protects=a revision that only removed part of the waiting text is taken back by Regenerate too, in its place; fails_when=the removed section stays gone, or comes back elsewhere; no_claim=none beyond protects.
   test("Regenerate after removing part of it brings that part back in its place", async () => {
@@ -838,6 +955,54 @@ describe("The assistant's own text already in the Mind (#1061)", { timeout: 30_0
       ]);
     },
   );
+
+  // protects=new text for the summary added from an Answer goes in as the model writes it, each finished paragraph after the old one, which is proposed for removal, and is asked for as the whole call's is (#1635); fails_when=nothing shows until the call is whole, the old summary isn't proposed for removal, or the change isn't tagged as asked; no_claim=what the window then applies.
+  test("new text for the summary added from an Answer goes in as it is written, the old one to remove", async () => {
+    const summary = "The paper is about spring tides.";
+    const first = "The paper is about spring tides, at new and full moon.";
+    const input = {
+      part: "The paper is",
+      content: `${first}\n\nThe tide rises highest then.\n\nNeap tides come between.`,
+    };
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const model = scriptedModel((call): ScriptedReply => {
+      if (call.results.length > 0) return { text: "Done." };
+      return {
+        calls: [{ tool: "edit_mind", input, streamInput: true }],
+        pause: { after: JSON.stringify(input).indexOf("The tide") + 8, until: held },
+      };
+    });
+    const { core, mind, client } = await setUp(model);
+    await core.addToNote({
+      mindId: mind.id,
+      blocks: [{ type: "paragraph", content: [{ type: "text", text: summary }] }],
+      origin: null,
+      model: null,
+    });
+    await client.settled();
+
+    const asking = askAssistant(core, { text: "Make the summary longer.", mindId: mind.id });
+    await expect
+      .poll(() => shownWithChanges(client).slice(-2))
+      .toEqual([`- ${summary}`, `+ ${first}`]);
+    release();
+    const answer = await asking;
+
+    await client.settled();
+    expect(shownWithChanges(client).slice(-4)).toEqual([
+      `- ${summary}`,
+      `+ ${first}`,
+      "+ The tide rises highest then.",
+      "+ Neap tides come between.",
+    ]);
+    const [change] = changesIn(answer);
+    expect(proposalRequestOf(client.doc, change?.request ?? "")).toMatchObject({
+      requested: "edit",
+    });
+  });
 
   // protects=new text for the assistant's summary that leaves out a Citation tells the model so, as an instruction's rewrite does; fails_when=the Citation goes with no word to the model; no_claim=what the model then says.
   test("new text that leaves out a Citation of the summary says so to the model", async () => {
