@@ -45,6 +45,40 @@ npm run eval:repeats
 
 ## Results
 
+### 2026-10-23: a contradiction needs a second, strict judgement (#1647)
+
+On the same Documents, Library and search as below. "Before" is the version below ("now" there: Haiku 5.5's two runs, Sonnet 5.5's one); "after" is this version, whose changes are:
+
+- A sentence the check calls contradicted, and the first confirmation upholds, is judged once more beside its quote, by a judgement that writes the sentence's detail ("on Mondays and Fridays (two named days)") and what the quote states of it before its word, in English. Only "conflict" keeps it Contradicted. Otherwise the two judgements disagree and the card is the partly-supported one, quoting the Passage, with the reply's own parts or, when it named none, parts asked for once. A judgement that fails or can't be read leaves the sentence not checked, with why.
+- The reply's `Scope` field names the sentence's own word for the party before `same` or `wider` ("Scope: Staff, wider"; "Scope: none, same" when the sentence names none).
+- A Supported reply with a wider scope whose parts can't be shown asks for them once.
+
+Haiku 5.5 ran twice after (runs 1 and 2, the last two commits; the second only adds the third change). Sonnet 5.5 ran once after; `en-control` again on the last commit, the run shown. Counts are of 10 checks, as below.
+
+| Set · sentence | Haiku before (1; 2) | Haiku after (1; 2) | Sonnet before | Sonnet after |
+|---|---|---|---|---|
+| en · own words | 8 S, 2 P; 10 S | 10 S; 10 S | 10 S | 10 S |
+| zh · notice (paraphrase) | 10 S; 10 S | 10 S; 10 S | 10 S | 10 S |
+| zh · near miss (每周一和周五) | 2 P, 8 C; 3 P, 7 C | 10 P; 10 P | 10 P | 10 P |
+| en · near miss (Mondays and Fridays) | 5 D, 5 C; 7 D, 3 C | 5 P, 5 D; 4 P, 5 D, 1 C | 10 P | 10 P |
+| en · staff-home ("Staff…") | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| en-control · staff-home | 10 P; 10 P | 10 P; 9 P, 1 S | 10 P | 10 P |
+| en-control · employees-home | 9 P, 1 S; 9 P, 1 not checked | 10 P; 9 P, 1 S | 10 P | 10 P |
+| zh · staff-home (员工…) | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| zh-control · staff-home | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| zh-control · employees-home | 10 P; 10 P | 10 P; 9 P, 1 D | 10 P | 10 P |
+| en · holiday (wrong figure) | 10 C; 10 C | 10 C; 10 C | 10 C | 10 C |
+| zh · holiday (wrong figure) | 10 C; 10 C | 10 C; 10 C | 10 C | 10 C |
+| en · car allowance (absent) | 10 A; 10 A | 10 A; 10 A | 10 A | 10 A |
+| zh · car allowance (absent) | 10 A; 10 A | 10 A; 10 A | 10 A | 10 A |
+
+Every other sentence was Supported in every check of every run. No check gave a false Supported, and none after was not checked.
+
+- **The near miss:** Contradicted in 0 of 20 checks in Chinese and 1 of 20 in English on Haiku 5.5 after, against 15 of 20 and 8 of 20 before. Its "D" cards are unsupported verdicts whose nearest line the existing nearest-line judgement (#770) calls different, as before.
+- **Why a second judgement and not the existing one:** asked for one word, both existing judgements called the near miss a conflict in 10 of 10 requests each, in English and Chinese, on Haiku 5.5 with thinking off, as checks run. The strict one did in 0 of 10 in English and 1 of 30 in Chinese; with its lines in the sentence's language, 9 of 60 in Chinese. It still called every genuine conflict tried a conflict, 10 of 10 each: the two holiday figures, three days a week, "Mondays, Wednesdays and Fridays" against two days a week (in English and Chinese), other hours, another manager, a later date, another pension share and a longer probation; and Sonnet 5.5 judged all 12 cases tried as expected. Asking it for the parts in the same request swayed its word (the Chinese near miss a conflict in 15 of 20), so the parts are a request of their own.
+- **Time:** the strict judgement is one more request for a sentence the check calls contradicted: a median of 1.0 to 1.2 s (90th percentile 1.5 to 2.0 s) on Haiku 5.5, 1.9 s (3.7 s) on Sonnet 5.5. The parts request, when needed, about 1 s. Sentences are checked several at once, so a Mind's check takes longer only by what its slowest sentence adds.
+- **Spend:** $3.27 in all: Haiku 5.5 $0.52 (four runs of the four sets while building it, and the diagnosis), the judgement trials $0.32 (Sonnet 5.5 $0.09 of it), Sonnet 5.5 $2.43 (the four sets, then `en-control` again).
+
 ### 2026-10-23: the card says where it looked, and a part covered needs the same claim
 
 Three versions on the same Documents, Library and search: `main` at bf47b4631 ("main"); the first partly-supported card for a sentence with no Citation ("first"); and this version ("now"). Now, the check's reply says in fields of its own whether a Passage is about the sentence's topic (`Topic: found` or `not found`) and whether the sentence names the Passage's party in general words (`Scope: same` or `wider`); "Covered" and "Not covered" are asked for only when a Passage states part of what the sentence itself says, never for a neighbouring thing. A Supported reply with `Scope: wider` shows the partly-supported card; a sentence no Passage states says "I didn’t find this in “{scope}”". Haiku 5.5 ran twice now (run 1; run 2). Counts are of 10 checks; S supported, C contradicted, P the partly-supported card, A absent, D a line that says something different. `zh-control` didn't run on `main`.
