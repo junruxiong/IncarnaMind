@@ -9357,6 +9357,7 @@
   }
   /* Its text, or what it says in its place: never an empty cell. */
   .comparison-cell-running,
+  .comparison-cell-reading,
   .comparison-cell-stopped,
   .comparison-cell-problem {
     display: none;
@@ -9368,16 +9369,38 @@
   .comparison-cell:not([data-status="done"]) > .comparison-cell-content {
     display: none;
   }
-  .comparison-table:is([data-filling], [data-waiting])
+  /* Words arriving, while the table fills: a table that is not filling hides what a quit left half written. */
+  .comparison-table[data-filling]
+    .comparison-cell[data-status="writing"][data-streaming]
+    > .comparison-cell-content {
+    display: block;
+  }
+  .comparison-table[data-filling]
+    .comparison-cell[data-status="waiting"]
+    > .comparison-cell-running,
+  .comparison-table[data-waiting]
     .comparison-cell:is([data-status="waiting"], [data-status="writing"])
     > .comparison-cell-running,
+  .comparison-table[data-filling]
+    .comparison-cell[data-status="writing"]:not([data-streaming])
+    > .comparison-cell-reading,
   .comparison-table:not([data-filling], [data-waiting])
     .comparison-cell:is([data-status="waiting"], [data-status="writing"])
     > .comparison-cell-stopped,
   .comparison-cell[data-status="failed"] > .comparison-cell-problem {
-    display: inline-flex;
+    display: flex;
     align-items: flex-start;
     gap: 6px;
+  }
+  .comparison-cell-reading::before {
+    content: "";
+    flex: none;
+    margin-top: 9px;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-accent);
+    animation: mind-pulse 1.6s ease-in-out infinite;
   }
   /* On the reason's first line, however many it takes. */
   .comparison-cell-mark {
@@ -9736,6 +9759,7 @@
 :root:not([data-motion="on"]) :is(.margin-check-icon, .margin-check--reveal),
 :root:not([data-motion="on"]) .edit-pending-dot,
 :root:not([data-motion="on"]) .answer-writing::before,
+:root:not([data-motion="on"]) .comparison-cell-reading::before,
 :root:not([data-motion="on"]) .answer-steps-dot,
 :root:not([data-motion="on"]) .task-dot {
   animation: none;
