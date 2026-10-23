@@ -655,6 +655,9 @@ export const zhCN = {
   "claim.cutUnsupported": "删去无依据的部分",
   "claim.keepAsView": "保留为我的观点",
   "claim.keptAsView": "已保留为你的观点",
+  "claim.cutSentence": "删除这句话",
+  "claim.cutSentence.keywords": "删除 删去 这句话 无依据",
+  "claim.cutSentence.done": "已删除这句话",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
     "IncarnaMind 无法核对该判决是否存在、是否这样说。依赖前请在你的法律数据库中查证。",

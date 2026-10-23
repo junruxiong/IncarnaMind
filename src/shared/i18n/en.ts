@@ -669,6 +669,9 @@ export const en = {
   "claim.cutUnsupported": "Cut the unsupported part",
   "claim.keepAsView": "Keep as my view",
   "claim.keptAsView": "Kept as your view",
+  "claim.cutSentence": "Cut it",
+  "claim.cutSentence.keywords": "delete remove sentence unsupported",
+  "claim.cutSentence.done": "Cut the sentence",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
     "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",
