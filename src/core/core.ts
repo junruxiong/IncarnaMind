@@ -2461,7 +2461,11 @@ export function createCore(adapters: CoreAdapters): Core {
     // The app still opens; what is due goes at the next start.
     console.error("Deleting what waited 30 days in Recently deleted failed.", error);
   }
-  documents.dropPurged().catch((error: unknown) => console.error(error));
+  documents
+    .dropPurged()
+    .catch((error: unknown) =>
+      console.error("Removing the data-folder copies of Documents deleted for good failed.", error),
+    );
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
