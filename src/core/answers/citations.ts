@@ -31,6 +31,7 @@ import { citationNode, type NodeJSON } from "../../shared/blockJson";
 import { parseQuotedWords } from "../../shared/citations";
 import {
   englishPlace,
+  joinUnits,
   locationOf,
   parseRequestedLocation,
   quoteInUnits,
@@ -40,6 +41,7 @@ import {
 } from "../../shared/locations";
 import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
+import { readableQuote, readableQuoteText } from "../../shared/readableQuote";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
@@ -47,11 +49,14 @@ import {
   type CitationCheck,
   type CitationCheckReason,
   type CitationRecheck,
+  type CitedSelection,
   MAX_CITED_PAGES,
   type QuotedWords,
   type RejectedRecord,
+  type SelectedPart,
 } from "../api";
 import type { CitationSource, DocumentDate } from "../documents";
+import { BOILERPLATE_PARAMETERS } from "../documents/boilerplate";
 import type { PageText } from "../documents/passages";
 import type { WindowedPassage } from "../documents/search";
 import { writtenInCjk } from "../documents/textLanguage";
@@ -340,34 +345,24 @@ export interface RecheckDocuments {
   ): { id: string; text: string }[];
 }
 
-/**
- * Checks a Citation again against its Document's current version (see
- * `CoreApi.recheckCitation`): in the cited Units first, then in each Unit,
- * and each two consecutive Units of one run, of the current version, in
- * order. The Passage given is one of the current version that holds the
- * Units, preferably one whose text holds the quote too.
- */
-export function recheckCitation(
-  documents: RecheckDocuments,
-  input: { documentId: string; quote: string; pageFrom: number | null; pageTo: number | null },
-): CitationRecheck {
-  const cited = { pageFrom: input.pageFrom, pageTo: input.pageTo };
-  const contentHash = documents.currentVersion(input.documentId);
-  if (contentHash === null) {
-    return {
-      check: "cant-check",
-      checkReason: "document-removed",
-      contentHash: null,
-      passageId: null,
-      ...cited,
-      location: null,
-    };
-  }
-  const quote = cleanQuote(input.quote);
-  const units = documents.pageTexts(input.documentId, contentHash, null, null);
+const removedFrom = (range: PageRange): CitationRecheck => ({
+  check: "cant-check",
+  checkReason: "document-removed",
+  contentHash: null,
+  passageId: null,
+  ...range,
+  location: null,
+});
+
+const FOUND: CheckResult = { check: "found", checkReason: null };
+const NOT_ON_PAGES: CheckResult = { check: "not-found", checkReason: "quote-not-on-pages" };
+
+/** A live Document's current version, as Citations of it are checked: its Units, and what a check in some of them gives. */
+function currentVersion(documents: RecheckDocuments, documentId: string, contentHash: string) {
+  const units = documents.pageTexts(documentId, contentHash, null, null);
   const matching = matchingOf(units);
-  const passageFor = (range: PageRange): string | null => {
-    const covering = documents.passagesCovering(input.documentId, range.pageFrom, range.pageTo);
+  const passageFor = (range: PageRange, quote: string): string | null => {
+    const covering = documents.passagesCovering(documentId, range.pageFrom, range.pageTo);
     return (
       covering.find((passage) => quote !== "" && findQuote(passage.text, quote, matching))?.id ??
       covering[0]?.id ??
@@ -381,12 +376,12 @@ export function recheckCitation(
         range.pageTo === null ||
         (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
     );
-  const result = (check: CheckResult, range: PageRange): CitationRecheck => {
+  const result = (check: CheckResult, range: PageRange, quote: string): CitationRecheck => {
     const covered = inRange(range);
     return {
       ...check,
       contentHash,
-      passageId: passageFor(range),
+      passageId: passageFor(range, quote),
       ...range,
       location: locationOf(
         covered,
@@ -394,6 +389,27 @@ export function recheckCitation(
       ),
     };
   };
+  return { units, matching, inRange, result };
+}
+
+/**
+ * Checks a Citation again against its Document's current version (see
+ * `CoreApi.recheckCitation`): in the cited Units first, then in each Unit,
+ * and each two consecutive Units of one run, of the current version, in
+ * order. The Passage given is one of the current version that holds the
+ * Units, preferably one whose text holds the quote too.
+ */
+export function recheckCitation(
+  documents: RecheckDocuments,
+  input: { documentId: string; quote: string; pageFrom: number | null; pageTo: number | null },
+): CitationRecheck {
+  const cited = { pageFrom: input.pageFrom, pageTo: input.pageTo };
+  const contentHash = documents.currentVersion(input.documentId);
+  if (contentHash === null) return removedFrom(cited);
+  const quote = cleanQuote(input.quote);
+  const version = currentVersion(documents, input.documentId, contentHash);
+  const { units, matching, inRange } = version;
+  const result = (check: CheckResult, range: PageRange) => version.result(check, range, quote);
   if (units.every((unit) => unit.text.trim() === "")) {
     return result({ check: "cant-check", checkReason: "no-text" }, cited);
   }
@@ -419,6 +435,109 @@ export function recheckCitation(
   const located = locateQuote(units, quote, matching);
   if (located) return result({ check: "found", checkReason: null }, located);
   return result({ check: "not-found", checkReason: "quote-not-on-pages" }, cited);
+}
+
+/**
+ * A part's text without the lines of a running header or footer it took in at
+ * its page's top or foot (`SelectedPart.linesBefore`), which processing peeled
+ * off the stored page (../documents/boilerplate): the fewest lines left out
+ * such that the rest is on the page and, where lines were left out, starts or
+ * ends it; "" when every line may be such a line and no fewer will do. As it
+ * is when no such cut is on the page.
+ */
+function withoutRunningLines(part: SelectedPart, unit: PageText, matching: Matching): string {
+  const lines = part.text.split("\n").filter((line) => line.trim() !== "");
+  const { edgeLines } = BOILERPLATE_PARAMETERS;
+  const top = part.linesBefore === undefined ? 0 : Math.max(0, edgeLines - part.linesBefore);
+  const foot = part.linesAfter === undefined ? 0 : Math.max(0, edgeLines - part.linesAfter);
+  const pageStart = unit.text.length - unit.text.trimStart().length;
+  const pageEnd = unit.text.trimEnd().length;
+  for (let cut = 0; cut <= top + foot; cut++) {
+    for (let fromTop = Math.min(cut, top); fromTop >= 0 && cut - fromTop <= foot; fromTop--) {
+      const fromFoot = cut - fromTop;
+      const kept = lines.slice(fromTop, lines.length - fromFoot);
+      if (kept.length === 0) return "";
+      const found = quoteInUnits([unit], kept.join("\n"), matching);
+      if (!found) continue;
+      if (fromTop > 0 && (found[0]?.start ?? 0) > pageStart) continue;
+      if (fromFoot > 0 && (found.at(-1)?.end ?? 0) < pageEnd) continue;
+      return kept.join("\n");
+    }
+  }
+  return part.text;
+}
+
+/**
+ * Cites what the User selected in a Document's viewer (see
+ * `CoreApi.citeSelection`): parts on known Units are checked in those Units
+ * alone, which become the Citation's, so it points where the User selected,
+ * not at the same words elsewhere. Parts on no known Unit are looked for in
+ * the whole Document. The quote is read as words (`readableQuote`), its
+ * radical look-alikes the ideographs they stand for.
+ */
+export function citeSelection(
+  documents: RecheckDocuments,
+  input: { documentId: string; parts: readonly SelectedPart[] },
+): CitedSelection {
+  const raw = input.parts.map((part) => part.text).join("\n");
+  const all = foldRadicals(readableQuoteText(raw));
+  const nowhere: PageRange = { pageFrom: null, pageTo: null };
+  const contentHash = documents.currentVersion(input.documentId);
+  if (contentHash === null) return { ...removedFrom(nowhere), quote: all };
+  const version = currentVersion(documents, input.documentId, contentHash);
+  const { units, matching, inRange } = version;
+  /** The quote checked in these Units: as their text has it where it is found there. */
+  const citeIn = (range: PageRange, text: string): CitedSelection => {
+    const covered = inRange(range);
+    const found = quoteInUnits(covered, text, matching);
+    const quote = foldRadicals(
+      found ? readableQuote(joinUnits(covered).text, found) : readableQuoteText(text),
+    );
+    return { ...version.result(found ? FOUND : NOT_ON_PAGES, range, quote), quote };
+  };
+  const refused = (check: CheckResult, range: PageRange): CitedSelection => ({
+    ...version.result(check, range, all),
+    quote: all,
+  });
+  if (units.every((unit) => unit.text.trim() === "")) {
+    return refused({ check: "cant-check", checkReason: "no-text" }, nowhere);
+  }
+  if (all === "") return refused(NOT_ON_PAGES, nowhere);
+  // A whole TXT or Markdown file stored before Units is checked as one text.
+  if (units.length === 1 && units[0]?.kind === "text") return citeIn(nowhere, raw);
+  if (input.parts.some((part) => part.unit === null)) {
+    const located = locateQuote(units, raw, matching);
+    return located ? citeIn(located, raw) : refused(NOT_ON_PAGES, nowhere);
+  }
+  const numbers = input.parts.map((part) => part.unit as number);
+  const spread = { pageFrom: Math.min(...numbers), pageTo: Math.max(...numbers) };
+  // A page at each end may hold nothing but a running header or footer: more can't be cited.
+  if (spread.pageTo - spread.pageFrom + 1 > MAX_CITED_PAGES + 2) {
+    return refused({ check: "not-found", checkReason: "too-many-pages" }, spread);
+  }
+  const kept = input.parts.flatMap((part) => {
+    const unit = units.find((each) => each.page === part.unit);
+    const text = unit ? withoutRunningLines(part, unit, matching) : part.text;
+    return text.trim() === "" ? [] : [{ unit: part.unit as number, text }];
+  });
+  const first = kept[0];
+  const last = kept.at(-1);
+  if (!first || !last) return refused(NOT_ON_PAGES, nowhere);
+  const range = { pageFrom: first.unit, pageTo: last.unit };
+  const text = kept.map((part) => part.text).join("\n");
+  const covered = inRange(range);
+  const [start, end] = [covered[0], covered.at(-1)];
+  if (
+    range.pageTo - range.pageFrom + 1 > MAX_CITED_PAGES ||
+    (start && end && !sameRun(start, end))
+  ) {
+    const quote = foldRadicals(readableQuoteText(text));
+    return {
+      ...version.result({ check: "not-found", checkReason: "too-many-pages" }, range, quote),
+      quote,
+    };
+  }
+  return citeIn(range, text);
 }
 
 /**

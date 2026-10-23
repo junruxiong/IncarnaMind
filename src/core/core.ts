@@ -50,7 +50,7 @@ import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
-import { recheckCitation, recheckKept } from "./answers/citations";
+import { citeSelection, recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
   addCitedVersions,
@@ -90,6 +90,7 @@ import {
   type SavedFile,
   type ScannedQuoteInput,
   type SearchScope,
+  type SelectedPart,
   type Task,
   type UnlockDocumentInput,
   type UnreadFile,
@@ -421,6 +422,23 @@ function parseQuoted(input: unknown): ScannedQuoteInput {
     pageFrom: unit(input.pageFrom),
     pageTo: unit(input.pageTo),
     quote: input.quote,
+  };
+}
+
+function parseSelectedPart(input: unknown): SelectedPart {
+  if (!isRecord(input) || typeof input.text !== "string") {
+    throw new InvalidInputError("Each part of a selection is its text and its Unit.");
+  }
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+  const unit = count(input.unit);
+  const linesBefore = count(input.linesBefore);
+  const linesAfter = count(input.linesAfter);
+  return {
+    unit: unit !== undefined && unit >= 1 ? unit : null,
+    text: input.text,
+    ...(linesBefore !== undefined && { linesBefore }),
+    ...(linesAfter !== undefined && { linesAfter }),
   };
 }
 
@@ -3744,6 +3762,18 @@ export function createCore(adapters: CoreAdapters): Core {
         quote: typeof input.quote === "string" ? input.quote : "",
         pageFrom: page(input.pageFrom),
         pageTo: page(input.pageTo) ?? page(input.pageFrom),
+      });
+    },
+    citeSelection: async (input) => {
+      if (!isRecord(input) || typeof input.documentId !== "string" || input.documentId === "") {
+        throw new InvalidInputError("citeSelection needs the Document's id.");
+      }
+      if (!Array.isArray(input.parts) || input.parts.length === 0) {
+        throw new InvalidInputError("citeSelection needs the selected text, part by part.");
+      }
+      return citeSelection(documents, {
+        documentId: input.documentId,
+        parts: input.parts.map(parseSelectedPart),
       });
     },
     searchPassages: (query, options) => documents.search(query, options),
