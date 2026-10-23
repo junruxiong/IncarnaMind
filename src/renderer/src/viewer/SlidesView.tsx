@@ -122,7 +122,7 @@ function pictureParts(slide: SlideDrawing): string[] {
   return parts;
 }
 
-/** The slide a node is on, its notes included: the Unit a selection there is cited by. */
+// A slide's speaker notes are part of its Unit (ADR-0011).
 const slideOf = (node: Node) => {
   const slide = node.parentElement?.closest<HTMLElement>("[data-slide]")?.dataset.slide;
   return slide ? Number(slide) : null;

@@ -83,10 +83,8 @@ export function pdfSelection(range: Range, root: Element): ReadSelection {
   return { parts };
 }
 
-/** How much of the text around a selection goes with it (`SelectedPart.before`), in characters. */
 const AROUND = 80;
 
-/** Where `range` starts and ends in a text node it covers some of. */
 function clipOf(node: Text, range: Range): [number, number] | null {
   if (!range.intersectsNode(node)) return null;
   const from = node === range.startContainer ? range.startOffset : 0;
@@ -94,7 +92,6 @@ function clipOf(node: Text, range: Range): [number, number] | null {
   return from < to ? [from, to] : null;
 }
 
-/** `spans` of `text` as the parts the core cites, the words around them on their ends. */
 function partsOf(
   text: string,
   spans: readonly { unit: number | null; start: number; end: number }[],

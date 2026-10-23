@@ -495,7 +495,7 @@ function placesOf(text: string, quote: string, options: MatchOptions): TextRange
   return places;
 }
 
-/** About how many characters of the words around a selection are matched with it, the most first. */
+// Characters of the words around a selection matched with it, the most first.
 const CONTEXT_LENGTHS = [60, 24, 8, 0];
 
 // The far end may cut a word: it is left out, or a word the page writes whole would never match.

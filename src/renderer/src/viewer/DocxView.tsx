@@ -24,7 +24,7 @@ import { useDocumentFile } from "./useDocumentFile";
 import { ViewerHeader } from "./ViewerHeader";
 import { confirmDrawn, type DrawnTarget, drawnTargetOf } from "./wordPlaces";
 
-/** What `read` reads of the drawn pages with the footnotes' numbers, set as superscripts, left out. */
+// A footnote's number, set as a superscript in the text, isn't in the text a quote is checked against.
 function withoutFootnoteNumbers<T>(body: HTMLElement, read: () => T): T {
   const numbers = [...body.querySelectorAll<HTMLElement>("sup")].filter((sup) =>
     /^\s*\d{1,3}\s*$/.test(sup.textContent ?? ""),
@@ -312,8 +312,6 @@ function DocxPages({ loaded, target }: { loaded: Loaded; target: ViewerTarget })
         markQuote(textNodes(body), quote) ??
         inNotes(comments.current);
       found = find();
-      // A footnote's number in the text isn't in the text a quote is checked
-      // against: read on across numbers set as superscripts, and try again.
       if (!found) found = withoutFootnoteNumbers(body, find);
     }
     setMarks(found ?? []);
