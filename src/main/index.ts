@@ -76,8 +76,12 @@ if (instanceLock?.timedOut) {
   app.whenReady().then(() => {
     const language = resolveLanguage("system", app.getPreferredSystemLanguages());
     const { title, detail } = busyDialog(language);
-    dialog.showErrorBox(title, detail);
-    app.exit(0);
+    // A copy left running would keep Electron's lock, and every later launch would quit unseen.
+    try {
+      dialog.showErrorBox(title, detail);
+    } finally {
+      app.exit(0);
+    }
   });
 } else if (!ownsDataFolder) {
   logger.info("app.anotherCopyRunning");
