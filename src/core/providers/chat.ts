@@ -90,9 +90,17 @@ const MODEL_LIST_TTL_MS = 5 * 60_000;
 /**
  * The chat flow: what a Question sends to a cloud chat provider. While a
  * Connector is on, the core adds "tool-results" (what its Tools return),
- * which makes it ask again.
+ * which makes it ask again. The names of Documents, another Mind a Question
+ * names and a Meeting's live Transcript went before the lines named them:
+ * a User who allowed the flow earlier is asked once more.
  */
-export const CHAT_FLOW_SENDS = ["blocks", "passages"] as const;
+export const CHAT_FLOW_SENDS = [
+  "blocks",
+  "passages",
+  "document-names",
+  "other-minds",
+  "live-transcript",
+] as const;
 
 const TEST_TIMEOUT_MS = 30_000;
 

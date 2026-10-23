@@ -2493,6 +2493,10 @@ export interface DocumentScanProgress {
  * - "skipped": the Document has no text to tag (processing failed, or found none).
  * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
  *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
+ * - "off": the Document came in while automatic tagging and sorting was off
+ *   (`LibrarySettings.automatic`, off for a cloud model until the User turns
+ *   it on): nothing is sent for it, and turning the switch on doesn't tag
+ *   it. A re-tag the User asks for does.
  */
 export type TaggingState =
   | "pending"
@@ -2502,7 +2506,8 @@ export type TaggingState =
   | "no-tags"
   | "failed"
   | "skipped"
-  | "stopped";
+  | "stopped"
+  | "off";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -6245,6 +6250,9 @@ export const dataKinds = [
   "references",
   "connector-search",
   "meeting-audio",
+  "document-names",
+  "other-minds",
+  "live-transcript",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -6300,6 +6308,12 @@ export type DataKind = (typeof dataKinds)[number];
  *   voices included, to the cloud transcription service the User chose in
  *   Settings › Meetings or on the first-meeting sheet (#141). Choosing it
  *   allows it; none in local mode.
+ * - "scan-images": when Organize or the Library's automatic grouping meets a
+ *   PDF with no text after reading and OCR (a scan), up to 3 of its page
+ *   images, to the service of the model that reads them (the chosen model's,
+ *   else the image model's). Not allowed by choosing the provider (#1613):
+ *   the User allows it here, in Settings › Privacy, and without it the scan
+ *   stays unsorted. A model on this computer needs no consent.
  */
 export const dataFlowIds = [
   "chat",
@@ -6318,22 +6332,23 @@ export const dataFlowIds = [
   "web-search",
   "connector-registry",
   "transcription",
+  "scan-images",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
- * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says. That line is
- * made from this list, so a flow added here needs its words (`chosenFlowLines`).
+ * The flows choosing the chat model's provider allows (ADR-0022): what runs
+ * by itself, as the line above "Use this provider" says. That line is made from
+ * this list, so a flow added here needs its words (`chosenFlowLines`). Tagging and
+ * sorting Documents aren't in it: the User turns them on (Settings › Tagging) or
+ * asks for them, and that is their consent (#1617).
  */
 export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
   "checks",
   "suggestions",
   "edits",
-  "tagging",
-  "classification",
 ] as const satisfies readonly DataFlowId[];
 
 export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
@@ -8420,6 +8435,8 @@ export interface CoreApi {
   stopTagging(): Promise<(string | null)[]>;
   /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
   setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
+  /** Closes the Library's one-time line that automatic tagging and sorting went off (`LibrarySnapshot.automaticOffNotice`). */
+  dismissAutomaticOffNotice(): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -10423,6 +10440,7 @@ const methods: Record<CoreApiMethod, true> = {
   classifyDocuments: true,
   stopTagging: true,
   setTaggingWithAi: true,
+  dismissAutomaticOffNotice: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,

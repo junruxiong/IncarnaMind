@@ -32,6 +32,8 @@ test("the Privacy page lists the data flows and the update check, and offers no 
       baseUrl: "https://llm.example.com/v1",
       modelId: "example-model",
     });
+    // Tagging and sorting by themselves start off for it; turning them on is the consent too.
+    await bridge.saveLibrarySettings({ ...(await bridge.getLibrary()).settings, automatic: true });
   });
 
   const privacy = await openPrivacySettings(window);
@@ -40,10 +42,6 @@ test("the Privacy page lists the data flows and the update check, and offers no 
   await expect(statement).toContainText("Only these services receive anything");
   await privacy.getByTestId("privacy-flows-intro-details").click();
   await expect(privacy).toContainText("asks it not to store your requests");
-  // The Chat line names the main parts only, and says so.
-  await expect(privacy.getByTestId("privacy-chat-more")).toContainText(
-    "Chat sends more than its line names",
-  );
 
   // The statement, then the services, then the switch, then the other traffic.
   const service = privacy.getByTestId("data-service");

@@ -156,7 +156,7 @@ import { safeFileName, writeNewFile } from "./fileNames";
 import { createFolders } from "./folders";
 import { LANGUAGES, systemRegion } from "./language";
 import { createLayouts } from "./layout";
-import { CLASSIFICATION_FLOW_SENDS, createLibrary } from "./library";
+import { CLASSIFICATION_FLOW_SENDS, createLibrary, SCAN_IMAGES_FLOW_SENDS } from "./library";
 import { automaticGroupClassifier } from "./library/automatic";
 import { createBatches } from "./library/batches";
 import {
@@ -2188,6 +2188,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizesNewDocuments(),
+    automatic: () => library.settings().automatic,
     organizing: (id) => organizing() && library.isOrganizing(id),
     stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
@@ -2277,9 +2278,28 @@ export function createCore(adapters: CoreAdapters): Core {
           return supportsLibraryImages(classifier.modelId) && classifier.usePageImages === true;
         case "jev":
           return false;
-        case "chat":
-          return chat.readsImages(classifier.choice) || chat.imageModel(classifier.choice) !== null;
+        case "chat": {
+          const reader = chat.imageModel(classifier.choice);
+          return reader !== null && scanImagesAllowed(reader);
+        }
       }
+    },
+    usesCloud: ({ classifier, organizeWith }) => {
+      const sorts = classifier.kind === "automatic" ? organizeWith : classifier;
+      if (sorts && tagging.service(sorts) !== null) return true;
+      if (classifier.kind !== "automatic") return tagging.service(classifier) !== null;
+      const picked = tagging.lastResolved();
+      if (picked) return tagging.service(picked) !== null;
+      // Not worked out yet: Jev, else the chat model, where Automatic looks first.
+      if (jev.service()) return true;
+      const chosen = settings.get().user.chatModel;
+      return !!chosen && chat.describeModel(chosen)?.service !== null;
+    },
+    pagesWaitFor: (classifier) => {
+      if (classifier.kind !== "chat") return null;
+      const reader = chat.imageModel(classifier.choice);
+      const service = reader && chat.describeModel(reader)?.service;
+      return service && !scanImagesAllowed(reader) ? service : null;
     },
     async pageImages(id, contentHash, signal) {
       try {
@@ -2329,15 +2349,15 @@ export function createCore(adapters: CoreAdapters): Core {
       const prepared = await chat.prepareModel(choice, "classification");
       if (embedding.localOnly() && prepared.provider.service)
         throw new TaggingNotReadyError({ key: "error.tagging.cloudPaused" });
-      // prepareModel got consent for everything the classification flow sends, page images included.
-      const images = readsImages(prepared.capabilities);
+      // A scan's page images go only where the User allowed them (the "scan-images" flow).
+      const images = readsImages(prepared.capabilities) && scanImagesAllowed(choice);
       let chosen: GroupClassifier = {
         ...chatGroupClassifier(prepared.model, prepared.provider.service === null, images),
         model: { id: choice.modelId, images, reason: "selected" as const },
       };
       // A scan goes to the image model when this one can't read its pages.
-      const imageModel = images ? null : chat.imageModel(choice);
-      if (imageModel) {
+      const imageModel = readsImages(prepared.capabilities) ? null : chat.imageModel(choice);
+      if (imageModel && scanImagesAllowed(imageModel)) {
         chosen = withPageReader(chosen, async () => {
           const reader = await chat.prepareModel(imageModel, "classification");
           return {
@@ -2350,6 +2370,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return plan ? pacedBy(chosen, plan.run) : chosen;
     },
   });
+  function scanImagesAllowed(reader: ChatModelChoice): boolean {
+    const service = chat.describeModel(reader)?.service;
+    return !service || consent.allows("scan-images", service);
+  }
   /** The services Organize sends to: its model's, and the image model's for the scans it can't read. */
   const classificationServices = async (): Promise<ExternalService[]> => {
     const classifier = organizeModelOf(library.settings());
@@ -2366,6 +2390,18 @@ export function createCore(adapters: CoreAdapters): Core {
     sends: CLASSIFICATION_FLOW_SENDS,
     background: true,
     services: classificationServices,
+  });
+  // The page images of a scan with no text, a flow of their own that choosing a provider doesn't allow.
+  consent.registry.register({
+    id: "scan-images",
+    sends: SCAN_IMAGES_FLOW_SENDS,
+    background: true,
+    services: async () => {
+      const classifier = organizeModelOf(library.settings());
+      const reader = classifier?.kind === "chat" ? chat.imageModel(classifier.choice) : null;
+      const service = reader && chat.describeModel(reader)?.service;
+      return service ? [service] : [];
+    },
   });
   libraryDocumentChanged = (id) => library.documentChanged(id);
   library.start();
@@ -2496,7 +2532,14 @@ export function createCore(adapters: CoreAdapters): Core {
     if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
+    // The switch for tagging and sorting follows the model until the User sets it: say when it moved.
+    const automatic = library.settings().automatic;
+    if (automatic !== lastAutomatic) {
+      lastAutomatic = automatic;
+      events.emit("library.changed", null);
+    }
   };
+  let lastAutomatic = library.settings().automatic;
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -3929,18 +3972,20 @@ export function createCore(adapters: CoreAdapters): Core {
       const after = library.settings();
       // Choosing the model that tags or organizes Documents, where a line says what goes,
       // allows it (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      const switchedOn = !before.automatic && after.automatic;
       const tagsAnew = JSON.stringify(after.classifier) !== JSON.stringify(before.classifier);
       const organizesAnew =
         JSON.stringify(organizeModelOf(after)) !== JSON.stringify(organizeModelOf(before));
-      if (tagsAnew) {
+      // Turning on tagging and sorting by themselves, where a line says what goes, is the consent too (#1617).
+      if (tagsAnew || switchedOn) {
         for (const service of await taggingServices()) consent.choose(["tagging"], service);
       }
-      if (organizesAnew) {
+      if (organizesAnew || switchedOn) {
         for (const service of await classificationServices()) {
           consent.choose(["classification"], service);
         }
       }
-      if (tagsAnew || organizesAnew) await dataFlowsChanged();
+      if (tagsAnew || organizesAnew || switchedOn) await dataFlowsChanged();
       await taggingChanged();
     },
     getTaggingModels: async () => {
@@ -4094,6 +4139,7 @@ export function createCore(adapters: CoreAdapters): Core {
       library.setTaggingStopped([folderId], !on);
       tagger.resume();
     },
+    dismissAutomaticOffNotice: async () => library.dismissAutomaticOffNotice(),
 
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {
