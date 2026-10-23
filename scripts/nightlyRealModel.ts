@@ -45,6 +45,7 @@ type Provider = keyof typeof SECRETS;
 export const RATES: Readonly<Record<string, Price>> = {
   "claude-haiku-5-5": { currency: "USD", input: 0.1, output: 0.5, cacheRead: 0.01 },
   "claude-sonnet-5-5": { currency: "USD", input: 2, output: 10, cacheRead: 0.1 },
+  "claude-opus-5-5": { currency: "USD", input: 4, output: 20, cacheRead: 0.2 },
   "kimi-k2.6": { currency: "CNY", input: 6.5, output: 27, cacheRead: 1.1 },
   "kimi-k3": { currency: "CNY", input: 20, output: 100, cacheRead: 2 },
 };
@@ -63,6 +64,8 @@ export interface Step {
   id: string;
   name: string;
   provider: Provider;
+  /** The step is stopped, and fails, when it takes longer. */
+  minutes: number;
   results: "vitest" | "everyday";
   command: (folder: string) => string[];
   env: (key: string) => Record<string, string>;
@@ -89,8 +92,9 @@ const requests = (fallback?: string): Record<string, string> => {
 export const STEPS: readonly Step[] = [
   {
     id: "live",
-    name: "Live tests on Claude Haiku 5.5",
+    name: "Live tests on Claude",
     provider: "anthropic",
+    minutes: 45,
     results: "vitest",
     command: (folder) => vitestRun("tests/live", folder),
     env: (key) => ({
@@ -102,6 +106,7 @@ export const STEPS: readonly Step[] = [
     id: "everyday",
     name: "Everyday requests on Claude Haiku 5.5",
     provider: "anthropic",
+    minutes: 150,
     results: "everyday",
     command: () => ["npm", "run", "eval:everyday"],
     env: (key) => ({
@@ -115,6 +120,7 @@ export const STEPS: readonly Step[] = [
     id: "kimi-live",
     name: "Kimi International answers",
     provider: "kimi",
+    minutes: 15,
     results: "vitest",
     command: (folder) => vitestRun("tests/live/providers.live.test.ts", folder),
     env: (key) => ({ MOONSHOT_API_KEY: key, KIMI_REGION: "intl" }),
@@ -123,6 +129,7 @@ export const STEPS: readonly Step[] = [
     id: "kimi-everyday",
     name: "Everyday requests in Chinese on Kimi K2.6",
     provider: "kimi",
+    minutes: 90,
     results: "everyday",
     command: () => ["npm", "run", "eval:everyday"],
     env: (key) => ({
@@ -162,7 +169,8 @@ export interface Attempt {
   log: string;
   seconds: number;
   outOfCredit: boolean;
-  skipped?: true;
+  /** The step didn't run, and why. */
+  skipped?: string;
 }
 
 type Execute = (
@@ -173,30 +181,43 @@ type Execute = (
 /**
  * Runs each step with the first key of its provider that still has credit. A step that fails
  * saying a key is out of credit runs again with the next one, and every step after it starts there.
+ * `stop` says, before each step, whether the night should go no further (and why); `after` hears
+ * each attempt as it ends.
  */
-export async function runSteps(steps: readonly Step[], execute: Execute): Promise<Attempt[]> {
+export async function runSteps(
+  steps: readonly Step[],
+  execute: Execute,
+  {
+    stop,
+    after,
+  }: {
+    stop?: (attempts: readonly Attempt[]) => string | null;
+    after?: (attempts: readonly Attempt[]) => void;
+  } = {},
+): Promise<Attempt[]> {
   const attempts: Attempt[] = [];
   const spent = new Set<string>();
+  const notRun = (step: Step, secret: string, skipped: string) => {
+    attempts.push({ step, secret, exitCode: 1, log: "", seconds: 0, outOfCredit: false, skipped });
+    after?.(attempts);
+  };
   for (const step of steps) {
     const names = SECRETS[step.provider];
+    const why = stop?.(attempts);
+    if (why) {
+      notRun(step, names.find((name) => !spent.has(name)) ?? names.at(-1) ?? "", why);
+      continue;
+    }
     const candidates = names.filter((name) => !spent.has(name));
     if (candidates.length === 0) {
-      const secret = names.at(-1) ?? "";
-      attempts.push({
-        step,
-        secret,
-        exitCode: 1,
-        log: "",
-        seconds: 0,
-        outOfCredit: true,
-        skipped: true,
-      });
+      notRun(step, names.at(-1) ?? "", "every key is out of credit");
       continue;
     }
     for (const secret of candidates) {
       const run = await execute(step, secret);
       const outOfCredit = run.exitCode !== 0 && OUT_OF_CREDIT.test(run.log);
       attempts.push({ step, secret, outOfCredit, ...run });
+      after?.(attempts);
       if (!outOfCredit) break;
       spent.add(secret);
     }
@@ -227,10 +248,21 @@ export function spendOf(
 
 export interface Result extends Attempt {
   cases: Case[];
+  /** Cases that skipped themselves, as the live tests do without their provider's key. */
+  skippedCases?: number;
   usage: Counted[];
 }
 
 const cell = (text: string) => text.replace(/\|/g, "\\|");
+
+/** The last line of a step's log that names an error, or none. */
+function failureLine(log: string): string {
+  const line = log
+    .split("\n")
+    .filter((each) => /\b(?:Error|Stopped after)\b/.test(each))
+    .at(-1);
+  return line ? line.trim().slice(0, 240) : "";
+}
 
 /** The night's report: a line for each step, then a result for every case, and what it spent. */
 export function summary(
@@ -255,23 +287,30 @@ export function summary(
     const dollars = spend.reduce((sum, each) => sum + each.dollars, 0);
     total += dollars;
     unpriced += spend.reduce((sum, each) => sum + each.unpricedTokens, 0);
-    const ok = last.exitCode === 0;
+    const ran = last.cases.length > 0;
+    const ok = last.exitCode === 0 && ran;
     passed &&= ok;
     const failing = last.cases.filter((each) => !each.passed).length;
     const minutes = (tries.reduce((sum, attempt) => sum + attempt.seconds, 0) / 60).toFixed(1);
+    const skippedCases = last.skippedCases ? ` (${last.skippedCases} skipped)` : "";
+    const outcome = last.skipped ? "**not run**" : ok ? "passed" : "**failed**";
     rows.push(
-      `| ${step.name} | ${last.secret} | ${ok ? "passed" : "**failed**"} | ${last.cases.length - failing} of ${last.cases.length} | $${dollars.toFixed(2)} | ${minutes} min |`,
+      `| ${step.name} | ${last.secret} | ${outcome} | ${last.cases.length - failing} of ${last.cases.length}${skippedCases} | $${dollars.toFixed(2)} | ${minutes} min |`,
     );
+    const why = last.skipped
+      ? `Not run: ${last.skipped}.`
+      : last.exitCode === 0
+        ? "No case ran: every test skipped itself, or the requests named no case."
+        : "No results: read the job's log.";
+    const reason = failureLine(last.log);
     sections.push(
       `## ${step.name}`,
       "",
-      ...(last.cases.length === 0
-        ? [
-            last.skipped
-              ? "Not run: every key is out of credit."
-              : "No results: read the job's log.",
-            "",
-          ]
+      ...(ran && !ok && failing === 0 && reason
+        ? [`The step failed, every case passed: ${reason}`, ""]
+        : []),
+      ...(!ran
+        ? [last.skipped ? why : reason ? `${why} ${reason}` : why, ""]
         : [
             "| Case | Result |",
             "|---|---|",
@@ -329,28 +368,29 @@ interface EverydayReport {
   }[];
 }
 
-function casesOf(step: Step, folder: string): Case[] {
+function casesOf(step: Step, folder: string): { cases: Case[]; skipped: number } {
   if (step.results === "everyday") {
     const report = readJson(join(folder, "everyday", "report.json")) as EverydayReport | null;
-    return (report?.rows ?? []).map((row) => ({
+    const cases = (report?.rows ?? []).map((row) => ({
       name: `${row.id} (${row.language})`,
       passed: !row.under,
       detail: `${row.passed} of ${row.runs} runs passed, floor ${Math.round(row.floor * 100)}%`,
     }));
+    return { cases, skipped: 0 };
   }
   const report = readJson(join(folder, "vitest.json")) as VitestReport | null;
-  return (report?.testResults ?? []).flatMap((file) =>
-    (file.assertionResults ?? [])
-      .filter((each) => each.status === "passed" || each.status === "failed")
-      .map((each) => {
-        const reason = each.failureMessages?.[0]?.split("\n")[0]?.slice(0, 200);
-        return {
-          name: each.fullName,
-          passed: each.status === "passed",
-          ...(reason && { detail: reason }),
-        };
-      }),
-  );
+  const all = (report?.testResults ?? []).flatMap((file) => file.assertionResults ?? []);
+  const cases = all
+    .filter((each) => each.status === "passed" || each.status === "failed")
+    .map((each) => {
+      const reason = each.failureMessages?.[0]?.split("\n")[0]?.slice(0, 200);
+      return {
+        name: each.fullName,
+        passed: each.status === "passed",
+        ...(reason && { detail: reason }),
+      };
+    });
+  return { cases, skipped: all.length - cases.length };
 }
 
 const everydayReports = () => {
@@ -360,7 +400,7 @@ const everydayReports = () => {
   );
 };
 
-function executeIn(out: string, env: Readonly<Record<string, string | undefined>>): Execute {
+export function executeIn(out: string, env: Readonly<Record<string, string | undefined>>): Execute {
   const preload = pathToFileURL(join(ROOT, "scripts", "usageTally.ts")).href;
   return (step, secret) => {
     const folder = join(out, step.id, secret);
@@ -373,12 +413,26 @@ function executeIn(out: string, env: Readonly<Record<string, string | undefined>
     const begun = Date.now();
     const [command = "", ...args] = step.command(folder);
     return new Promise((done) => {
+      // Its own process group, so that stopping a step stops what it started too.
       const run = spawn(command, args, {
         cwd: ROOT,
         env: child,
         stdio: ["ignore", "pipe", "pipe"],
+        detached: true,
       });
       let log = "";
+      const stopGroup = (signal: NodeJS.Signals) => {
+        try {
+          if (run.pid !== undefined) process.kill(-run.pid, signal);
+        } catch {
+          // It has already ended.
+        }
+      };
+      const timer = setTimeout(() => {
+        log += `\nStopped after ${step.minutes} minutes.\n`;
+        stopGroup("SIGTERM");
+        setTimeout(() => stopGroup("SIGKILL"), 10_000).unref();
+      }, step.minutes * 60_000);
       for (const [stream, to] of [
         [run.stdout, process.stdout],
         [run.stderr, process.stderr],
@@ -389,6 +443,7 @@ function executeIn(out: string, env: Readonly<Record<string, string | undefined>
         });
       }
       const finish = (exitCode: number) => {
+        clearTimeout(timer);
         for (const name of everydayReports()) {
           if (before.has(name)) continue;
           cpSync(join(ROOT, "eval", "results", name), join(folder, "everyday"), {
@@ -409,7 +464,6 @@ function executeIn(out: string, env: Readonly<Record<string, string | undefined>
 const withoutKeys = (text: string, keys: readonly string[]) =>
   keys.reduce((rest, key) => rest.split(key).join("[key]"), text);
 
-/** Takes a key out of every file in a folder, should a report have caught one. */
 function removeKeys(folder: string, keys: readonly string[]): void {
   for (const entry of readdirSync(folder)) {
     const path = join(folder, entry);
@@ -423,8 +477,12 @@ function removeKeys(folder: string, keys: readonly string[]): void {
   }
 }
 
+/** The most a night may spend, in dollars, before it starts no further step. */
+const DEFAULT_MAX_USD = 10;
+
 async function main(): Promise<void> {
-  const env = process.env;
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const name of Object.values(SECRETS).flat()) env[name] = env[name]?.trim();
   const ids = (env.NIGHTLY_STEPS ?? "")
     .split(",")
     .map((id) => id.trim())
@@ -442,22 +500,42 @@ async function main(): Promise<void> {
     console.error(`${env.GITHUB_ACTIONS ? "::error::" : ""}${missingMessage(missing)}`);
     process.exit(1);
   }
+  const limit = Number(env.NIGHTLY_MAX_USD) > 0 ? Number(env.NIGHTLY_MAX_USD) : DEFAULT_MAX_USD;
   const out = resolve(ROOT, env.NIGHTLY_OUT ?? join("eval", "results", "nightly-real-model"));
   mkdirSync(out, { recursive: true });
-  const attempts = await runSteps(steps, executeIn(out, env));
-  const results = attempts.map((attempt) => {
-    const folder = join(out, attempt.step.id, attempt.secret);
-    return { ...attempt, cases: casesOf(attempt.step, folder), usage: readUsage(folder) };
-  });
   const keys = Object.values(SECRETS)
     .flat()
     .map((name) => env[name])
     .filter((key): key is string => Boolean(key));
-  const night = summary(results, new Date().toISOString().slice(0, 10));
-  const text = withoutKeys(night.text, keys);
-  writeFileSync(join(out, "summary.md"), text);
+  const date = new Date().toISOString().slice(0, 10);
+  const resultsOf = (attempts: readonly Attempt[]): Result[] =>
+    attempts.map((attempt) => {
+      const folder = join(out, attempt.step.id, attempt.secret);
+      const { cases, skipped } = casesOf(attempt.step, folder);
+      return { ...attempt, cases, skippedCases: skipped, usage: readUsage(folder) };
+    });
+  // The summary is written after every step, so a night that is cut off leaves its report.
+  const write = (attempts: readonly Attempt[]) => {
+    const text = withoutKeys(summary(resultsOf(attempts), date).text, keys);
+    writeFileSync(join(out, "summary.md"), text);
+    removeKeys(out, keys);
+    return text;
+  };
+  const attempts = await runSteps(steps, executeIn(out, env), {
+    after: write,
+    stop: (done) => {
+      const spent = resultsOf(done).reduce(
+        (sum, result) => sum + spendOf(result.usage, result.step.provider).dollars,
+        0,
+      );
+      return spent > limit
+        ? `the night has spent $${spent.toFixed(2)}, over its $${limit} limit`
+        : null;
+    },
+  });
+  const night = summary(resultsOf(attempts), date);
+  const text = write(attempts);
   if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
-  removeKeys(out, keys);
   console.log(text);
   process.exit(night.passed ? 0 : 1);
 }

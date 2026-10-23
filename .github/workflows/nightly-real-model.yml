@@ -35,6 +35,8 @@ concurrency:
 jobs:
   real-models:
     name: Real-model checks
+    # A run by hand from another branch would give that branch's files the keys.
+    if: github.repository == 'IncarnaMind/IncarnaMind' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 240
     steps:
@@ -44,8 +46,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Cache the models and the fetched Documents
-        uses: actions/cache@v4
+      - name: Restore the models and the fetched Documents
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/incarnamind-eval
           key: incarnamind-everyday-${{ hashFiles('src/core/embedding/model.ts', 'src/core/reranking/model.ts') }}
@@ -57,6 +59,13 @@ jobs:
           NIGHTLY_KIMI_KEY: ${{ secrets.NIGHTLY_KIMI_KEY }}
           NIGHTLY_STEPS: ${{ inputs.steps }}
           INCARNAMIND_EVAL_EVERYDAY: ${{ inputs.requests }}
+      # Saved even when a night is red, so the next one doesn't download the models again.
+      - name: Keep the models and the fetched Documents
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/incarnamind-eval
+          key: incarnamind-everyday-${{ hashFiles('src/core/embedding/model.ts', 'src/core/reranking/model.ts') }}
       - name: Upload the summary and the reports
         if: always()
         uses: actions/upload-artifact@v7

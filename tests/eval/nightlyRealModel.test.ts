@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   type Attempt,
+  executeIn,
   missingMessage,
   missingSecrets,
   OUT_OF_CREDIT,
@@ -9,11 +10,13 @@ import {
   runSteps,
   SECRETS,
   STEPS,
+  type Step,
   spendOf,
   summary,
 } from "../../scripts/nightlyRealModel";
 import { usageOf } from "../../scripts/usageTally";
 import { catalogFacts } from "../../src/core/providers/catalog";
+import { createTempDataFolder } from "../helpers/core";
 
 const [live, everyday, kimiLive] = STEPS;
 if (!live || !everyday || !kimiLive) throw new Error("The steps changed.");
@@ -91,7 +94,11 @@ describe("the second key", () => {
       return credit;
     });
     expect(asked).toEqual(["live NIGHTLY_ANTHROPIC_KEY_1", "live NIGHTLY_ANTHROPIC_KEY_2"]);
-    expect(attempts.at(-1)).toMatchObject({ step: everyday, skipped: true, exitCode: 1 });
+    expect(attempts.at(-1)).toMatchObject({
+      step: everyday,
+      skipped: "every key is out of credit",
+      exitCode: 1,
+    });
   });
 
   // protects=the words Anthropic and Kimi use for a used-up key are recognised; fails_when=a message from the provider's documentation no longer matches; no_claim=that the providers keep these words.
@@ -104,6 +111,108 @@ describe("the second key", () => {
       expect(OUT_OF_CREDIT.test(message)).toBe(true);
     }
     expect(OUT_OF_CREDIT.test("rate limit exceeded, retry in 20 s")).toBe(false);
+  });
+});
+
+describe("a night that goes wrong", () => {
+  const run = (exitCode: number, log = "") => ({ exitCode, log, seconds: 1 });
+
+  // protects=no further step starts once the night's spend is over its limit, and each says why; fails_when=a night with a key that spends without a cap goes on to the end; no_claim=what the limit is.
+  test("a night over its spend limit starts no further step", async () => {
+    const asked: string[] = [];
+    const attempts = await runSteps(
+      [live, everyday, kimiLive],
+      async (step) => {
+        asked.push(step.id);
+        return run(0);
+      },
+      {
+        stop: (done) =>
+          done.length >= 1 ? "the night has spent $11.00, over its $10 limit" : null,
+      },
+    );
+    expect(asked).toEqual(["live"]);
+    expect(attempts.map((each) => each.skipped)).toEqual([
+      undefined,
+      "the night has spent $11.00, over its $10 limit",
+      "the night has spent $11.00, over its $10 limit",
+    ]);
+  });
+
+  // protects=the report is written after each step, so a night that is cut off has one; fails_when=it is written only at the end; no_claim=none beyond protects.
+  test("each attempt is heard as it ends", async () => {
+    const heard: number[] = [];
+    await runSteps([live, everyday], async () => run(0), {
+      after: (done) => void heard.push(done.length),
+    });
+    expect(heard).toEqual([1, 2]);
+  });
+
+  // protects=a step that took longer than its time is stopped, with the child it started, and fails with a line saying so; fails_when=a step that hangs holds the night until the job's own limit; no_claim=how long a step may take.
+  test("a step that takes too long is stopped", async () => {
+    const folder = await createTempDataFolder();
+    const hanging: Step = {
+      id: "hanging",
+      name: "A step that hangs",
+      provider: "kimi",
+      minutes: 0.002,
+      results: "vitest",
+      command: () => ["node", "-e", "setTimeout(() => {}, 600000)"],
+      env: () => ({}),
+    };
+    const result = await executeIn(folder, { PATH: process.env.PATH })(hanging, "NIGHTLY_KIMI_KEY");
+    expect(result.exitCode).not.toBe(0);
+    expect(result.log).toContain("Stopped after 0.002 minutes.");
+  });
+
+  const none = (over: Partial<Result>): Result => ({
+    step: live,
+    secret: "NIGHTLY_ANTHROPIC_KEY_1",
+    exitCode: 0,
+    log: "",
+    seconds: 60,
+    outOfCredit: false,
+    cases: [],
+    usage: [],
+    ...over,
+  });
+
+  // protects=a step that ran no case never reports passed, however it ended, and says what happened; fails_when=every test skipping itself, or a typo in the requests, reads as a pass; no_claim=none beyond protects.
+  test("a step that ran no case did not pass", () => {
+    const quiet = summary([none({ skippedCases: 43 })], "2026-10-23");
+    expect(quiet.passed).toBe(false);
+    expect(quiet.text).toContain("**failed**");
+    expect(quiet.text).toContain("No case ran");
+    const skipped = summary(
+      [none({ cases: [{ name: "a", passed: true }], skippedCases: 43 })],
+      "2026-10-23",
+    );
+    expect(skipped.passed).toBe(true);
+    expect(skipped.text).toContain("1 of 1 (43 skipped)");
+  });
+
+  // protects=a step that failed with every case passed says why (the Everyday target for Supported sentences), and a step that did not run is named as not run; fails_when=the summary says only failed; no_claim=none beyond protects.
+  test("the reason for a failure no case shows, and a step that did not run", () => {
+    const night = summary(
+      [
+        none({
+          exitCode: 1,
+          cases: [{ name: "owner-1 (en)", passed: true }],
+          log: "x\nError: 90% of the cited sentences are Supported, under the target of 95%.\n",
+        }),
+        none({
+          step: everyday,
+          exitCode: 1,
+          skipped: "the night has spent $11.00, over its $10 limit",
+        }),
+      ],
+      "2026-10-23",
+    );
+    expect(night.text).toContain(
+      "every case passed: Error: 90% of the cited sentences are Supported",
+    );
+    expect(night.text).toContain("**not run**");
+    expect(night.text).toContain("Not run: the night has spent $11.00");
   });
 });
 
