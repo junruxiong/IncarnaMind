@@ -20,7 +20,7 @@ New issues are triaged with five labels:
 | `needs-owner` | Needs the owner or another person: an account, signing, a decision or hand-checked data |
 | `wontfix` | Won't be actioned |
 
-Anyone is welcome to take an issue labelled `ready-to-build`. A `needs-owner` issue needs an account, a decision or hand-checked data, so ask on it first. [`AGENTS.md`](AGENTS.md) holds the rules for working on the code, for people and coding agents alike, and `docs/agents/` holds the detail: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)), how to use the domain docs ([`domain.md`](docs/agents/domain.md)), the rules every UI change follows ([`interaction.md`](docs/agents/interaction.md)), and how to test so CI passes ([`testing.md`](docs/agents/testing.md)).
+Every triaged issue also has a priority label, `priority:P0` (do first) to `priority:P3` (after the alpha); [`triage-labels.md`](docs/agents/triage-labels.md) says what each means. Anyone is welcome to take an issue labelled `ready-to-build`. A `needs-owner` issue needs an account, a decision or hand-checked data, so ask on it first. [`AGENTS.md`](AGENTS.md) holds the rules for working on the code, for people and coding agents alike, and `docs/agents/` holds the detail: the issue tracker and its `gh` commands ([`issue-tracker.md`](docs/agents/issue-tracker.md)), the labels ([`triage-labels.md`](docs/agents/triage-labels.md)), how to use the domain docs ([`domain.md`](docs/agents/domain.md)), the rules every UI change follows ([`interaction.md`](docs/agents/interaction.md)), and how to test so CI passes ([`testing.md`](docs/agents/testing.md)).
 
 ## Setting up
 
@@ -46,4 +46,4 @@ Each commit in a pull request carries a sign-off line, which says you wrote the 
 Signed-off-by: Your Name <you@example.com>
 ```
 
-To add it to commits you've already made, run `git rebase --signoff main` and push again. A check on every pull request looks for it. There's no contributor licence agreement to sign.
+Commits carry your own name and sign-off, so the author line and the `Signed-off-by:` line name you. To add it to commits you've already made, run `git rebase --signoff main` and push again. A check on every pull request looks for it. There's no contributor licence agreement to sign.
