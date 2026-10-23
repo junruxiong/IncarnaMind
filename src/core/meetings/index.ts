@@ -27,6 +27,9 @@
  * its source, and nothing from it is kept, sent or transcribed until it is
  * resumed, while the computer's sound goes on. That is the Meeting's, not the
  * device's: every Meeting starts with its microphone on.
+ *
+ * A voice memo (#1568) is a Meeting of the User alone: it records the microphone only, from the
+ * moment it is made, in a Mind with no title, so the title line of its note names the Mind.
  */
 import { randomUUID } from "node:crypto";
 import { formatDay } from "../../shared/dates";
@@ -47,6 +50,7 @@ import {
   type MeetingGap,
   type MeetingHelp,
   type MeetingHelpTemplate,
+  type MeetingKind,
   type MeetingLevel,
   type MeetingSourceState,
   type Mind,
@@ -99,6 +103,7 @@ interface Period {
 interface MeetingRow {
   id: string;
   mind_id: string;
+  kind: MeetingKind;
   status: Meeting["status"];
   paused_by: Meeting["pausedBy"];
   system_audio: number;
@@ -113,7 +118,7 @@ interface MeetingRow {
 }
 
 const COLUMNS =
-  "id, mind_id, status, paused_by, system_audio, periods, started_at, stopped_at, audio_expires_at, audio_deleted_at, fill, created_at, updated_at";
+  "id, mind_id, kind, status, paused_by, system_audio, periods, started_at, stopped_at, audio_expires_at, audio_deleted_at, fill, created_at, updated_at";
 
 /** A Meeting's fill as stored: as the API has it, and the ids of the Blocks it added, for Undo. */
 export interface StoredFill extends MeetingFill {
@@ -191,6 +196,11 @@ function lossCauseOf(code: string): AudioLossCause {
   return "error";
 }
 
+/** Whether a Meeting is a voice memo: its Transcript asks before the Meetings are made. */
+export const isMemo = (db: Database, meetingId: string): boolean =>
+  db.get<Pick<MeetingRow, "kind">>("SELECT kind FROM meetings WHERE id = ?", [meetingId])?.kind ===
+  "memo";
+
 export function createMeetings(options: MeetingsOptions) {
   const { db, now, capture, transcripts, health, log } = options;
   const clock = () => Date.parse(now());
@@ -258,6 +268,7 @@ export function createMeetings(options: MeetingsOptions) {
     return {
       id: row.id,
       mindId: row.mind_id,
+      kind: row.kind,
       status: row.status,
       pausedBy: row.paused_by,
       systemAudio: row.system_audio === 1,
@@ -572,10 +583,19 @@ export function createMeetings(options: MeetingsOptions) {
     transcripts?.markMicrophonePause(meetingId, from, atMs);
   }
 
-  function assertNoneCapturing(meetingId: string): void {
+  function assertNoneCapturing(meetingId: string | null): void {
     if (live && live.meetingId !== meetingId) {
       throw new InvalidInputError({ key: "error.meeting.otherRecording" });
     }
+  }
+
+  /** What recording needs: a copy that records, the notice read, and nothing else capturing. */
+  function assertCanStart(meetingId: string | null): void {
+    if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
+    if (!options.noticeAccepted()) {
+      throw new InvalidInputError({ key: "error.meeting.noticeUnread" });
+    }
+    assertNoneCapturing(meetingId);
   }
 
   // ---- Retention ----
@@ -696,36 +716,64 @@ export function createMeetings(options: MeetingsOptions) {
     return input;
   };
 
+  /** A Meeting ready to record, in the empty Mind given or a new one; a memo's has no title. */
+  function insert(input: unknown, kind: MeetingKind): MeetingRow {
+    if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
+    const { mindId, folderId } = parseInput(input);
+    if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
+      throw new NotFoundError({ key: "error.mind.notFound" });
+    }
+    if (
+      typeof mindId === "string" &&
+      db.get("SELECT 1 FROM meetings WHERE mind_id = ? AND deleted_at IS NULL", [mindId])
+    ) {
+      throw new InvalidInputError("That Mind has a Meeting already.");
+    }
+    const id = randomUUID();
+    const at = now();
+    const systemAudio = kind === "meeting" && options.systemAudioByDefault();
+    db.transaction(() => {
+      const mind =
+        typeof mindId === "string"
+          ? mindId
+          : options.createMind(kind === "memo" ? "" : meetingTitle(), parseFolderChoice(folderId))
+              .id;
+      db.run(
+        `INSERT INTO meetings (id, mind_id, kind, status, system_audio, created_at, updated_at)
+         VALUES (?, ?, ?, 'ready', ?, ?, ?)`,
+        [id, mind, kind, systemAudio ? 1 : 0, at, at],
+      );
+    });
+    return rowOf(id);
+  }
+
+  function record(row: MeetingRow, system: boolean): Meeting {
+    const at = now();
+    const period: Period = { start: at, offsetMs: 0, durationMs: null, endedBy: null };
+    save(row.id, {
+      status: "recording",
+      system_audio: system ? 1 : 0,
+      periods: JSON.stringify([period]),
+      started_at: at,
+    });
+    begin(rowOf(row.id), period);
+    log.info("meeting.started", { meetingId: row.id, kind: row.kind, systemAudio: system });
+    changed();
+    return toMeeting(rowOf(row.id));
+  }
+
   return {
     list,
 
     create(input: unknown): Meeting {
-      if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
-      const { mindId, folderId } = parseInput(input);
-      if (mindId !== undefined && (typeof mindId !== "string" || !options.mindExists(mindId))) {
-        throw new NotFoundError({ key: "error.mind.notFound" });
-      }
-      if (
-        typeof mindId === "string" &&
-        db.get("SELECT 1 FROM meetings WHERE mind_id = ? AND deleted_at IS NULL", [mindId])
-      ) {
-        throw new InvalidInputError("That Mind has a Meeting already.");
-      }
-      const id = randomUUID();
-      const at = now();
-      db.transaction(() => {
-        const mind =
-          typeof mindId === "string"
-            ? mindId
-            : options.createMind(meetingTitle(), parseFolderChoice(folderId)).id;
-        db.run(
-          `INSERT INTO meetings (id, mind_id, status, system_audio, created_at, updated_at)
-           VALUES (?, ?, 'ready', ?, ?, ?)`,
-          [id, mind, options.systemAudioByDefault() ? 1 : 0, at, at],
-        );
-      });
+      const row = insert(input, "meeting");
       changed();
-      return toMeeting(rowOf(id));
+      return toMeeting(row);
+    },
+
+    recordMemo(input: unknown): Meeting {
+      assertCanStart(null);
+      return record(insert(input, "memo"), false);
     },
 
     discard(meetingId: unknown): void {
@@ -746,24 +794,8 @@ export function createMeetings(options: MeetingsOptions) {
       if (systemAudio !== undefined && typeof systemAudio !== "boolean") {
         throw new InvalidInputError("systemAudio must be true or false.");
       }
-      if (!capture) throw new InvalidInputError("This copy of IncarnaMind can't record audio.");
-      if (!options.noticeAccepted()) {
-        throw new InvalidInputError({ key: "error.meeting.noticeUnread" });
-      }
-      assertNoneCapturing(row.id);
-      const at = now();
-      const period: Period = { start: at, offsetMs: 0, durationMs: null, endedBy: null };
-      const system = systemAudio ?? row.system_audio === 1;
-      save(row.id, {
-        status: "recording",
-        system_audio: system ? 1 : 0,
-        periods: JSON.stringify([period]),
-        started_at: at,
-      });
-      begin(rowOf(row.id), period);
-      log.info("meeting.started", { meetingId: row.id, systemAudio: system });
-      changed();
-      return toMeeting(rowOf(row.id));
+      assertCanStart(row.id);
+      return record(row, row.kind === "meeting" && (systemAudio ?? row.system_audio === 1));
     },
 
     pause(meetingId: unknown): Meeting {
