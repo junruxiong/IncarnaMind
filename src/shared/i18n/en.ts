@@ -669,6 +669,11 @@ export const en = {
   "claim.cutUnsupported": "Cut the unsupported part",
   "claim.keepAsView": "Keep as my view",
   "claim.keptAsView": "Kept as your view",
+  "claim.cutSentence": "Cut it",
+  "claim.cutSentence.keywords": "delete remove sentence unsupported",
+  "claim.cutSentence.done": "Cut the sentence",
+  "claim.cutSentence.moved":
+    "Nothing was cut: the sentence isn’t where its check marked it. Check it again.",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
     "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",
@@ -2017,6 +2022,8 @@ export const en = {
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
   "providers.form.badKeyAt": "{region}: {host} refused this key. Check it on {site}.",
+  "providers.form.sendTo": "Send it to {region}",
+  "providers.form.sendTo.aria": "Send it to {region} ({host})",
 
   "providers.test.ok": "Connected: the provider answered.",
   "providers.test.auth": "The key was refused. Check that it is correct and still active.",

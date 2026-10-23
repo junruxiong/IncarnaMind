@@ -655,6 +655,10 @@ export const zhCN = {
   "claim.cutUnsupported": "删去无依据的部分",
   "claim.keepAsView": "保留为我的观点",
   "claim.keptAsView": "已保留为你的观点",
+  "claim.cutSentence": "删除这句",
+  "claim.cutSentence.keywords": "删除 删去 这句 无依据",
+  "claim.cutSentence.done": "已删除这句",
+  "claim.cutSentence.moved": "未能删除：这句话不在核对时标记的位置。请重新核对。",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
     "IncarnaMind 无法核对该判决是否存在、是否这样说。依赖前请在你的法律数据库中查证。",
@@ -1886,7 +1890,7 @@ export const zhCN = {
   "providers.form.keyNot": "这不是 {provider} 的密钥：{provider} 的密钥以 {prefixes} 开头。",
   "providers.form.keyNot.pick": "请选择它所属的服务。",
   "providers.form.keyAnyway": "仍用于 {provider}",
-  "providers.form.region": "地域",
+  "providers.form.region": "区域",
   "providers.region.cn": "中国",
   "providers.region.intl": "国际",
   "providers.form.more": "更多服务",
@@ -1941,6 +1945,8 @@ export const zhCN = {
   "providers.form.needsModel": "请先选择模型。",
   "providers.form.badKey": "这个密钥对 {provider} 无效。请到 {site} 检查。",
   "providers.form.badKeyAt": "{region}：{host} 拒绝了这个密钥。请到 {site} 检查。",
+  "providers.form.sendTo": "发送到{region}区域",
+  "providers.form.sendTo.aria": "发送到{region}区域（{host}）",
 
   "providers.test.ok": "连接成功：服务已响应。",
   "providers.test.auth": "密钥被拒绝。请检查密钥是否正确且仍然有效。",
