@@ -9,9 +9,12 @@
  *    User's own opinions (./findClaims), before the run is asked for, so its
  *    estimate counts them (`findMindClaims`), and only once. In "changed"
  *    mode it is shown only the sentences never checked since the last run,
- *    and the checks that need a re-check are made again without asking it.
- *    In "added" mode only the checks that Documents added since could change
- *    are made again, each in the scope it used (#993).
+ *    and the checks that need a re-check, or that couldn't be made, are made
+ *    again without asking it; with none of those, nothing is sent and the
+ *    plan says so (`unchanged`). "All" mode checks every marked sentence
+ *    again, and names claims only among the sentences never marked or
+ *    skipped. In "added" mode only the checks that Documents added since
+ *    could change are made again, each in the scope it used (#993).
  * 3. Each claim gets a "checking" mark at once, then its result, as Check
  *    against Documents gives it (./runChecks).
  * 4. The run is recorded in the Mind's settings (`MindCheckRun`): when, how
@@ -19,7 +22,7 @@
  *    next run doesn't send them again.
  */
 import { randomUUID } from "node:crypto";
-import { addedCouldChange, claimCheckShown } from "../../../shared/claimChecks";
+import { addedCouldChange, claimCheckShown, restsOn } from "../../../shared/claimChecks";
 import { readMindCheck, sentenceKey, writeMindCheck } from "../../../shared/mindCheck";
 import { mindModelOf } from "../../../shared/mindModel";
 import { mindScopeIn } from "../../../shared/mindScope";
@@ -119,6 +122,8 @@ interface Sending {
   skipped: Set<string>;
   /** In "added" mode, the checks to make again in every Document, as they were made. */
   widened: Set<SelectedSentence>;
+  /** In "changed" mode, when each check that still holds was made. */
+  held: string[];
 }
 
 export function createMindCheck(options: MindCheckOptions) {
@@ -236,11 +241,31 @@ export function createMindCheck(options: MindCheckOptions) {
             mark.element === sentence.element && mark.from < sentence.to && mark.to > sentence.from,
         );
       if (mode === "all") {
-        const fresh = sentences.filter((sentence) => !keptAsView(marks, sentence));
-        return { fresh, again: [], keys, skipped: new Set(), widened };
+        const fresh: SelectedSentence[] = [];
+        const again: SelectedSentence[] = [];
+        for (const sentence of sentences) {
+          if (keptAsView(marks, sentence)) continue;
+          if (markOf(sentence)) again.push(sentence);
+          else if (!skipped.has(sentenceKey(sentence.text))) fresh.push(sentence);
+        }
+        return { fresh, again, keys, skipped, widened, held: [] };
       }
       const fresh: SelectedSentence[] = [];
       const again: SelectedSentence[] = [];
+      const held: string[] = [];
+      const inScope = new Map<boolean, ReadonlySet<string> | null>();
+      const leftScope = (check: ClaimCheckAttributes) => {
+        const { widened: everyDocument } = check.scope;
+        if (!inScope.has(everyDocument)) {
+          const ids = options.scopeOf(mindId, everyDocument).check.scope.documentIds;
+          inScope.set(everyDocument, ids && new Set(ids));
+        }
+        const ids = inScope.get(everyDocument);
+        return (
+          !!ids &&
+          restsOn(check).some((cited) => cited.documentId !== null && !ids.has(cited.documentId))
+        );
+      };
       for (const sentence of sentences) {
         const mark = markOf(sentence);
         if (added) {
@@ -260,13 +285,24 @@ export function createMindCheck(options: MindCheckOptions) {
           scope,
         });
         if (shown.state === "needs-recheck") again.push(sentence);
+        else if (shown.state === "kept" || shown.state === "checking") continue;
+        else if (shown.state === "not-checked" || leftScope(mark.check)) again.push(sentence);
+        else held.push(mark.check.checkedAt);
       }
-      return { fresh, again, keys, skipped, widened };
+      return { fresh, again, keys, skipped, widened, held };
     });
+  }
+
+  function unchangedSince(mindId: string, held: readonly string[]): string | null {
+    const oldest = held.filter((at) => at !== "").sort()[0];
+    return oldest ?? content.readSettings(mindId, readMindCheck)?.at ?? null;
   }
 
   function plan(mindId: string, mode: CheckMindMode, allDocuments: boolean): MindCheckPlan {
     const sent = sending(mindId, mode);
+    if (sent.fresh.length + sent.again.length === 0 && sent.held.length > 0) {
+      return { kind: "unchanged", since: unchangedSince(mindId, sent.held) };
+    }
     const { fresh, again } = sent;
     if (fresh.length + again.length === 0) return { kind: "nothing" };
     const { empty, folderId } = options.scopeOf(mindId, everywhere(allDocuments, sent));
