@@ -231,6 +231,9 @@ const modelFetch: typeof fetch = (input, init) => {
   return net.fetch(input instanceof URL ? input.href : input, { ...init, credentials: "omit" });
 };
 
+// A Response with a body throws for these statuses.
+const NULL_BODY = new Set([204, 205, 304]);
+
 // The core follows a model download's redirects itself, to keep it to the source's own hosts,
 // but net.fetch cancels a redirect it is told not to follow: net.request hands it back.
 function unfollowed(url: string, init: RequestInit): Promise<Response> {
@@ -275,7 +278,8 @@ function unfollowed(url: string, init: RequestInit): Promise<Response> {
           request.abort();
         },
       });
-      resolve(new Response(body, { status: message.statusCode, headers }));
+      const status = message.statusCode;
+      resolve(new Response(NULL_BODY.has(status) ? null : body, { status, headers }));
     });
     request.on("error", reject);
     request.end();

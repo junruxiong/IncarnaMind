@@ -27,10 +27,10 @@ test.afterEach(async () => {
 const requests: { server: string; path: string }[] = [];
 
 // A source that has none of the model's files, as each one is from a network that blocks it.
-async function emptySource(name: string) {
+async function emptySource(name: string, status = 404) {
   const server = createServer((request, response) => {
     requests.push({ server: name, path: request.url ?? "" });
-    response.writeHead(404).end();
+    response.writeHead(status).end();
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -113,6 +113,32 @@ for (const language of ["en", "zh-CN"] as const) {
     copy.close();
   });
 }
+
+// protects=a source answering 204 or 304, a reply with no body, fails with what it answered and the download moves on to the next source, ending in the every-source line; fails_when=the main process can't make the reply into a Response, so each source fails with that error (or, where the throw escapes, waits out the stall); no_claim=other statuses, which the core's download tests cover.
+test("a source answering 204 or 304 fails with what it answered, and the next is tried", async () => {
+  requests.length = 0;
+  const pinned = await emptySource("pinned", 204);
+  const copy = await emptySource("modelscope", 304);
+  const { app, window } = await launchApp(dataDir, {
+    modelDownloads: {
+      source: { baseUrl: pinned.url, files: [FILE] },
+      copies: { modelscope: { url: `${copy.url}{folder}/` } },
+    },
+  });
+  await setWindowSize(app, window, 1280, 800);
+  await dismissChatSetup(window);
+  await turnOnEmbeddings(window);
+  await addNotes(window);
+  const row = window.getByTestId("embedding-model-failed");
+  await expect(row).toContainText(WORDS.en.line);
+  await pointAndClick(window, row.getByTestId("embedding-model-details"));
+  const sources = window.getByTestId("embedding-model-sources");
+  await expect(sources).toContainText("answered HTTP 204");
+  await expect(sources).toContainText("answered HTTP 304");
+  await app.close();
+  pinned.close();
+  copy.close();
+});
 
 // protects=with one source only, a failed download's line stays as it was, with no Details and no source choice (DESIGN.md: no setting shows unless there is one to make); fails_when=a choice of one source shows; no_claim=the line's words, which the other specs cover.
 test("with one source only, nothing about sources shows", async () => {
