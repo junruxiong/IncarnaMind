@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { type ReactNode, type Ref, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { Document, LibraryGroup, LinkedFolder } from "../../../core/api";
 import { displayName } from "../../../shared/documentNames";
 import { mindName } from "../../../shared/naming";
@@ -175,11 +175,26 @@ function Rows({ children }: { children: ReactNode }) {
   );
 }
 
-function Row({ label, testId, children }: { label: string; testId: string; children: ReactNode }) {
+function Row({
+  label,
+  testId,
+  focusRef,
+  children,
+}: {
+  label: string;
+  testId: string;
+  focusRef?: Ref<HTMLElement>;
+  children: ReactNode;
+}) {
   return (
     <>
       <dt className="text-ink-meta">{label}</dt>
-      <dd data-testid={testId} className="min-w-0 break-words text-ink [overflow-wrap:anywhere]">
+      <dd
+        ref={focusRef}
+        tabIndex={focusRef ? -1 : undefined}
+        data-testid={testId}
+        className="min-w-0 break-words text-ink outline-none [overflow-wrap:anywhere]"
+      >
         {children}
       </dd>
     </>
@@ -234,6 +249,7 @@ function DocumentInfo({ document }: { document: Document }) {
     "scan-images",
     assignment?.error?.wording?.key === "error.library.scanImagesOff",
   );
+  const organizeRow = useRef<HTMLElement>(null);
   const folder = useDocumentFolder(document.id);
   const linkedName = useAppStore((state) => {
     const linked = state.linkedFolders.find((each) => each.id === document.linkedFolderId);
@@ -320,7 +336,7 @@ function DocumentInfo({ document }: { document: Document }) {
             <span className="block text-ink-meta">{document.failure.message}</span>
           )}
         </Row>
-        <Row label={t("info.organize")} testId="info-organize">
+        <Row label={t("info.organize")} testId="info-organize" focusRef={organizeRow}>
           {t(organizeState(assignment))}
           {assignment?.model && (
             <span className="block text-ink-meta">{organizeModel(assignment.model, t)}</span>
@@ -335,6 +351,7 @@ function DocumentInfo({ document }: { document: Document }) {
               onClick={() =>
                 void core
                   .allowDataFlow("scan-images", scanImages.service.id)
+                  .then(() => organizeRow.current?.focus())
                   .catch((error: unknown) => useAppStore.getState().reportError(error))
               }
               className={`${buttonClass} mt-1.5`}

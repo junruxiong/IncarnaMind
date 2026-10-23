@@ -333,7 +333,6 @@ export function createLibrary(options: {
         ]))
     );
   };
-  /** Why a scan with no text waits: its page images may not go to the service that would read them yet. */
   const scanWaits = (doc: DocumentRow): ProviderError | undefined => {
     if (doc.kind !== "pdf" || doc.status !== "no-text") return undefined;
     const classifier = organizeModelOf(getSettings());

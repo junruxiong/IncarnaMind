@@ -3667,7 +3667,7 @@ export const zhCN = {
   "error.library.noClassifier": "先选择分类模型。",
   "error.library.noFolders": "先新建或选择文件夹。",
   "error.library.scanImagesOff":
-    "这份扫描件没有文字，它的页面图片不会发送给 {service}。允许后才能整理它。",
+    "这份扫描件没有文字，页面图片不会发送给 {service}。允许后才能整理。",
   "scan.images.allow": "允许发送页面图片",
   "error.library.classifierModel": "选择已连接的提供商和模型。",
   "error.library.autoNotLocal": "自动分类必须在这台电脑上运行。",
