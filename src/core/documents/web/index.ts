@@ -168,7 +168,6 @@ export function createWebPages(options: WebPagesOptions) {
     return started;
   };
 
-  /** What a page the User named costs in Local mode: nothing is fetched until they let this one go. */
   const heldInLocalMode = (address: string): WebPageResult => {
     const site = URL.parse(address)?.host ?? address;
     return failed(

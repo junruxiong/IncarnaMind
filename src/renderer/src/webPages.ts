@@ -40,7 +40,6 @@ interface WebPagesState {
   closeDialog(): void;
   add(addresses: readonly string[], folderId?: string | null, keepLook?: boolean): Promise<void>;
   fetchAgain(document: Pick<Document, "id" | "name">, once?: boolean): Promise<void>;
-  /** `once`: Local mode is on and the User let this page be fetched ("Fetch this page once"). */
   tryAgain(problem: WebPageProblem, once?: boolean): Promise<void>;
   dismiss(problem: WebPageProblem): void;
 }
@@ -62,11 +61,9 @@ const REFUSED: ReadonlySet<WebPageFailureReason> = new Set([
 export const canTryAgain = (problem: Pick<WebPageProblem, "reason">) =>
   !REFUSED.has(problem.reason);
 
-/** Local mode is on and nothing was fetched: the User may let this page go. */
 export const heldInLocalMode = (problem: Pick<WebPageProblem, "reason">) =>
   problem.reason === "local-mode";
 
-/** The site an address names, as the line says it would be contacted. */
 export const siteOf = (address: string): string => URL.parse(address)?.host ?? address;
 
 export const reasonKey = (reason: WebPageFailureReason): MessageKey => `webPages.reason.${reason}`;

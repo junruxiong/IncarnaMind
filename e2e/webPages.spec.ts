@@ -262,7 +262,7 @@ test("an Answer cites a web page by section and paragraph; its card says the sit
   await app.close();
 });
 
-test("with “Keep everything on this computer” on, a web page by address isn't fetched: one line says it would contact the site, and Fetch this page once adds it with Local mode still on", async () => {
+test("with “Keep everything on this computer” on, a web page by address isn't fetched: one line says it would contact the site, and Fetch this page once adds it with the setting still on", async () => {
   const { app, window } = await launchApp(dataDir, { home, web: port });
   await dismissChatSetup(window);
   await window.evaluate(async () => {
