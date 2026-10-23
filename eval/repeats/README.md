@@ -4,7 +4,7 @@
 
 ## What it does
 
-1. A temporary data folder, as for the other evaluations, with the Library of a first run: the example's Documents (`createExamples`) beside the set's own agreement, so the search weighs the agreement against other Documents as it does for a newcomer. Documents are added with embeddings off and searched with the built-in reranking model, as Users have them by default. The interface is in the set's language.
+1. A temporary data folder, as for the other evaluations, with the Library of a first run: the example's Documents (`createExamples`) beside the set's own agreement (and, for the conflict Minds, a short flat-and-laptop agreement between the same parties, which only their Library holds), so the search weighs the agreement against other Documents as it does for a newcomer. Documents are added with embeddings off and searched with the built-in reranking model, as Users have them by default. The interface is in the set's language.
 2. For each set, a Mind with its sentences, one paragraph each.
 3. Check this Mind, as the button does on an unchanged Mind: the first time the model names the claims and checks the new sentences ("changed"), every later time it checks them all ("all"). `INCARNAMIND_EVAL_REPEATS` times (10 by default).
 4. After each check, every sentence's result is read from its mark, as the editor reads it, and named by how its card shows it:
@@ -19,12 +19,13 @@ The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core
 
 ## The sets
 
-An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and four Minds:
+An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and six Minds:
 
 | Set | Sentences |
 |---|---|
 | `en`, `zh` | The three sentences of #1608 (notice as a paraphrase; holiday with a wrong figure; "Staff" for "the Employee"), the agreement's own words, a car allowance it doesn't mention, and a near miss that names days it doesn't |
 | `en-control`, `zh-control` | The home-working clause four ways: a paraphrase about the same Employee, the Employee by name, "Staff" (员工) and "Employees" (职工) |
+| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped and a duty for a permission ("must" for "may"), in Chinese who pays the social insurance swapped |
 
 ## Running it
 
@@ -41,9 +42,47 @@ npm run eval:repeats
 - `INCARNAMIND_EVAL_REPEATS_SETS`: only these sets, by id (`en,zh`).
 - `INCARNAMIND_EVAL_REPEATS_BUDGET`: stops after the check that takes the spend past this many dollars, at the app's own count (5).
 
-**Cost and time:** ten checks of the four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5.
+**Cost and time:** ten checks of the first four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5. The two conflict Minds add about 9 minutes and $0.25 on Haiku 5.5, and roughly $4 on Sonnet 5.5 (from the other sets' ratio, not measured), so run them there with fewer checks.
+
+**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today, as #1668: "must" for "may"; employer and employee reversed (English); who pays the social insurance and who pays the rent reversed, landlord and tenant reversed, and the negation the claims leave out (Chinese).
 
 ## Results
+
+### 2026-10-23: a contradiction needs a second, strict judgement (#1647)
+
+On the same Documents, Library and search as below. "Before" is the version below ("now" there: Haiku 5.5's two runs, Sonnet 5.5's one); "after" is this version, whose changes are:
+
+- A sentence the check calls contradicted, and the first confirmation upholds, is judged once more beside its quote, by a judgement that writes the sentence's detail ("on Mondays and Fridays (two named days)") and what the quote states of it before its word, in English. Only "conflict" keeps it Contradicted. Otherwise the two judgements disagree and the card is the partly-supported one, quoting the Passage, with the reply's own parts or, when it named none, parts asked for once. A judgement that fails or can't be read leaves the sentence not checked, with why.
+- The reply's `Scope` field names the sentence's own word for the party before `same` or `wider` ("Scope: Staff, wider"; "Scope: none, same" when the sentence names none).
+- A Supported reply with a wider scope whose parts can't be shown asks for them once.
+
+Haiku 5.5 ran twice after (runs 1 and 2, the last two commits; the second only adds the third change). Sonnet 5.5 ran once after; `en-control` again on the last commit, the run shown. Counts are of 10 checks, as below.
+
+| Set · sentence | Haiku before (1; 2) | Haiku after (1; 2) | Sonnet before | Sonnet after |
+|---|---|---|---|---|
+| en · own words | 8 S, 2 P; 10 S | 10 S; 10 S | 10 S | 10 S |
+| zh · notice (paraphrase) | 10 S; 10 S | 10 S; 10 S | 10 S | 10 S |
+| zh · near miss (每周一和周五) | 2 P, 8 C; 3 P, 7 C | 10 P; 10 P | 10 P | 10 P |
+| en · near miss (Mondays and Fridays) | 5 D, 5 C; 7 D, 3 C | 5 P, 5 D; 4 P, 5 D, 1 C | 10 P | 10 P |
+| en · staff-home ("Staff…") | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| en-control · staff-home | 10 P; 10 P | 10 P; 9 P, 1 S | 10 P | 10 P |
+| en-control · employees-home | 9 P, 1 S; 9 P, 1 not checked | 10 P; 9 P, 1 S | 10 P | 10 P |
+| zh · staff-home (员工…) | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| zh-control · staff-home | 10 P; 10 P | 10 P; 10 P | 10 P | 10 P |
+| zh-control · employees-home | 10 P; 10 P | 10 P; 9 P, 1 D | 10 P | 10 P |
+| en · holiday (wrong figure) | 10 C; 10 C | 10 C; 10 C | 10 C | 10 C |
+| zh · holiday (wrong figure) | 10 C; 10 C | 10 C; 10 C | 10 C | 10 C |
+| en · car allowance (absent) | 10 A; 10 A | 10 A; 10 A | 10 A | 10 A |
+| zh · car allowance (absent) | 10 A; 10 A | 10 A; 10 A | 10 A | 10 A |
+
+Every other sentence was Supported in every check of every run. No check gave a false Supported, and none after was not checked.
+
+- **The near miss:** rarely Contradicted on Haiku 5.5 after, not never: 3 of 30 checks in Chinese and 1 of 30 in English in a re-test (0 of 20 and 1 of 20 in the runs above), against 15 of 20 and 8 of 20 before. Its "D" cards are unsupported verdicts whose nearest line the existing nearest-line judgement (#770) calls different, as before.
+- **With only the strict "neither" downgrading** (see the conflicts below), Haiku 5.5, 20 checks of `en` and `zh`, 10 of each control: the near miss Contradicted in 2 of 20 in Chinese and 0 of 20 in English; the own words and the notice paraphrase Supported in 20 of 20 in both languages; "Staff…" partly in 19 of 20 and 20 of 20, and in 10 of 10 in both control Minds, "Employees…" too; the holiday Contradicted in 20 of 20 and 19 of 20 (one "D"); the car allowance "I didn't find this" in all 40; no false Supported. Sonnet 5.5, 5 checks of the four sets: every sentence as expected in every check.
+- **Genuine conflicts** (`en-conflicts`, `zh-conflicts`, added after): with the strict judgement downgrading on any word but "conflict", the Chinese reversed reporting line, "人力资源总监向乙方汇报。", got the partly-supported card in 5 of 5 checks: writing it in English, the strict judgement read the direction backwards and said "same" (8 of 10 requests alone). So only its "neither" (the quote doesn't state the detail) downgrades a contradiction; its "same" leaves it Contradicted. Since then, on Haiku 5.5, 5 checks: Contradicted in 80 of 80 in English and 63 of 65 in Chinese, known misses left out, the reversed reporting line in 5 of 5. Asked alone 10 times each, the strict judgement said "neither" to none of the reversed parties. What isn't Contradicted comes before it: a reversed party Supported by the first verdict (in English employer and employee once in 5; in Chinese who pays the rent twice and landlord and tenant once), employer and employee reversed in Chinese "I didn't find this" twice (the first confirmation said "neither"), and the Chinese negation left unmarked in every check (the claims weren't named with it). One Chinese check of the date was not checked in an earlier run: its reply wrote the verdict lines beside `cite` with no marker, which the Answer engine drops as a preamble, so what was left had no verdict. The two known misses (#1668), "must" for "may" and the swapped social insurance, were Supported in 5 of 5 and 4 of 5, by the first verdict. Sonnet 5.5, one check of each: 16 of 16 in English and 13 of 13 in Chinese, known misses left out (of them, employer and employee reversed got the partly-supported card from the check itself, the strict judgement alone saying "conflict" to it in 5 of 5; the others were Contradicted).
+- **Why a second judgement and not the existing one:** asked for one word, both existing judgements called the near miss a conflict in 10 of 10 requests each, in English and Chinese, on Haiku 5.5 with thinking off, as checks run. The strict one did in 0 of 10 in English and 1 of 30 in Chinese; with its lines in the sentence's language, 9 of 60 in Chinese. It still called every genuine conflict tried a conflict, 10 of 10 each: the two holiday figures, three days a week, "Mondays, Wednesdays and Fridays" against two days a week (in English and Chinese), other hours, another manager, a later date, another pension share and a longer probation; and Sonnet 5.5 judged all 12 cases tried as expected. Asking it for the parts in the same request swayed its word (the Chinese near miss a conflict in 15 of 20), so the parts are a request of their own.
+- **Time:** the strict judgement is one more request for a sentence the check calls contradicted: a median of 1.0 to 1.2 s (90th percentile 1.5 to 2.0 s) on Haiku 5.5, 1.9 s (3.7 s) on Sonnet 5.5. The parts request, when needed, about 1 s. Sentences are checked several at once, so a Mind's check takes longer only by what its slowest sentence adds.
+- **Spend:** $6.22 in all: Haiku 5.5 $1.52 (the runs while building it, the conflict sets and the diagnosis), the judgement trials $0.65 (Sonnet 5.5 $0.42 of it), Sonnet 5.5's runs of the sets $4.05.
 
 ### 2026-10-23: the card says where it looked, and a part covered needs the same claim
 
