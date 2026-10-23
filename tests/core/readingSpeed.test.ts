@@ -167,6 +167,47 @@ describe("How long reading takes on this computer (#1506)", () => {
     expect(meter.seconds(files(1, "markdown", 2_000))).toBeCloseTo(0.1);
   });
 
+  test("a Document processed under one embedding model isn't counted for the next, when it is embedded", () => {
+    const { meter, advance, useEmbedding } = startMeter();
+    useEmbedding("multilingual-e5-small");
+    meter.started("notes", true);
+    advance(10);
+    meter.processed("notes", "markdown", 2_000, false);
+
+    useEmbedding("another-model");
+    meter.embedded("notes", 90);
+
+    expect(meter.seconds(files(1, "markdown", 2_000))).toBeNull();
+  });
+
+  test("a write that fails is tried again when the meter closes, and the failure is reported", () => {
+    let time = 0;
+    let stored: string | undefined;
+    let failing = true;
+    const failures: unknown[] = [];
+    const meter = createReadingMeter({
+      clock: () => time,
+      embedding: () => "",
+      read: () => (stored === undefined ? undefined : JSON.parse(stored)),
+      write: (speed) => {
+        if (failing) throw new Error("The disk is full.");
+        stored = JSON.stringify(speed);
+      },
+      reportError: (error) => failures.push(error),
+    });
+    meter.started("notes", true);
+    time += 10;
+    meter.processed("notes", "text", 4_000, true);
+    expect(failures).toHaveLength(1);
+    expect(stored).toBeUndefined();
+
+    failing = false;
+    meter.close();
+    expect(failures).toHaveLength(1);
+    const restarted = startMeter(stored);
+    expect(restarted.meter.seconds(files(10, "text", 4_000))).toBeCloseTo(0.1);
+  });
+
   test("turning embeddings on or off, or another model, starts again: reading takes another time", () => {
     const { meter, read, useEmbedding } = startMeter();
     read("markdown", 2_000, 10);

@@ -146,10 +146,10 @@ export function createReadingMeter(options: ReadingMeterOptions) {
 
   const keep = () => {
     if (!unkept || !measured) return;
-    unkept = false;
     keptAt = options.clock();
     try {
       options.write(measured);
+      unkept = false;
     } catch (error) {
       options.reportError(error);
     }
@@ -159,6 +159,8 @@ export function createReadingMeter(options: ReadingMeterOptions) {
     const model = options.embedding();
     if (measured?.embedding !== model) {
       keep();
+      // Processed under the old model: the new one's time would hold a share of the old.
+      embedding.clear();
       measured = speedFor(options.read(), model);
     }
     return measured;
@@ -182,6 +184,7 @@ export function createReadingMeter(options: ReadingMeterOptions) {
      * read once embedded, which takes its share of the time too.
      */
     processed(documentId: string, kind: DocumentKind, bytes: number, ready: boolean): void {
+      speed();
       const begun = started.get(documentId);
       started.delete(documentId);
       embedding.delete(documentId);
@@ -192,6 +195,7 @@ export function createReadingMeter(options: ReadingMeterOptions) {
     },
 
     embedded(documentId: string, ms: number): void {
+      speed();
       const processed = embedding.get(documentId);
       embedding.delete(documentId);
       if (processed) add(processed.kind, processed.bytes, processed.ms + ms);
