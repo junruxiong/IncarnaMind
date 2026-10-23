@@ -7,6 +7,7 @@ import { readVtt } from "../../src/core/documents/formats/vtt";
 import { listParts, meetingFolder } from "../../src/core/meetings/audioFiles";
 import { createFakeCapture } from "../../src/core/meetings/fakeCapture";
 import { createFakeSpeechEngine } from "../../src/core/transcription/fake";
+import { isTheirs } from "../../src/shared/speakers";
 import { createTempDataFolder, manualClock, nextTurn, startCore } from "../helpers/core";
 import { inProcessTranscriber, NO_TRANSCRIPTION_FILES, until } from "../helpers/transcription";
 
@@ -341,9 +342,10 @@ describe("Pausing the microphone, in the capture pipeline, with recorded voices"
     expect(paused.transcript.gaps).toEqual([
       { fromMs: PAUSED_AT, toMs: RESUMED_AT, reason: "muted" },
     ]);
-    expect(paused.transcript.cues.filter((cue) => cue.speaker?.startsWith("Them")).length).toBe(
+    // The fake service numbers voices by its own count of lines, so the labels may differ.
+    expect(paused.transcript.cues.filter((cue) => isTheirs(cue.speaker)).length).toBe(
       (await playCall({ pause: false, route: "soniox" })).transcript.cues.filter((cue) =>
-        cue.speaker?.startsWith("Them"),
+        isTheirs(cue.speaker),
       ).length,
     );
   });

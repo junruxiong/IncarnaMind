@@ -49,11 +49,14 @@ export interface EverydayCase {
 export const floorOf = (each: EverydayCase): number => (each.hard ? 1 / 3 : 2 / 3);
 
 const ANSWER = { write: false, cite: true, coverAll: false } as const;
-const ANSWER_ALL = { write: false, cite: true, coverAll: true } as const;
 const WRITE = { write: true, cite: true, coverAll: false } as const;
 const WRITE_ALL = { write: true, cite: true, coverAll: true } as const;
 const EDIT = { write: true, cite: false, coverAll: false } as const;
 const NOTHING = { write: false, cite: false, coverAll: false } as const;
+// It names nothing to produce: answered in the panel or written into a Mind, either passes (#1559).
+const EITHER = { write: false, cite: true, coverAll: false, either: true } as const;
+const EITHER_ALL = { ...EITHER, coverAll: true } as const;
+const EMPTY = { title: "", blocks: [] };
 const ABOUT_THE_QUESTION = {
   write: false,
   cite: false,
@@ -104,6 +107,13 @@ const PENSIONS = {
     "Staff get 25 days of leave a year, plus bank holidays.",
     "The pension scheme matches contributions up to 5% of salary.",
     "Health cover starts after three months.",
+  ],
+};
+const TYPOS_ZH = {
+  title: "港口笔记",
+  blocks: [
+    "我们周二去了海港，看到潮水彻底退去了，场面十分壮管。",
+    "导游说大潮每月会出现两次，这让所有人都很惊呀。",
   ],
 };
 const READING_GROUP_ZH = {
@@ -158,7 +168,7 @@ export const CASES: readonly EverydayCase[] = [
     mind: READING_GROUP,
     before: OWNER.slice(0, 2),
     request: OWNER[2] ?? "",
-    expected: NOTHING,
+    expected: { ...NOTHING, either: true },
   },
   {
     id: "owner-4",
@@ -214,7 +224,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "Compare the two papers' methods",
-    expected: ANSWER_ALL,
+    expected: EITHER_ALL,
   },
   {
     id: "ask-summarise",
@@ -222,7 +232,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "Summarise these papers",
-    expected: ANSWER_ALL,
+    expected: EITHER_ALL,
   },
   {
     id: "ask-summarise-zh",
@@ -230,7 +240,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "总结一下这两篇论文",
-    expected: ANSWER_ALL,
+    expected: EITHER_ALL,
   },
   {
     id: "ask-translate-doc",
@@ -238,7 +248,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "Translate the abstract of the GraphST paper into Chinese",
-    expected: ANSWER,
+    expected: EITHER,
   },
   {
     id: "ask-clarify",
@@ -271,7 +281,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "Add a short section on GraphST's results to my notes",
-    expected: WRITE,
+    expected: { ...WRITE, into: "asked-from" },
   },
   {
     id: "write-section-zh",
@@ -279,7 +289,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "把教程的主要观点加到我的笔记里",
-    expected: WRITE,
+    expected: { ...WRITE, into: "asked-from" },
   },
   {
     id: "write-new-note",
@@ -287,7 +297,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: READING_GROUP,
     request: "Make a new note with the key numbers from the GraphST paper",
-    expected: WRITE,
+    expected: { ...WRITE, into: "new" },
   },
   {
     id: "write-page-zh",
@@ -349,17 +359,17 @@ export const CASES: readonly EverydayCase[] = [
     id: "write-empty",
     language: "en",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     request: "Write a short summary of the GraphST paper.",
-    expected: WRITE,
+    expected: { ...WRITE, into: "asked-from" },
   },
   {
     id: "write-empty-zh",
     language: "zh-CN",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     request: "帮我写一份 GraphST 论文的简短摘要。",
-    expected: WRITE,
+    expected: { ...WRITE, into: "asked-from" },
   },
   // The User's own text, changed.
   {
@@ -410,6 +420,302 @@ export const CASES: readonly EverydayCase[] = [
     request: "Remove the part about pensions",
     expected: { ...EDIT, only: 1 },
   },
+  // An edit asked about "this", "my draft" or "the file", with no paragraph numbered, in both languages.
+  {
+    id: "edit-this-shorter",
+    language: "en",
+    library: "papers",
+    mind: Q3,
+    selectAll: true,
+    request: "Make this shorter",
+    expected: EDIT,
+  },
+  {
+    id: "edit-rewrite-this",
+    language: "en",
+    library: "papers",
+    mind: Q3,
+    selectAll: true,
+    request: "Rewrite this so it reads more clearly",
+    expected: EDIT,
+  },
+  {
+    id: "edit-rewrite-paragraph",
+    language: "en",
+    library: "papers",
+    mind: Q3,
+    request: "Rewrite the second paragraph so it's clearer",
+    expected: { ...EDIT, only: 1 },
+  },
+  {
+    id: "edit-typos-draft",
+    language: "en",
+    library: "papers",
+    mind: TYPOS,
+    request: "Fix the typos in my draft",
+    expected: EDIT,
+  },
+  {
+    id: "edit-typos-this",
+    language: "en",
+    library: "papers",
+    mind: TYPOS,
+    selectAll: true,
+    request: "Fix the typos in this",
+    expected: EDIT,
+  },
+  {
+    id: "edit-tighten-draft",
+    language: "en",
+    library: "papers",
+    mind: Q3,
+    request: "Can you tighten up my draft?",
+    expected: EDIT,
+  },
+  {
+    id: "edit-this-shorter-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: WEEKLY,
+    selectAll: true,
+    request: "把这个改短一点",
+    expected: EDIT,
+  },
+  {
+    id: "edit-rewrite-this-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: WEEKLY,
+    selectAll: true,
+    request: "把这一段重写一下，读起来更清楚",
+    expected: EDIT,
+  },
+  {
+    id: "edit-rewrite-paragraph-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: WEEKLY,
+    request: "把第二段重写一下，说得更清楚",
+    expected: { ...EDIT, only: 1 },
+  },
+  {
+    id: "edit-typos-draft-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: TYPOS_ZH,
+    request: "帮我改一下草稿里的错别字",
+    expected: EDIT,
+  },
+  {
+    id: "edit-typos-this-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: TYPOS_ZH,
+    selectAll: true,
+    request: "把这里的错别字改掉",
+    expected: EDIT,
+  },
+  {
+    id: "edit-polish-draft-zh",
+    language: "zh-CN",
+    library: "papers",
+    mind: WEEKLY,
+    request: "我的草稿太啰嗦了，帮我精简一下",
+    expected: EDIT,
+  },
+  // The same asked of an imported Word file, which the User calls "the file".
+  {
+    id: "word-shorten",
+    language: "en",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT,
+    request: "Make the liability clause shorter",
+    expected: { ...EDIT, only: 1 },
+  },
+  {
+    id: "word-rewrite",
+    language: "en",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT,
+    request: "Rewrite the payment clause in plain English",
+    expected: { ...EDIT, only: 2 },
+  },
+  {
+    id: "word-formal-file",
+    language: "en",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT,
+    selectAll: true,
+    request: "Make this file more formal",
+    expected: EDIT,
+  },
+  {
+    id: "word-shorten-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT_ZH,
+    request: "把赔偿责任这一条改短一点",
+    expected: { ...EDIT, only: 1 },
+  },
+  {
+    id: "word-rewrite-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT_ZH,
+    request: "把付款条款重写得通俗易懂一点",
+    expected: { ...EDIT, only: 2 },
+  },
+  {
+    id: "word-formal-file-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: null,
+    word: SUPPLY_AGREEMENT_ZH,
+    selectAll: true,
+    request: "把这份文件改得更正式",
+    expected: EDIT,
+  },
+  // The owner's own words (2026-10-21), asked of the whole Library: in an empty Mind, from Home, beside a Mind
+  // with text (#1559). The Library open asks the core as Home does: no Mind in focus, every Document searched.
+  {
+    id: "owner-lib-empty-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: EMPTY,
+    request: "帮我写一份关于这个知识库的总结",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-lib-home-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: null,
+    request: "帮我写一份关于这个知识库的总结",
+    expected: { ...WRITE_ALL, into: "new" },
+  },
+  {
+    id: "owner-lib-mind-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: WEEKLY,
+    request: "帮我写一份关于这个知识库的总结",
+    expected: { ...WRITE_ALL, into: "new" },
+  },
+  {
+    id: "owner-lib-empty-en",
+    language: "en",
+    library: "reports",
+    mind: EMPTY,
+    request: "Write me a summary of this Library",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-lib-home-en",
+    language: "en",
+    library: "reports",
+    mind: null,
+    request: "Write me a summary of this Library",
+    expected: { ...WRITE_ALL, into: "new" },
+  },
+  {
+    id: "owner-lib-mind-en",
+    language: "en",
+    library: "reports",
+    mind: Q3,
+    request: "Write me a summary of this Library",
+    expected: { ...WRITE_ALL, into: "new" },
+  },
+  // Close variants of the owner's words that the router left unclear, asked in an empty Mind. The two that name
+  // nothing to produce may go either way.
+  {
+    id: "owner-var-qmark-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: EMPTY,
+    request: "帮我写一份关于这个知识库的总结？",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-var-ba-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: EMPTY,
+    request: "帮我写一份关于这个知识库的总结吧",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-var-zongjie-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: EMPTY,
+    request: "帮我总结一下这个知识库",
+    expected: EITHER_ALL,
+  },
+  {
+    id: "owner-var-qmark-en",
+    language: "en",
+    library: "reports",
+    mind: EMPTY,
+    request: "Write me a summary of this Library?",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-var-can-en",
+    language: "en",
+    library: "reports",
+    mind: EMPTY,
+    request: "Can you write me a summary of this Library?",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-var-summarise-en",
+    language: "en",
+    library: "reports",
+    mind: EMPTY,
+    request: "Summarise this Library for me",
+    expected: EITHER_ALL,
+  },
+  // As the app starts a new Mind: one empty Heading 1 (its grey "Title"), nothing else.
+  {
+    id: "owner-lib-h1-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: { title: "", blocks: ["# "] },
+    request: "帮我写一份关于这个知识库的总结",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-lib-h1-en",
+    language: "en",
+    library: "reports",
+    mind: { title: "", blocks: ["# "] },
+    request: "Write me a summary of this Library",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  // The owner's words after a chat answer about the same Library, in the app's empty new Mind.
+  {
+    id: "owner-lib-after-zh",
+    language: "zh-CN",
+    library: "reports",
+    mind: { title: "", blocks: ["# "] },
+    before: ["这个知识库里有什么？"],
+    request: "帮我写一份关于这个知识库的总结",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
+  {
+    id: "owner-lib-after-en",
+    language: "en",
+    library: "reports",
+    mind: { title: "", blocks: ["# "] },
+    before: ["What is in this Library?"],
+    request: "Write me a summary of this Library",
+    expected: { ...WRITE_ALL, into: "asked-from" },
+  },
   // After a write, its follow-ups change the same text.
   {
     id: "follow-longer",
@@ -435,7 +741,7 @@ export const CASES: readonly EverydayCase[] = [
     language: "en",
     library: "papers",
     mind: READING_GROUP,
-    before: ["Summarise the tutorial paper in a short paragraph"],
+    before: ["What does the tutorial paper say? Answer in a short paragraph."],
     addToNote: true,
     request: "Make the summary longer.",
     expected: { ...EDIT, inPlace: true },
@@ -445,7 +751,7 @@ export const CASES: readonly EverydayCase[] = [
     language: "zh-CN",
     library: "papers",
     mind: READING_GROUP,
-    before: ["用一小段话总结一下这篇教程论文"],
+    before: ["这篇教程论文讲了什么？请用一小段话回答。"],
     addToNote: true,
     request: "把摘要写长一点。",
     expected: { ...EDIT, inPlace: true },
@@ -475,7 +781,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "reports",
     mind: { title: "Briefing", blocks: ["Notes for Monday's briefing."] },
     request: "Summarise the two main documents",
-    expected: ANSWER,
+    expected: EITHER,
   },
   {
     id: "reports-all-zh",
@@ -483,7 +789,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "reports",
     mind: { title: "简报", blocks: ["周一简报的笔记。"] },
     request: "总结这些文档",
-    expected: ANSWER_ALL,
+    expected: EITHER_ALL,
   },
   {
     id: "reports-esg",
@@ -507,7 +813,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "reports",
     mind: { title: "Briefing", blocks: ["Notes for Monday's briefing."] },
     request: "Add the ESG report's main targets to my notes",
-    expected: WRITE,
+    expected: { ...WRITE, into: "asked-from" },
   },
   // No Mind in focus.
   {
@@ -516,7 +822,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: null,
     request: "Add a risks section",
-    expected: NOTHING,
+    expected: { ...NOTHING, either: true },
   },
   {
     id: "no-mind-page",
@@ -524,7 +830,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: null,
     request: "Write a summary page of these papers",
-    expected: WRITE_ALL,
+    expected: { ...WRITE_ALL, into: "new" },
   },
   // Questions that only sound like requests, and Questions about the User's own text.
   {
@@ -594,7 +900,7 @@ export const CASES: readonly EverydayCase[] = [
     afterExample: true,
     before: ["What does the GraphST paper claim?"],
     request: "Summarise the two main documents.",
-    expected: ABOUT_THE_QUESTION,
+    expected: { ...ABOUT_THE_QUESTION, either: true },
   },
   {
     id: "example-main-zh",
@@ -604,7 +910,7 @@ export const CASES: readonly EverydayCase[] = [
     afterExample: true,
     before: ["GraphST 这篇论文的主要主张是什么？"],
     request: "总结一下两份主要文档。",
-    expected: ABOUT_THE_QUESTION,
+    expected: { ...ABOUT_THE_QUESTION, either: true },
   },
   {
     id: "example-word",
@@ -647,60 +953,61 @@ export const CASES: readonly EverydayCase[] = [
     expected: ABOUT_THE_QUESTION,
   },
   // A short summary for a page of their own, after a Question about their file from the example's page
-  // (#1172). In the panel (to add with Add to note) or in the page, what it writes is held to both guards.
+  // (#1172): one named goes into the empty page in front (#1559); "Summarise … for my manager" names
+  // none, and may be answered in the panel to add with Add to note. What it writes is held to both guards.
   {
     id: "page-summary",
     language: "en",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     afterExample: true,
     beforeInExample: true,
     before: ["What data does the GraphST paper use, and what are its main results?"],
     request: "Write a short summary of the GraphST paper.",
-    expected: { ...ANSWER, standsAlone: true, noExample: true },
+    expected: { ...WRITE, into: "asked-from", standsAlone: true, noExample: true },
   },
   {
     id: "page-summary-panel",
     language: "en",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     afterExample: true,
     beforeInExample: true,
     before: ["What data does the GraphST paper use, and what are its main results?"],
     request: "Summarise the GraphST paper for my manager.",
-    expected: { ...ANSWER, standsAlone: true, noExample: true },
+    expected: { ...EITHER, standsAlone: true, noExample: true },
   },
   {
     id: "page-summary-zh",
     language: "zh-CN",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     afterExample: true,
     beforeInExample: true,
     before: ["GraphST 这篇论文用了哪些数据，主要结果是什么？"],
     request: "请为 GraphST 这篇论文写一个简短的摘要。",
-    expected: { ...ANSWER, standsAlone: true, noExample: true },
+    expected: { ...WRITE, into: "asked-from", standsAlone: true, noExample: true },
   },
-  // The summary answered in the panel, then put into the page as it is: the copy of the last Answer the guard reads too.
+  // A Question answered in the panel, then its Answer put into the page as it is: the copy of the last Answer the guard reads too.
   {
     id: "page-copy",
     language: "en",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     afterExample: true,
-    before: ["Summarise the GraphST paper for my manager."],
-    request: "Put that summary into this page as it is.",
-    expected: { ...WRITE, standsAlone: true, noExample: true },
+    before: ["What are the GraphST paper's main results?"],
+    request: "Put that answer into this page as it is.",
+    expected: { ...WRITE, into: "asked-from", standsAlone: true, noExample: true },
   },
   {
     id: "page-copy-zh",
     language: "zh-CN",
     library: "papers",
-    mind: { title: "", blocks: [] },
+    mind: EMPTY,
     afterExample: true,
-    before: ["请为 GraphST 这篇论文写一份给经理看的摘要。"],
-    request: "把这份摘要原样放进这个页面。",
-    expected: { ...WRITE, standsAlone: true, noExample: true },
+    before: ["GraphST 这篇论文的主要结果是什么？"],
+    request: "把这个回答原样放进这个页面。",
+    expected: { ...WRITE, into: "asked-from", standsAlone: true, noExample: true },
   },
   // Research questions where an inference is tempting: a cited sentence says only what its quote supports (#1073).
   {
@@ -892,7 +1199,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "Summarise the employment contract.",
-    expected: TEXT_DATES_EN,
+    expected: { ...TEXT_DATES_EN, either: true },
     summary: true,
   },
   {
@@ -933,7 +1240,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "dated",
     mind: null,
     request: "总结一下这份劳动合同。",
-    expected: TEXT_DATES_ZH,
+    expected: { ...TEXT_DATES_ZH, either: true },
     summary: true,
   },
   {

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
-import { SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
+import { coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { comparableSentence } from "../../../shared/sentences";
@@ -328,14 +328,16 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * A sentence check's card: its state and the sentence it is about; for a
  * Passage found, the Document and Location with the quote washed in the
  * state's colour, and Add as Citation when it isn't cited yet; for a
- * contradiction, what the Document says; for a figure worked out, its
- * working and inputs; for nothing found, where it looked, with Search all
- * Documents, or, for a court decision no Document holds, that it can't be
- * checked here, with Remove the mark only; for a sentence with a Citation, the
- * part the Citation doesn't cover, with its quote, and Cut the unsupported
- * part, Search all Documents and Keep as my view (#1111); otherwise why, with
- * Check again. A Passage from a saved web page names the page. Documents
- * IncarnaMind wrote that matched are named, with Count it.
+ * contradiction, what the Document says; for a figure worked out, its working
+ * and inputs; for nothing found, where it looked, with Search all Documents,
+ * or, for a court decision no Document holds, that it can't be checked here,
+ * with Remove the mark only; for a sentence with a Citation, the part the
+ * Citation doesn't cover, with its quote, and Cut the unsupported part, Search
+ * all Documents and Keep as my view (#1111); for one without, the Passage the
+ * check quoted for part of it, with what that part is and what it doesn't
+ * cover; otherwise why, with Check again. A Passage from a saved web page
+ * names the page. Documents IncarnaMind wrote that matched are named, with
+ * Count it.
  */
 function ClaimCard({
   claim,
@@ -384,11 +386,17 @@ function ClaimCard({
   const fromPassage = !calculation || (state === "contradicted" && calculation.agrees);
   // An unsupported sentence keeps the nearest line when it says something different (#770).
   const differs = state === "unsupported" && check.evidence !== null;
-  const evidence = (decided && fromPassage) || differs ? check.evidence : null;
+  const decisionMissing = state === "unsupported" && check.citedCaseUnchecked;
+  const ownWorkings =
+    state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
+  const covers =
+    state === "unsupported" && !differs && !fixes && !decisionMissing && !ownWorkings
+      ? coveredPart(check.unsupported)
+      : null;
+  const evidence = (decided && fromPassage) || differs ? check.evidence : (covers?.quoted ?? null);
   const location = evidence ? citationLocation(evidence) : null;
   const quote = useReadableQuote(evidence);
   const where = location ? formatLocation(location, t) : null;
-  const decisionMissing = state === "unsupported" && check.citedCaseUnchecked;
   const decisionUnchecked = decided && check.citedCaseUnchecked;
   const decisionHeld =
     check.citedCaseFound &&
@@ -411,8 +419,6 @@ function ClaimCard({
       savedPage.fetchedAt,
   };
   const searchedFolder = !check.scope.widened && folderName !== null;
-  const ownWorkings =
-    state === "unsupported" && check.excluded.some((left) => left.reason === "own-workings");
   const cuttable = fixes && uncoveredOf(claim) !== null;
   const pastCap = shown.state === "not-checked" && shown.reason === "too-many";
   const reason =
@@ -447,6 +453,14 @@ function ClaimCard({
         {differs && (
           <p data-testid="claim-differs" className="claim-card-says">
             {t("claim.unsupported.differs")}
+          </p>
+        )}
+        {covers && (
+          <p data-testid="claim-covers" className="claim-card-says">
+            {t("claim.unsupported.documentsCover", {
+              covered: covers.covered,
+              uncovered: covers.uncovered,
+            })}
           </p>
         )}
         {evidence && (
@@ -503,16 +517,16 @@ function ClaimCard({
               onOpen={onOpen}
             />
           )}
-          {!fixes && (
+          {!fixes && !covers && (
             <p
               data-testid={ownWorkings ? "claim-own-workings" : "claim-nothing"}
               className="citation-card-note"
             >
               {ownWorkings
                 ? t("claim.unsupported.ownWorkings")
-                : searchedFolder
-                  ? t("claim.unsupported.inFolder", { folder: folderName })
-                  : t("claim.unsupported.anywhere")}
+                : t("claim.unsupported.notFound", {
+                    scope: searchedFolder && folderName ? folderName : t("composer.scope.all"),
+                  })}
             </p>
           )}
         </>
