@@ -152,13 +152,11 @@ function barRoom(editor: Editor): BarRoom {
 /** The second click of a double click: it does nothing more. */
 const repeated = (event: MouseEvent) => event.detail > 1;
 
-/** The assistant's changes waiting, for their line at the top of the Mind. */
 interface Group {
   ids: string[];
   stale: boolean;
 }
 
-/** Someone's changes from the Word file still waiting: how many, and whose, in the Mind's order. */
 interface Theirs {
   count: number;
   authors: (string | null)[];
@@ -207,7 +205,6 @@ function ProposalsBar({ editor, mindId }: { editor: Editor; mindId: string }) {
   );
 }
 
-/** "{n} changes from Dana Kim and Luis Ortega · Review", which opens the reviewing pane (#697). */
 function TheirChangesLine({ theirs, mindId }: { theirs: Theirs; mindId: string }) {
   const t = useT();
   const language = useLanguage();

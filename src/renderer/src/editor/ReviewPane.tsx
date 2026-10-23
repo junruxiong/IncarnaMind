@@ -376,7 +376,7 @@ function AuthorMenu({
             {option(null, t("review.everyone"))}
             <div className={menuRuleClass} />
             {authors.map(([key, { name, count }]) =>
-              option(key, t("review.author", { name, count })),
+              option(key, t("review.author", { person: name, count })),
             )}
           </>
         )}
@@ -446,13 +446,13 @@ function PaneMenu({ editor, mindId }: { editor: Editor; mindId: string }) {
                     <div className={menuRuleClass} />
                     {item(
                       "review-accept-author",
-                      t("proposal.theirs.acceptAll", { name }),
+                      t("review.acceptAuthor", { person: name }),
                       ids,
                       "accept",
                     )}
                     {item(
                       "review-reject-author",
-                      t("proposal.theirs.rejectAll", { name }),
+                      t("review.rejectAuthor", { person: name }),
                       ids,
                       "reject",
                     )}
@@ -582,7 +582,7 @@ function Card({
         data-review-id={item.id}
         tabIndex={tabbable ? 0 : -1}
         aria-current={selected || undefined}
-        aria-label={[made, item.clause, what, status].filter(Boolean).join(", ")}
+        aria-label={[made, item.clause, what, status].filter(Boolean).join(t("review.separator"))}
         title={made}
         onClick={onSelect}
         className="review-card-main"

@@ -1301,8 +1301,9 @@
 
   /*
    * The reviewing pane (#697; the board Final-10-Redlines): beside the page,
-   * inside the Mind's tab, or over the page's right edge when the page would
-   * be narrower than 760px beside it.
+   * inside the Mind's tab; under a 760px Mind, folded to its button, which
+   * opens it at the page's right edge, the page narrowing so it never covers
+   * the change a card points to.
    */
   .review-slot {
     display: none;
@@ -1319,17 +1320,18 @@
     &[data-shown="beside"] {
       flex: none;
     }
-    /* Under the page's top right, so "Changes (n)" and ⋯ stay in reach above it. */
     &[data-shown="over"] {
       position: absolute;
-      top: 52px;
+      top: 0;
       right: 0;
       bottom: 0;
       z-index: 20;
       max-width: 100%;
-      border-top-left-radius: 8px;
       box-shadow: var(--shadow-popover);
     }
+  }
+  .mind-tab-row[data-review="over"] > .mind-tab-page {
+    margin-right: min(296px, 100%);
   }
   .review-pane {
     display: flex;

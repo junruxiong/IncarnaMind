@@ -69,6 +69,13 @@ async function importFile(
 const cardsOf = (pane: Locator) =>
   pane.locator('[data-testid="review-change"], [data-testid="review-comment"]');
 
+/** Nothing of the page is under the pane: the scroller ends where it starts, and so does `target`. */
+async function expectClearOf(window: Page, pane: Locator, target?: Locator): Promise<void> {
+  const box = await pane.boundingBox();
+  const page = await (target ?? window.getByTestId("mind-scroller")).boundingBox();
+  expect(box && page && page.x + page.width <= box.x + 1).toBe(true);
+}
+
 /** Whether a box is inside what the Mind's scroller shows. */
 async function inView(window: Page, target: Locator): Promise<boolean> {
   const box = await target.boundingBox();
@@ -80,12 +87,10 @@ async function inView(window: Page, target: Locator): Promise<boolean> {
 
 test("the reviewing pane lists their changes and comments in order, follows the text both ways, filters by status and author, and folds under a narrow Mind", async () => {
   const { app, window } = await launchApp(dataDir, { home });
-  await setWindowSize(app, window, 1600, 900);
+  // The sidebar and the assistant both shown.
+  await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
   await importFile(window, app, "Supply agreement v5.docx", supplyRedline());
-  // As on the board: the sidebar hidden, the assistant beside the tabs.
-  await window.keyboard.press("ControlOrMeta+Backslash");
-  await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
   await motionSettled(window);
 
   // The line under the title says whose changes wait, and Review opens the pane.
@@ -123,9 +128,7 @@ test("the reviewing pane lists their changes and comments in order, follows the 
   await expect(pane.getByTestId("review-filter-all")).toBeChecked();
 
   // The pane sits beside the page, which keeps its text clear of it.
-  const paneBox = await pane.boundingBox();
-  const page = await window.getByTestId("mind-scroller").boundingBox();
-  expect(paneBox && page && paneBox.x >= page.x + page.width - 1).toBe(true);
+  await expectClearOf(window, pane);
   await screenshot(window, "review-pane");
 
   // A card selected scrolls the Mind to its change and washes it there; ↓ goes to the next.
@@ -135,6 +138,7 @@ test("the reviewing pane lists their changes and comments in order, follows the 
   const picked = editor.locator(".review-picked");
   await expect(picked.first()).toContainText("Northwind’s total liability");
   await expect.poll(() => inView(window, picked.first())).toBe(true);
+  await expectClearOf(window, pane, picked.first());
   await window.keyboard.press("ArrowDown");
   await expect(cards.nth(7)).toHaveAttribute("data-selected", "true");
   await expect(cards.nth(7).getByRole("button")).toBeFocused();
@@ -195,35 +199,36 @@ test("the reviewing pane lists their changes and comments in order, follows the 
   await expect(notice.getByTestId("review-status")).toHaveText("已接受");
   await screenshot(window, "review-pane-zh");
 
-  // Under a 760px Mind it folds to "Changes ({n})", which opens it over the page's right edge.
-  for (const width of [1100, 900]) {
-    await setWindowSize(app, window, width, 800);
-    const fold = window.getByTestId("review-fold");
-    await expect(fold).toHaveText("修订（6）");
-    await expect(pane).toHaveCount(0);
-    await pointAndClick(window, fold);
-    await expect(pane).toHaveAttribute("data-placement", "over");
-    const over = await pane.boundingBox();
-    const scroller = await window.getByTestId("mind-scroller").boundingBox();
-    expect(
-      over &&
-        scroller &&
-        over.x >= scroller.x &&
-        over.x + over.width <= scroller.x + scroller.width + 1,
-    ).toBe(true);
-    await screenshot(window, `review-pane-zh-${width}`);
-    await pointAndClick(window, fold);
-    await expect(pane).toHaveCount(0);
-  }
-  await setLanguage(window, "en");
-  await expect(window.getByTestId("review-fold")).toHaveText("Changes (6)");
-  await screenshot(window, "review-pane-folded-900");
-  await pointAndClick(window, window.getByTestId("review-fold"));
+  // Under a 760px Mind it folds to "Changes ({n})", which opens it at the page's right edge,
+  // the page narrowing so a card's change shows beside it.
+  await setWindowSize(app, window, 1100, 800);
+  const fold = window.getByTestId("review-fold");
+  await expect(fold).toHaveText("修订（6）");
+  await expect(pane).toHaveCount(0);
+  await pointAndClick(window, fold);
   await expect(pane).toHaveAttribute("data-placement", "over");
+  await expectClearOf(window, pane);
+  await pointAndClick(window, cards.nth(2).getByRole("button"));
+  await expect(picked).toHaveText(["8%, on 30 days’ notice", /^6%, on 45 days’ notice/]);
+  await expect.poll(() => inView(window, picked.last())).toBe(true);
+  await expectClearOf(window, pane, picked.last());
+  await screenshot(window, "review-pane-zh-1100");
+  await pointAndClick(window, fold);
+  await expect(pane).toHaveCount(0);
+  await setLanguage(window, "en");
+  await expect(fold).toHaveText("Changes (6)");
+  await screenshot(window, "review-pane-folded-1100");
+
+  // At 900 px the assistant goes under the tabs; the Mind is still under 760 px, so the pane stays folded.
+  await setWindowSize(app, window, 900, 800);
+  await expect(fold).toHaveText("Changes (6)");
+  await pointAndClick(window, fold);
+  await expect(pane).toHaveAttribute("data-placement", "over");
+  await expectClearOf(window, pane);
   await screenshot(window, "review-pane-900");
   await pane.getByTestId("review-close").click();
   await expect(pane).toHaveCount(0);
-  await expect(window.getByTestId("review-fold")).toHaveCount(0);
+  await expect(fold).toHaveCount(0);
 
   // Wide again, ⌘K opens it beside the page, from the cursor in the text.
   await setWindowSize(app, window, 1600, 900);

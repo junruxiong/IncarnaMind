@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { heldByMind } from "./heldByMind";
 
-export const REVIEW_PANE_WIDTH = 296;
-/** Narrower than this beside the pane, the Mind folds the pane to its button (DESIGN.md, the reviewing pane). */
+/** Under a Mind this wide the pane folds to its button (DESIGN.md, the reviewing pane). */
 export const NARROWEST_MIND = 760;
 
 export type ReviewFilter = "all" | "unresolved";
@@ -57,20 +56,19 @@ export const useReviewPanes = create<ReviewPanes>((set) => ({
 /** The key an author is filtered by: the name, or "" for someone the file doesn't name. */
 export const authorKey = (author: string | null): string => author ?? "";
 
-/** What each open Mind has to review, for ⌘K and the menus. */
 const reviewables = heldByMind<{ has(): boolean; open(): void }>();
 export const useReviewables = reviewables.use;
 export const holdReviewable = reviewables.hold;
 
 /**
- * Whether the Mind's tab has room for the pane beside its page: else it folds
- * to "Changes ({n})" and opens over the page's right edge. `row` holds both.
+ * Whether the Mind, `row`, is wide enough to have the pane beside its page:
+ * else it folds to "Changes ({n})", which opens it at the page's right edge.
  */
 export function useRoomBeside(row: HTMLElement | null): boolean {
   const [beside, setBeside] = useState(true);
   useEffect(() => {
     if (!row) return;
-    const measure = () => setBeside(row.clientWidth - REVIEW_PANE_WIDTH >= NARROWEST_MIND);
+    const measure = () => setBeside(row.clientWidth >= NARROWEST_MIND);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(row);

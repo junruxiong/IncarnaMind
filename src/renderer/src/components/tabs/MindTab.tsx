@@ -53,8 +53,12 @@ export function MindTab({ mindId }: { mindId: string }) {
 
   return (
     <div className="relative flex min-h-0 flex-grow flex-col">
-      <div ref={review.setRow} className="relative flex min-h-0 flex-grow">
-        <div className="relative flex min-h-0 min-w-0 flex-grow flex-col">
+      <div
+        ref={review.setRow}
+        data-review={review.shown}
+        className="mind-tab-row relative flex min-h-0 flex-grow"
+      >
+        <div className="mind-tab-page relative flex min-h-0 min-w-0 flex-grow flex-col">
           {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop target, in the capture phase because the note's own handlers accept every drag over the text; "Import a Word file…" does it without dragging. */}
           <div
             data-testid="mind-scroller"
@@ -116,11 +120,6 @@ export function MindTab({ mindId }: { mindId: string }) {
   );
 }
 
-/**
- * Where the Mind's reviewing pane shows (#697): beside its page while the
- * tab has room for both, else over the page's right edge once asked, and
- * folded to its button when the tab narrows under it.
- */
 function useReviewShown(mindId: string) {
   const [row, setRow] = useState<HTMLElement | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
