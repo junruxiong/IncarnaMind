@@ -68,18 +68,23 @@ Checks of sentences that turn a permission into a duty or the reverse, or revers
 | The Director of People reports to the Employee. | 20 C | 20 C | | | | |
 | The Company must keep the Employee's confidential information secret… | 1 S, 18 C, 1 P | 20 C | | | | |
 | The Employee may pay salary in lieu of notice instead of… | 4 S, 10 C, 6 D | 15 C, 5 D | | 20 C | | |
-| 乙方每周须在家工作两天。 | 15 C, 5 P | 18 C, 2 P | | 20 C | | |
-| 乙方每周必须居家办公两天。 | 17 C, 3 P | 20 C | | | | |
-| 乙方在职期间及离职后均可对甲方的商业秘密保密。 | 18 S, 1 C, 1 P | 1 S, 11 C, 8 P | not a claim | | 20 S | |
-| 乙方依法为甲方缴纳社会保险和住房公积金。 | 20 S | 8 C, 12 P | 20 C | 20 C | 20 C | |
-| 社会保险和住房公积金由乙方为甲方缴纳。 | 20 S | 3 C, 17 P | | | | |
-| 人力资源总监向乙方汇报。 | 2 S, 3 C, 15 P | 19 C, 1 P | | | 20 C | |
-| 甲方须对乙方的商业秘密保密。 | 7 S, 13 A | 1 C, 9 P, 10 A | | | | |
-| 乙方可提前24小时通知甲方在居家工作日到岗。 | 20 C | 19 C, 1 N | | | | |
+| 乙方每周须在家工作两天。 | 15 C, 5 P | 14 C, 4 D, 2 P | | 20 C | | |
+| 乙方每周必须居家办公两天。 | 17 C, 3 P | 17 C, 3 P | | | | |
+| 乙方在职期间及离职后均可对甲方的商业秘密保密。 | 18 S, 1 C, 1 P | 2 S, 11 C, 7 P | not a claim | | 20 S | |
+| 乙方依法为甲方缴纳社会保险和住房公积金。 | 20 S | 2 C, 18 P | 20 C | 20 C | 20 C | |
+| 社会保险和住房公积金由乙方为甲方缴纳。 | 20 S | 6 C, 14 P | | | | |
+| 人力资源总监向乙方汇报。 | 2 S, 3 C, 15 P | 2 S, 16 C, 2 P | | | 20 C | |
+| 甲方每月向乙方支付租金人民币一千五百元。 | 5 S, 5 C (10 checks) | 2 S, 16 C, 2 D | | | | |
+| 甲方须对乙方的商业秘密保密。 | 7 S, 13 A | 6 P, 14 A | | | | |
+| 乙方可提前24小时通知甲方在居家工作日到岗。 | 20 C | 20 C | | | | |
+
+On Haiku 5.5 the English rows come from a Mind of these sentences alone, and the Chinese rows after from the whole `zh-conflicts` Mind, where the claims request names the reporting line (in a Mind of the key sentences alone it often doesn't).
+
+- **Still open (#1708):** the reversed reporting line, the reversed rent payer and 均可 for 须 are each Supported in about 1 of 10 checks on Haiku 5.5, and "Employees…" in about 1 of 10 (about 1 in 20 before). The `Roles` field comes after the verdict line, so when the verdict has already misread the sentence, the field follows it: "乙方 reports to 人力资源总监 / 乙方 reports to 人力资源总监, same" for "人力资源总监向乙方汇报". Other wordings of the field moved these between 0 and 2 of 20, within the noise of 20 checks.
 
 - **The two causes:** a duty for a permission was Supported by the check's own verdict, written first: Haiku 5.5 then named the difference in the lines after it ("Not covered: an obligation to pay (the Agreement says may, not must)"). The Chinese parties reversed were Contradicted by the verdict in every check and Supported by the first confirmation's "same".
-- **The other sets, after:** Haiku 5.5, 10 checks of `en`, `en-control` and `zh-control` and 40 of `zh`: every sentence as before. The notice and the own words were Supported in every check; "Staff…" and 员工 got the partly-supported card in every check, in all four Minds. "Employees…" was Supported in 1 of 10, its reply's `Scope` saying "same", as in a run below. The car allowance was "I didn't find this" in every check. The holiday was Contradicted in 10 of 10 in English and 39 of 40 in Chinese: in the one miss the verdict was unsupported and the nearest line was judged different (#1708). 职工 was Supported in 2 of 10 by replies that ended by repeating their verdict line. Read with this version's reader, both get the partly-supported card. Sonnet 5.5, 2 checks of the four sets: every sentence as expected.
-- **The conflict sets, after:** Haiku 5.5, 10 checks: Supported only "must pay salary in lieu of notice instead of…" (2 of 10; 1 read with this version's reader, its `Roles` line corrected) and "must be carried over" (1 of 10). No reversed party was Supported. The Chinese negation and the Chinese seven days' notice were left unmarked, both from the one claims request of the run (#1682). Sonnet 5.5, 1 check: all 47 Contradicted.
+- **The other sets, after:** Haiku 5.5, 10 checks of `en` and 40 of `zh`, 20 of `en-control` and `zh-control`. The notice, the own words and the named and same-subject paraphrases were Supported in every check, "The Employee can work from home for two days each week." and "乙方每周有两天可以在家办公。" in 20 of 20. "Staff…", 员工 and 职工 got the partly-supported card in 19 of 20 each in the control Minds and in every check in `en` and `zh`. "Employees…" got it in 17 of 20, and was Supported in 2, its reply's `Scope` saying "same", as in a run below. The car allowance was "I didn't find this" in every check. The holiday was Contradicted in 10 of 10 in English and 39 of 40 in Chinese: in the one miss the verdict was unsupported and the nearest line was judged different (#1708). Before the last reading fix, 职工 was Supported in 2 of 10 by replies that ended by repeating their verdict line. Sonnet 5.5, 2 checks of the four sets: every sentence as expected.
+- **The conflict sets, after:** Haiku 5.5, 10 checks: Supported only "must pay salary in lieu of notice instead of…" (2 of 10; 1 read with this version's reader, its `Roles` line corrected) and "must be carried over" (1 of 10). In Chinese, 20 checks: the reversed reporting line, the reversed rent payer and 均可 for 须, 2 of 20 each (still open, above), every other sentence 0. The Chinese negation and the Chinese seven days' notice were left unmarked, both from the one claims request of the run (#1682). Sonnet 5.5, 1 check: all 47 Contradicted.
 - **Wordings tried** (Haiku 5.5, the sentences above 20 times and the four other sets 10 times): the generic instruction, without the four example words, left a duty for a permission Supported in up to 8 to 10 of 20 checks, against at most 1 or 2 with them. Placed after the reply's sentence instead of before it, the field copied the Passage's word for both sides. Placed before the verdict, it decided the verdict well but swayed `Scope` ("职工" Supported in 3 to 6 of 10), and leading a Supported reply into the contradiction's judgements made the notice and "Staff" Contradicted in a few checks. Words other than the four are measured only as far as 需 in the notice (#1708).
 - **Not checked:** a reply that writes its fields beside `cite` with no marker loses them as a preamble (#1673): 0 to 7 of 320 checks a wording on the sentences above with the field before the reply's sentence, 0 to 1 after it, none in the other sets.
 - **Cost and time:** the field adds about 30 to 50 output tokens a check on Haiku 5.5 (the verdict's reply, median 258 tokens before and 285 after), about 34 on Sonnet 5.5 (102 to 136) and 24 to 31 on Kimi K2.6 (47 to 78), and no request; the check's time moved within its spread from run to run (Haiku 3.0 to 3.3 s a sentence; Sonnet 6.2 to 7.0 s), about 0.2 s at Haiku's speed.
