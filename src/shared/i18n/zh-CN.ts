@@ -2588,6 +2588,7 @@ export const zhCN = {
   "comparison.cell.waiting": "等待中",
   "comparison.cell.writing": "正在生成",
   "comparison.cell.waitingText": "等待中…",
+  "comparison.cell.readingText": "正在阅读…",
   "comparison.cell.stopped": "已停止",
   "comparison.cell.notFound": "未找到",
   "comparison.cell.nothingToSearch": "没有可搜索的文字",

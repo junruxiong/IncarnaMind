@@ -2689,6 +2689,7 @@ export const en = {
   "comparison.cell.waiting": "Waiting",
   "comparison.cell.writing": "Being written",
   "comparison.cell.waitingText": "Waiting…",
+  "comparison.cell.readingText": "Reading…",
   "comparison.cell.stopped": "stopped",
   "comparison.cell.notFound": "not found",
   "comparison.cell.nothingToSearch": "no text to search",
