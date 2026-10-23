@@ -185,6 +185,42 @@ for (const { width, height } of [
   });
 }
 
+for (const { value, next, catalogId } of [
+  { value: "en", next: "OpenAI", catalogId: "openai" },
+  { value: "zh-CN", next: "通义千问", catalogId: "qwen" },
+] as const) {
+  test(`choosing another provider after Change puts the model back as a line, for that provider's default (${value}, #1575)`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await pointAndClick(window, card.getByTestId("setup-key"));
+      const form = card.getByTestId("provider-form");
+      const line = form.getByTestId("provider-model-line");
+      const picker = form.getByTestId("provider-model");
+      const before = await line.innerText();
+
+      await pointAndClick(window, form.getByTestId("provider-model-change"));
+      await expect(picker).toBeFocused();
+      await expect(line).toHaveCount(0);
+
+      const chip = form.getByRole("radio", { name: next, exact: true });
+      await pointAndClick(window, chip.locator("xpath=ancestor::label"));
+      await expect(chip).toBeChecked();
+      await expect(line).toBeVisible();
+      await expect(line).not.toHaveText(before);
+      await expect(picker).toHaveCount(0);
+      // Change opens the list again, on the new provider's default.
+      await pointAndClick(window, form.getByTestId("provider-model-change"));
+      await expect(picker).toHaveValue(defaultModel(catalogId));
+    } finally {
+      await app.close();
+    }
+  });
+}
+
 for (const value of ["en", "zh-CN"] as const) {
   test(`saving a key without touching the model saves the provider's default, by mouse in English and by the keyboard in Chinese (${value}, #1575)`, async () => {
     const { app, window } = await launchApp(dataDir, { fakeChat: true });

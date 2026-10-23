@@ -121,7 +121,7 @@ const sameServer = (
 
 /**
  * Pick a provider, paste a key (and a URL for an OpenAI-compatible server),
- * keep the model its line names or Change it (#1575), test the connection,
+ * keep the model its line names or Change it, test the connection,
  * and use it. No provider is preselected.
  */
 export function ProviderForm({
@@ -198,7 +198,7 @@ export function ProviderForm({
   const modelPicker = useRef<HTMLSelectElement>(null);
   const modelText = useRef<HTMLInputElement>(null);
   const changeModel = useRef<HTMLButtonElement>(null);
-  /** The model's list stands open in place of its line: Change was pressed, or a failure asked for another model. */
+  /** Also opened, without Change, when a failure asks for another model. */
   const [modelOpen, setModelOpen] = useState(false);
   const showModelPicker = () => {
     flushSync(() => setModelOpen(true));
@@ -315,6 +315,7 @@ export function ProviderForm({
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
+    setModelOpen(false);
     setTest(null);
     setError(null);
   };
