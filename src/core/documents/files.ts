@@ -86,11 +86,11 @@ export const relativePath = (folder: string, path: string): string =>
 /** The file at `relative` ("/" between names) inside `folder`, on this computer. */
 export const pathIn = (folder: string, relative: string) => join(folder, ...relative.split("/"));
 
-// The old layout, before ADR-0010, copied each Document's file into the data folder's "documents".
-export function isLegacyCopy(dataDir: string, path: string): boolean {
-  const folder = join(dataDir, "documents");
-  return path !== folder && isInside(folder, path);
-}
+// The old layout, before ADR-0010, copied each Document's file into the data folder's "documents",
+// named by its content hash: a file of the User's in there, such as a Linked folder's, is not one.
+export const isLegacyCopy = (dataDir: string, path: string): boolean =>
+  dirname(path) === join(dataDir, "documents") &&
+  /^[0-9a-f]{64}(\.[a-z0-9]+)?$/.test(basename(path));
 
 /** The relative path of the folder a relative file path is in: "" at the top. */
 export const parentOf = (relative: string): string => {

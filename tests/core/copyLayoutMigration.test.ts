@@ -391,7 +391,7 @@ describe("A copied Document in Recently deleted (#1432)", { timeout: 30_000 }, (
     expect(await opened(core, again.id)).toBe(NOTES);
   });
 
-  test("a Linked folder's file is never removed by the purge: one that took over a copy, or one inside the data folder", async () => {
+  test("a file of the User's in the data folder is never removed by the purge: a Linked folder's there, or one kept when its folder was unlinked", async () => {
     const dataDir = await copyLayoutDataFolder();
     const core = startCore(dataDir);
     const papers = await createSourceFolder();
@@ -402,22 +402,36 @@ describe("A copied Document in Recently deleted (#1432)", { timeout: 30_000 }, (
       expect(documents).toEqual([expect.objectContaining({ id: DOCUMENT, path: original })]);
     });
     const kept = join(dataDir, "documents", "Kept");
-    const inside = await writeSourceFile(
+    const neap = await writeSourceFile(
       kept,
       "Neap tides.md",
       "# Neap tides\n\nNeap tides come at the quarter moons.\n",
     );
-    const [linked] = await linkAndProcess(core, kept);
-    if (!linked) throw new Error("The Linked folder inside the data folder holds no Document.");
+    const king = await writeSourceFile(
+      kept,
+      "King tides.md",
+      "# King tides\n\nThe highest tides.\n",
+    );
+    const linked = await linkAndProcess(core, kept);
+    const neapId = linked.find((each) => each.path.endsWith("Neap tides.md"))?.id;
+    const kingId = linked.find((each) => each.path.endsWith("King tides.md"))?.id;
+    if (!neapId || !kingId)
+      throw new Error("The Linked folder inside the data folder wasn't read.");
 
-    await core.deleteDocuments([DOCUMENT, linked.id]);
+    await core.deleteDocuments([DOCUMENT, neapId]);
+    const [folder] = (await core.listLinkedFolders()).filter((each) => each.path.endsWith("Kept"));
+    if (!folder) throw new Error("The Linked folder inside the data folder isn't there.");
+    await core.removeLinkedFolder(folder.id, { keep: [kingId] });
+    await core.deleteDocument(kingId);
     await core.deletePermanently([
       { kind: "document", id: DOCUMENT },
-      { kind: "document", id: linked.id },
+      { kind: "document", id: neapId },
+      { kind: "document", id: kingId },
     ]);
 
     expect(await readFile(original, "utf8")).toBe(NOTES);
-    expect(existsSync(inside)).toBe(true);
+    expect(existsSync(neap)).toBe(true);
+    expect(existsSync(king)).toBe(true);
   });
 
   test("many deleted and restored together all keep their copies", async () => {
