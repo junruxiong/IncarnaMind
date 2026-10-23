@@ -472,21 +472,22 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         );
       }
       // A false contradiction is the worst verdict a check gives, and one judgement upheld near
-      // misses (#1647): it stands only once the strict one finds a conflict too. Otherwise the two
-      // disagree, and the card shows the part the quote states (DESIGN.md › Checks).
+      // misses (#1647): the strict one finds the quote doesn't state the sentence's detail, and
+      // then the card shows the part the quote states (DESIGN.md › Checks). Its "same" doesn't
+      // count: writing a Chinese sentence in English, it read a reversed reporting line backwards.
       const strict = await compare(request, evidence, session, signal, STRICT_INSTRUCTIONS);
       if (signal.aborted) return notChecked("stopped");
       if ("failed" in strict) return failedCheck(strict.failed);
-      const upheld = readJudgement(strict.reply);
-      if (upheld === null) return notChecked("malformed");
-      if (upheld !== "conflict") {
+      const strictly = readJudgement(strict.reply);
+      if (strictly === null) return notChecked("malformed");
+      if (strictly === "neither") {
         if (byCalculation) return byCalculation;
         if (unit) return unsupported(unit, evidence);
         if (verdict.topic === "not found") return unsupported();
         const part = await parts(evidence);
         if (signal.aborted) return notChecked("stopped");
         if (!part.covered || !part.uncovered) return unsupported();
-        // The strict judgement has just found no conflict in this very quote.
+        // The strict judgement has just found this very quote silent on the detail.
         const skipNearest = true;
         return unsupported({ reason: verdict.says, ...part }, evidence, skipNearest);
       }

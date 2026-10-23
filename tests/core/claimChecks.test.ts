@@ -458,23 +458,26 @@ describe("One claim check", () => {
       });
     });
 
-    test("stays Contradicted once the strict judgement finds the conflict too", async () => {
-      const { core, client, check } = await mindWith(
-        [JANUARY],
-        checkingModel({
-          [JANUARY]: nearMiss({
-            text: "Sentence: in January\nQuote: every year\nJudgement: conflict",
+    test.each(["conflict", "same"])(
+      "stays Contradicted when the strict judgement says %s: only a quote silent on the detail downgrades it",
+      async (word) => {
+        const { core, client, check } = await mindWith(
+          [JANUARY],
+          checkingModel({
+            [JANUARY]: nearMiss({
+              text: `Sentence: in January\nQuote: every year\nJudgement: ${word}`,
+            }),
           }),
-        }),
-      );
+        );
 
-      await check();
+        await check();
 
-      expect((await shownChecks(core, client))[0]).toMatchObject({
-        shown: { state: "contradicted" },
-        check: { evidence: { quote: YEARLY, check: "found" } },
-      });
-    });
+        expect((await shownChecks(core, client))[0]).toMatchObject({
+          shown: { state: "contradicted" },
+          check: { evidence: { quote: YEARLY, check: "found" } },
+        });
+      },
+    );
 
     test.each<{ reason: ClaimCheckAttributes["reason"]; strict: GeneratedReply }>([
       { reason: "failed", strict: { error: { status: 500, message: "Overloaded" } } },
