@@ -27,6 +27,16 @@ const typesInField = (element: Element | null) =>
 const inPopover = (target: EventTarget | null) =>
   target instanceof Element && target.closest(".editor-popover") !== null;
 
+const HELD = "viewer-held-selection";
+
+/** The words acted on, drawn in the inactive-selection grey once the page's own selection has gone, as a Mind's are (#565). */
+function drawHeld(range: Range | null): void {
+  const highlights = globalThis.CSS?.highlights;
+  if (!highlights) return;
+  if (range) highlights.set(HELD, new Highlight(range));
+  else highlights.delete(HELD);
+}
+
 /**
  * The small menu under text selected in a PDF (#101; DESIGN.md › Viewer ›
  * Selecting to ask): Add to note and Copy with citation. It shows once the
@@ -56,6 +66,8 @@ export function SelectionMenu({
   /** Where the focus was before ⌘/ moved it into the menu, to go back to. */
   const cameFrom = useRef<HTMLElement | null>(null);
   const [focusWanted, setFocusWanted] = useState(false);
+  /** The page's selection went with the focus into a field: the words are drawn by `drawHeld`. */
+  const [away, setAway] = useState(false);
 
   useEffect(() => {
     if (!section || document.kind !== "pdf") return;
@@ -72,6 +84,7 @@ export function SelectionMenu({
       );
       setOpen(parts.length > 0);
       setPicking(false);
+      setAway(false);
     };
     const onDown = (event: PointerEvent) => {
       if (inPopover(event.target)) return;
@@ -93,8 +106,10 @@ export function SelectionMenu({
       }
       const focused = window.document.activeElement;
       if (inPopover(focused)) return;
-      if (typesInField(focused)) setOpen(false);
-      else setHeld(null);
+      if (typesInField(focused)) {
+        setOpen(false);
+        setAway(true);
+      } else setHeld(null);
     };
     section.addEventListener("pointerdown", onDown);
     section.addEventListener("pointerup", onUp);
@@ -130,6 +145,11 @@ export function SelectionMenu({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [held, open]);
+
+  useEffect(() => {
+    drawHeld(held && away ? held.range : null);
+    return () => drawHeld(null);
+  }, [held, away]);
 
   const anchor = useMemo<VirtualElement | null>(
     () =>
