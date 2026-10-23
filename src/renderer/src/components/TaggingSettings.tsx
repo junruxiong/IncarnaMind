@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import type {
   ChatProvider,
   LibraryClassifier,
@@ -98,6 +98,7 @@ export const providerOf = (option: TaggingModelOption, language: Language) =>
  * is saved as it is made.
  */
 export function TaggingSettings() {
+  const switchId = useId();
   const t = useT();
   const language = useLanguage();
   const library = useAppStore((state) => state.library);
@@ -164,7 +165,6 @@ export function TaggingSettings() {
                 ?.name ?? customName(organizeWith, t),
           })
         : t("tagging.organize.ask");
-  // Where tagging and sorting by themselves send: the model tagging uses, and the one Organize uses.
   const organizer =
     current.kind !== "automatic"
       ? inUse
@@ -294,23 +294,29 @@ export function TaggingSettings() {
           </p>
         )}
       </div>
-      <label className="mt-3 flex items-start gap-2 text-[13px] leading-5 text-ink-secondary">
+      <div className="mt-3 flex items-start gap-2 text-[13px] leading-5 text-ink-secondary">
         <input
+          id={`${switchId}-switch`}
           type="checkbox"
           data-testid="tagging-automatic-organize"
           checked={settings.automatic}
+          aria-describedby={sendsLine ? `${switchId}-sends` : undefined}
           onChange={(event) => void save({ automatic: event.target.checked })}
           className="mt-0.5 size-4 accent-ink"
         />
         <span className="flex min-w-0 flex-col">
-          {t("tagging.automatic.switch")}
+          <label htmlFor={`${switchId}-switch`}>{t("tagging.automatic.switch")}</label>
           {sendsLine && (
-            <span data-testid="tagging-automatic-sends" className="text-ink-meta">
+            <span
+              id={`${switchId}-sends`}
+              data-testid="tagging-automatic-sends"
+              className="text-ink-meta"
+            >
               {sendsLine}
             </span>
           )}
         </span>
-      </label>
+      </div>
       {error && (
         <p role="alert" className={`mt-2 ${errorTextClass}`}>
           <ProblemMark />

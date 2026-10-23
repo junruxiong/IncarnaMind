@@ -927,6 +927,7 @@ test("a scan with no text waits for its page images to be allowed with a cloud m
     await setLanguage(window, "en");
     await allow.click();
     await expect(allow).toHaveCount(0);
+    await expect(organize).toBeFocused();
     await expect(organize).not.toContainText("aren’t sent");
     expect(
       await (await coreOf(window)).evaluate(async (core) => {

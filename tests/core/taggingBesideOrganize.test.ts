@@ -226,6 +226,41 @@ describe("with Organize moving new Documents by itself", () => {
   });
 });
 
+describe("with the switch on, the work a quit or a hand interrupts", () => {
+  test("quitting halfway picks up at the next start", async () => {
+    const first = await start(true);
+    first.chat.hold();
+    const [document] = await add(first.core, { "One.txt": "The first report, about revenue." });
+    if (!document) throw new Error("Nothing was added.");
+    await vi.waitFor(() => expect(first.chat.calls).toHaveLength(1));
+    first.core.close();
+    first.chat.release();
+
+    const chat = scriptedChat();
+    const second = startOn(first.dataDir, chat);
+
+    await filed(second, [document.id], first.reports.id);
+    expect(chat.purposesFor("first report")).toEqual(["organize"]);
+  });
+
+  test("a Document Organize was asked to organize isn't worked on a second time by itself", async () => {
+    const { core, chat, reports } = await start(true);
+    chat.hold();
+    const [first, second] = await add(core, {
+      "One.txt": "The first report, about revenue.",
+      "Two.txt": "The second report, about costs.",
+    });
+    if (!first || !second) throw new Error("Nothing was added.");
+    await vi.waitFor(() => expect(chat.purposesFor("first report")).toEqual(["organize"]));
+
+    await core.classifyDocuments([second.id]);
+    chat.release();
+    await filed(core, [first.id, second.id], reports.id);
+
+    expect(chat.purposesFor("second report")).toEqual(["organize"]);
+  });
+});
+
 describe("with Organize filing new Documents by itself, a Document it holds", () => {
   test("a Document Organize holds is re-tagged and filed by Organize", async () => {
     const { core, chat, reports } = await start(true);

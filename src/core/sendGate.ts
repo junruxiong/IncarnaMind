@@ -45,7 +45,6 @@ function checkedBefore<T extends object>(model: T, method: string, check: () => 
   });
 }
 
-/** Whether a request carries a picture: Organize's page images, which only their own flow may send. */
 const carriesImages = (
   prompt: readonly { content: string | readonly { type: string; mediaType?: string }[] }[],
 ) =>

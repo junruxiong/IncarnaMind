@@ -2,8 +2,8 @@
  * Migration 103 (#1617): the Library setting "automatic" was saved as true by every save of the
  * Tagging setting, so it can't tell the User's choice from the old default. It is forgotten, so the
  * switch follows the model (on for one on this computer, off for a cloud model); only a false stays.
- * Where the default chat model is on another computer and Documents were being sent, the Library
- * says once that it went off.
+ * Where Documents were being tagged by themselves, the Library decides at its first start whether to
+ * say it went off: the migration only leaves the question "pending".
  */
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -47,17 +47,6 @@ async function migrated(setup: (db: Database) => void) {
   return db;
 }
 
-const providerOf =
-  (kind: string, baseUrl: string | null = null) =>
-  (db: Database) => {
-    insert(db, "chat_providers", { id: "p1", kind, base_url: baseUrl ?? "" });
-    if (baseUrl === null) db.run("UPDATE chat_providers SET base_url = NULL WHERE id = 'p1'");
-    insert(db, "user_settings", {
-      id: "u1",
-      key: "chatModel",
-      value: JSON.stringify({ providerId: "p1", modelId: "m" }),
-    });
-  };
 const aDocument = (db: Database) => insert(db, "documents", { id: "d1", name: "Report" });
 const library = (db: Database, value: unknown) =>
   insert(db, "device_settings", { id: "s1", key: "library", value: JSON.stringify(value) });
@@ -69,35 +58,32 @@ const savedLibrary = (db: Database) => {
   return row ? (JSON.parse(row.value) as Record<string, unknown>) : null;
 };
 const notice = (db: Database) =>
-  db.get<{ value: string }>(
-    "SELECT value FROM device_settings WHERE key = 'libraryAutomaticOffNotice' AND deleted_at IS NULL",
-  )?.value;
+  db.get<{ id: string; value: string }>(
+    "SELECT id, value FROM device_settings WHERE key = 'libraryAutomaticOffNotice' AND deleted_at IS NULL",
+  );
 
 describe("Migration 103: tagging and sorting by themselves follow the model", () => {
-  test("a true saved by the old default is forgotten, and the Library says it went off for a cloud model", async () => {
+  test("a true saved by the old default is forgotten, and the Library is left to decide whether to say it went off", async () => {
     const db = await migrated((each) => {
-      providerOf("anthropic")(each);
       aDocument(each);
       library(each, { classifier: { kind: "automatic" }, automatic: true, taggingStopped: [] });
     });
 
     expect(savedLibrary(db)).toEqual({ classifier: { kind: "automatic" }, taggingStopped: [] });
-    expect(notice(db)).toBe("true");
+    expect(notice(db)?.value).toBe('"pending"');
   });
 
-  test("a Library that never saved the setting says it went off too", async () => {
-    const db = await migrated((each) => {
-      providerOf("openai")(each);
-      aDocument(each);
-    });
+  test("a Library that never saved the setting is left to decide too, and its row has a UUID for an id", async () => {
+    const db = await migrated(aDocument);
 
     expect(savedLibrary(db)).toBeNull();
-    expect(notice(db)).toBe("true");
+    expect(notice(db)?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
   });
 
-  test("a false the User saved stays, and says nothing", async () => {
+  test("a false the User saved stays, and the Library has nothing to decide", async () => {
     const db = await migrated((each) => {
-      providerOf("anthropic")(each);
       aDocument(each);
       library(each, { classifier: { kind: "automatic" }, automatic: false });
     });
@@ -106,38 +92,12 @@ describe("Migration 103: tagging and sorting by themselves follow the model", ()
     expect(notice(db)).toBeUndefined();
   });
 
-  test("with a model on this computer nothing is said, and the old true is forgotten all the same", async () => {
-    const db = await migrated((each) => {
-      providerOf("ollama")(each);
-      aDocument(each);
-      library(each, { classifier: { kind: "automatic" }, automatic: true });
-    });
+  test("with no Documents there is nothing to say", async () => {
+    const db = await migrated((each) =>
+      library(each, { classifier: { kind: "automatic" }, automatic: true }),
+    );
 
     expect(savedLibrary(db)).toEqual({ classifier: { kind: "automatic" } });
     expect(notice(db)).toBeUndefined();
-  });
-
-  test("a compatible server on this computer is no cloud model", async () => {
-    const db = await migrated((each) => {
-      providerOf("openai-compatible", "http://localhost:1234/v1")(each);
-      aDocument(each);
-    });
-
-    expect(notice(db)).toBeUndefined();
-  });
-
-  test("a Library of local decision models, or with no Documents, says nothing", async () => {
-    const local = await migrated((each) => {
-      providerOf("anthropic")(each);
-      aDocument(each);
-      library(each, {
-        classifier: { kind: "auto", baseUrl: "http://127.0.0.1:11434" },
-        automatic: true,
-      });
-    });
-    const empty = await migrated(providerOf("anthropic"));
-
-    expect(notice(local)).toBeUndefined();
-    expect(notice(empty)).toBeUndefined();
   });
 });
