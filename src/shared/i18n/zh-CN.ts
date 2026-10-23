@@ -1007,7 +1007,7 @@ export const zhCN = {
   "viewer.locked.body": "输入密码即可打开。密码只为这个 PDF 保存在这台电脑上。",
   "viewer.locked.password": "密码",
   "viewer.locked.unlock": "解锁",
-  "viewer.locked.wrong": "这个密码打不开它。",
+  "viewer.locked.wrong": "密码不正确，无法打开。",
   "viewer.notText": "这个文件中没有可读的文字。",
   "viewer.removed.body": "这个文档已从 IncarnaMind 中删除，因此无法显示。",
   "viewer.removed.unlinked": "这个文档所在的同步文件夹已移除。IncarnaMind 保留了引用中引述的原文。",
