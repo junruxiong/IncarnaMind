@@ -685,7 +685,11 @@ function reviewOf(
   return {
     sentenceChecks: {
       contradicted: count("contradicted"),
-      unsupported: count("unsupported"),
+      // An Unsupported sentence's comment may name its own workings or a court decision instead.
+      unsupported:
+        count("unsupported") +
+        count("own-workings") +
+        counted.filter((each) => each.check === "cited-case-unchecked" && each.unsupported).length,
       needsRecheck: count("needs-recheck"),
       commented: asComments,
     },

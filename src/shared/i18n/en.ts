@@ -639,13 +639,14 @@ export const en = {
   "claim.calculated.inputs": "Worked out from",
   "claim.calculated.negative": "counted as negative",
   "claim.cited": "Cited in this sentence",
-  "claim.unsupported.inFolder": "Nothing in “{folder}” says this.",
-  "claim.unsupported.anywhere": "Nothing in your Documents says this.",
+  "claim.unsupported.notFound": "I didn’t find this in “{scope}”.",
   "claim.unsupported.differs": "Your Documents say something different:",
   "claim.unsupported.covers.one":
     "Your Citation supports {covered}, not the parts about {uncovered}.",
   "claim.unsupported.covers.other":
     "Your Citations support {covered}, not the parts about {uncovered}.",
+  "claim.unsupported.documentsCover":
+    "Your Documents support {covered}, not the parts about {uncovered}.",
   "claim.unsupported.noReason": "The check gave no reason",
   "claim.unsupported.currency.reason": "The Document gives {amount} without a currency.",
   "claim.unsupported.currency.covered": "the amount, {amount}",
@@ -3420,11 +3421,17 @@ export const en = {
   "export.comment.sentence.contradicted.worked":
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
-  "export.comment.sentence.unsupported": "Unsupported: nothing in your Documents says this.",
+  "export.comment.sentence.unsupported": "Unsupported: I didn’t find this in “{scope}”.",
   "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
-  "export.comment.sentence.unsupported.folder": "Unsupported: nothing in “{folder}” says this.",
+  "export.comment.sentence.ownWorkings": "Unsupported: only your own working file says this.",
+  "export.comment.sentence.unsupported.citation":
+    "Unsupported: your Citation supports {covered}, not the parts about {uncovered}.",
+  "export.comment.sentence.unsupported.citations":
+    "Unsupported: your Citations support {covered}, not the parts about {uncovered}.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
+  "export.comment.sentence.unsupported.covers":
+    "Unsupported: your Documents support {covered}, not the parts about {uncovered} (“{quote}”, {source})",
   "export.comment.sentence.needs-recheck.edited": "Needs re-check: changed since it was checked.",
   "export.comment.sentence.needs-recheck.new-version":
     "Needs re-check: a Document it was checked against has a new version.",

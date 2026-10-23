@@ -10,7 +10,14 @@ import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
-import { type Core, type Document, MIND_WORD_FIELD, WORD_ATOM_NODE } from "../../src/core";
+import {
+  type CitationAttributes,
+  type Core,
+  type Document,
+  MIND_WORD_FIELD,
+  type UnsupportedReason,
+  WORD_ATOM_NODE,
+} from "../../src/core";
 import { elements, parseXml, type XmlElement } from "../../src/core/documents/formats/xml";
 import { quitCopyOptions } from "../../src/shared/exportOptions";
 import { recordProposalRequest } from "../../src/shared/proposals";
@@ -558,13 +565,19 @@ describe("The Word copy offered when quitting follows the User's answer about ma
 });
 
 describe("sentences whose check isn't good, in an imported file (#900)", () => {
-  const checked = (value: string, state: "contradicted" | "unsupported", says: string | null) => ({
+  const checked = (
+    value: string,
+    state: "contradicted" | "unsupported",
+    says: string | null,
+    unsupported: UnsupportedReason | null = null,
+    more: Record<string, unknown> = {},
+  ) => ({
     ...text(value),
     marks: [
       {
         type: "claimCheck",
         attrs: {
-          id: `check-${state}`,
+          id: `check-${state}-${value.length}`,
           request: "r1",
           action: "check-against-documents",
           state,
@@ -573,15 +586,76 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
           text: value,
           evidence: null,
           says,
+          unsupported,
           calculation: null,
           scope: { folderId: null, widened: false },
           versions: [],
           excluded: [],
           checkedAt: "2026-10-12T14:30:00.000Z",
+          ...more,
         },
       },
     ],
   });
+
+  test.each([
+    {
+      language: "en" as const,
+      cited:
+        "Unsupported: your Citation supports the moon phases, not the parts about the harbour.",
+      own: "Unsupported: only your own working file says this.",
+    },
+    {
+      language: "zh-CN" as const,
+      cited: "无依据：引用支持the moon phases，但不支持the harbour的部分。",
+      own: "无依据：只有你自己的工作文件这样写。",
+    },
+  ])(
+    "$language: a cited sentence's comment says what its Citation supports, and one only the User's workings say says so, as their cards do",
+    async ({ language, cited, own }) => {
+      const { core, mindId, client } = await setUp({
+        body:
+          paragraph("Spring tides rise in the harbour.") + paragraph("Margins widened in 2026."),
+      });
+      const tides = await tidesDocument(core);
+      await core.updateSettings({ user: { language } });
+      editMind(client, ([first, second]) => [
+        {
+          ...(first as JSONContent),
+          content: [
+            checked(
+              "Spring tides rise in the harbour",
+              "unsupported",
+              null,
+              { reason: null, covered: "the moon phases", uncovered: "the harbour" },
+              // The sentence as checked holds its Citation, as an inline node.
+              { text: "Spring tides rise in the harbour\uFFFC." },
+            ),
+            citation(tides),
+            text("."),
+          ],
+        },
+        {
+          ...(second as JSONContent),
+          content: [
+            checked("Margins widened in 2026.", "unsupported", null, null, {
+              excluded: [
+                { documentId: "workings", documentName: "Workings", reason: "own-workings" },
+              ],
+            }),
+          ],
+        },
+      ]);
+      await client.settled();
+
+      const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+      const comments = textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
+
+      expect(result.sentenceChecks).toMatchObject({ unsupported: 2, commented: true });
+      expect(comments).toContain(cited);
+      expect(comments).toContain(own);
+    },
+  );
 
   test("each gets a comment on its own words, written into its paragraph; the others stay as they were", async () => {
     const { core, bytes, mindId, client } = await setUp({
@@ -618,7 +692,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     });
     expect([...comments.matchAll(/<w:comment /g)]).toHaveLength(2);
     expect(textOf(comments)).toContain("Contradicted: The report says £182.9m.");
-    expect(textOf(comments)).toContain("Unsupported: nothing in your Documents says this.");
+    expect(textOf(comments)).toContain("Unsupported: I didn’t find this in “All Documents”.");
     const [first, second, third] = paragraphsIn(document);
     expect(first).toMatch(
       /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Halden held cash of £192\.9m\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
@@ -629,6 +703,65 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     const before = paragraphsIn(unzip(bytes).get("word/document.xml")?.toString("utf8") ?? "");
     expect(second).toBe(before[1]);
   });
+
+  const STAFF = "Staff may work from home two days a week.";
+  const CLAUSE = "The Employee may work from home two days a week";
+  const quoted: CitationAttributes = {
+    passageId: "passage-1",
+    documentId: "agreement",
+    documentName: "Employment Agreement",
+    contentHash: "hash-1",
+    pageFrom: 1,
+    pageTo: 1,
+    location: null,
+    quote: CLAUSE,
+    check: "found",
+    checkReason: null,
+  };
+  test.each([
+    {
+      language: "en" as const,
+      covered: "home working two days a week",
+      uncovered: "staff in general",
+      covers: `Unsupported: your Documents support home working two days a week, not the parts about staff in general (“${CLAUSE}”, Employment Agreement, p. 1)`,
+      nothing: "Unsupported: I didn’t find this in “All Documents”.",
+    },
+    {
+      language: "zh-CN" as const,
+      covered: "每周在家工作两天",
+      uncovered: "全体员工",
+      covers: `无依据：你的文档支持每周在家工作两天，但不支持全体员工的部分（“${CLAUSE}”，Employment Agreement，第 1 页）`,
+      nothing: "无依据：未在“全部文档”中找到。",
+    },
+  ])(
+    "$language: a sentence the check quoted a Passage for part of says what it supports, as its card does; one nothing backs keeps its words",
+    async ({ language, covered, uncovered, covers, nothing }) => {
+      const { core, mindId, client } = await setUp({
+        body: paragraph(STAFF) + paragraph("Margins widened in 2026."),
+      });
+      await core.updateSettings({ user: { language } });
+      editMind(client, ([first, second]) => [
+        {
+          ...(first as JSONContent),
+          content: [
+            checked(STAFF, "unsupported", null, { reason: null, covered, uncovered, quoted }),
+          ],
+        },
+        {
+          ...(second as JSONContent),
+          content: [checked("Margins widened in 2026.", "unsupported", null)],
+        },
+      ]);
+      await client.settled();
+
+      const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+      const comments = textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
+
+      expect(result.sentenceChecks).toMatchObject({ unsupported: 2, commented: true });
+      expect(comments).toContain(covers);
+      expect(comments).toContain(nothing);
+    },
+  );
 
   test("with the option off the file is the one it was", async () => {
     const { core, bytes, mindId, client } = await setUp({
