@@ -4,7 +4,7 @@ Read this before writing code or tests, whether you are a person or a coding age
 
 **The bar:** a change is done when its pull request's checks are green on GitHub, not when the tests pass on your computer. CI runs on clean machines that are slower than yours and have a different screen. A test that passes only on your computer is a broken test.
 
-CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` doesn't run CI: `main` moves to exactly the group the queue tested. A run by hand (`workflow_dispatch`) is there when needed. A draft pull request runs only the light checks, which report as passed, until it is marked ready for review:
+CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), (there is no merge queue; the sign-off check is the only one that has to pass before a pull request merges, and the other two report what the pull request did). A push to `main` doesn't run CI. Every night at 01:30 UTC (`schedule`), and by hand (`workflow_dispatch`), the same jobs run on `main` whatever the last change was: a failing night shows its failed specs in the run's summary and is fixed before new work, like a red `main`. A draft pull request runs only the light checks, which report as passed, until it is marked ready for review:
 
 | Check | Where | What it runs |
 |---|---|---|
@@ -12,7 +12,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 | Electron smoke test (Linux) | Ubuntu | `npm ci`, the Noto CJK fonts (the runner has no Chinese face) and ffmpeg (for the feel check's videos; a failed install doesn't fail the check), then `npm run test:smoke` on a virtual display (`xvfb-run`): builds the app and runs every spec in `e2e/`, the feel check's among them, split into eight shards that run at once, balanced by how long each spec takes (`scripts/smoke-shard.mjs`, `e2e/durations.json`; refresh it from a green run's log when specs are added or slow down) (`Smoke shard N/8`); this check passes when all eight do. Each shard uploads the feel check's tables and videos as `feel-linux-N`, kept 14 days |
 | Every commit is signed off (DCO) | Ubuntu | a `Signed-off-by:` line on each commit (`git commit -s`), and no commit with an author, committer or sign-off at anthropic.com or a `Co-Authored-By:` trailer naming Claude or with an anthropic.com address (a commit carries its contributor's own name) |
 
-`main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
+`main` should stay green. A pull request merges once its sign-off check passes and its author has run the checks that matter for the change on their own computer; the full suite runs on `main` every night. If a night goes red, fixing it comes before new work.
 
 Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in four shards (`Smoke shard N/4 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
 
@@ -25,7 +25,7 @@ The packages CI installs (the Noto CJK fonts, ffmpeg, LibreOffice) come from a c
 
 ## Before you open a pull request
 
-1. Merge `main` into your branch only to resolve a conflict or to pick up something you need; the merge queue tests your change on top of `main` anyway.
+1. Merge `main` into your branch to resolve a conflict or to pick up something you need.
 2. Run what CI runs: `npm run typecheck`, `npm run lint`, `npm test`.
 3. Run `npm run test:smoke`: the whole suite, or at least every spec that touches what you changed. To find them, search `e2e/` for the test ids, labels and strings you changed or removed.
 4. When you change or remove UI, update or remove the tests that used it in the same pull request. A test still looking for something your change removed is broken by your change.
