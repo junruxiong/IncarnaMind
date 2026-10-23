@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
@@ -17,6 +17,7 @@ import { migrations } from "../../src/core/storage/migrations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import {
   createSourceFolder,
+  linkAndProcess,
   sha256,
   storedFile,
   waitForDocuments,
@@ -61,7 +62,7 @@ function mindContent(): Uint8Array {
 /**
  * A data folder as the copy layout left it (before migration 21): one ready
  * Document copied into documents/ under its hash, filed in an in-app Folder,
- * with a Tag, and a Mind citing it. `more` adds to it first, in the same layout.
+ * with a Tag, and a Mind citing it.
  */
 async function copyLayoutDataFolder(more?: (db: Database) => void): Promise<string> {
   const dataDir = await createTempDataFolder();
@@ -234,7 +235,7 @@ describe("Migration 21: from copies in the data folder to Documents in place", {
   });
 });
 
-/** A Document the copy layout deleted at `deletedAt`, which removed its copy unless another had it. */
+// The old layout's delete removed the copy, unless a live Document had the same hash.
 const deletedEarlier =
   (id: string, contentHash: string, deletedAt: string, kind = "markdown") =>
   (db: Database) =>
@@ -371,6 +372,52 @@ describe("A copied Document in Recently deleted (#1432)", { timeout: 30_000 }, (
     await core.deletePermanently([{ kind: "document", id: OLD_DOCUMENT }]);
     expect(existsSync(copyIn(dataDir))).toBe(true);
     expect(await opened(core)).toBe(NOTES);
+  });
+
+  test("a copy added again as a Document stays when the old one is deleted for good, with the data folder reached through a link", async () => {
+    const dataDir = await copyLayoutDataFolder();
+    const link = join(await createTempDataFolder(), "IncarnaMind");
+    await symlink(dataDir, link);
+    const core = startCore(link);
+    await core.deleteDocument(DOCUMENT);
+    const {
+      documents: [again],
+    } = await core.addDocuments([join(link, "documents", `${HASH}.md`)]);
+    if (!again) throw new Error("The copy wasn't added.");
+    expect(again.id).not.toBe(DOCUMENT);
+
+    await core.deletePermanently([{ kind: "document", id: DOCUMENT }]);
+
+    expect(await opened(core, again.id)).toBe(NOTES);
+  });
+
+  test("a Linked folder's file is never removed by the purge: one that took over a copy, or one inside the data folder", async () => {
+    const dataDir = await copyLayoutDataFolder();
+    const core = startCore(dataDir);
+    const papers = await createSourceFolder();
+    const original = await writeSourceFile(papers, "Tide notes.md", NOTES);
+    await core.addLinkedFolder(papers);
+    await core.reconcileDocuments();
+    await waitForDocuments(core, (documents) => {
+      expect(documents).toEqual([expect.objectContaining({ id: DOCUMENT, path: original })]);
+    });
+    const kept = join(dataDir, "documents", "Kept");
+    const inside = await writeSourceFile(
+      kept,
+      "Neap tides.md",
+      "# Neap tides\n\nNeap tides come at the quarter moons.\n",
+    );
+    const [linked] = await linkAndProcess(core, kept);
+    if (!linked) throw new Error("The Linked folder inside the data folder holds no Document.");
+
+    await core.deleteDocuments([DOCUMENT, linked.id]);
+    await core.deletePermanently([
+      { kind: "document", id: DOCUMENT },
+      { kind: "document", id: linked.id },
+    ]);
+
+    expect(await readFile(original, "utf8")).toBe(NOTES);
+    expect(existsSync(inside)).toBe(true);
   });
 
   test("many deleted and restored together all keep their copies", async () => {

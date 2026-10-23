@@ -74,9 +74,10 @@ import { isPlaceholderDate } from "./creationDate";
 import { createEmbeddingQueue } from "./embedding";
 import {
   DOCUMENT_EXTENSIONS,
-  isInside,
+  isLegacyCopy,
   openFile,
   openImageBeside,
+  pathIn,
   relativePath,
   type StatIdentity,
 } from "./files";
@@ -473,7 +474,6 @@ export function createDocuments(options: DocumentsOptions) {
   const log = options.log ?? silentLogger;
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
-  const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
   const { textRecognition } = options;
   /** Where reading each Document's scanned pages is, while its job reads them (#397). */
   const scanProgress = new Map<string, DocumentScanProgress>();
@@ -2512,7 +2512,6 @@ export function createDocuments(options: DocumentsOptions) {
     /** Picks up Documents `restore` brought back where they were, and announces them. */
     restored(ids: readonly string[]): void {
       const linkedFolders = new Set<string | null>();
-      const copies: string[] = [];
       for (const id of ids) {
         const row = find(id);
         if (!row) continue;
@@ -2529,29 +2528,39 @@ export function createDocuments(options: DocumentsOptions) {
         }
         if (!(row.status === "embedding" && embedding.enqueue(id))) announce(id);
         if (row.status === "waiting-for-model") model.ensure();
-        if (isLegacyCopy(row.path)) copies.push(row.path);
       }
       for (const linkedFolderId of linkedFolders) library.documentsChanged(linkedFolderId);
+      const copies = db
+        .all<{ path: string; relative_path: string }>(
+          `SELECT path, relative_path FROM documents
+           WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL
+             AND source_kind = 'data-folder' AND relative_path IS NOT NULL`,
+          [JSON.stringify(ids)],
+        )
+        .filter((row) => isLegacyCopy(dataDir, pathIn(dataDir, row.relative_path)))
+        .map((row) => row.path);
       // Builds before #1432 removed the copy at delete: one gone shows missing now, not when opened.
       if (copies.length > 0) library.check(copies).catch(reportError);
     },
 
     /**
      * Removes the old layout's copies of Documents deleted permanently, each once no Document
-     * that can still come back has it. Again at each start, for a quit that cut it short.
+     * that can still come back is at its place. Again at each start, for a quit that cut it short.
      */
     async dropPurged(): Promise<void> {
+      // By place, not by path: a Document added from a data folder reached through a link has
+      // the path with links resolved, an old one the path as the app was given it.
       const copies = db
-        .all<{ path: string }>(
-          `SELECT DISTINCT path FROM documents
-           WHERE purged_at IS NOT NULL AND path IS NOT NULL AND linked_folder_id IS NULL`,
+        .all<{ relative_path: string }>(
+          `SELECT DISTINCT d.relative_path FROM documents d
+           WHERE d.purged_at IS NOT NULL AND d.source_kind = 'data-folder'
+             AND d.linked_folder_id IS NULL AND d.relative_path IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM documents o WHERE o.purged_at IS NULL
+               AND (o.path = d.path
+                    OR (o.source_kind = 'data-folder' AND o.relative_path = d.relative_path)))`,
         )
-        .map((row) => row.path)
-        .filter(
-          (path) =>
-            isLegacyCopy(path) &&
-            !db.get("SELECT 1 FROM documents WHERE path = ? AND purged_at IS NULL", [path]),
-        );
+        .map((row) => pathIn(dataDir, row.relative_path))
+        .filter((path) => isLegacyCopy(dataDir, path));
       await Promise.all(copies.map((path) => rm(path, { force: true }).catch(reportError)));
     },
 
