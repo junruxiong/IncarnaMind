@@ -38,9 +38,9 @@ test.afterEach(async () => {
 interface Watch {
   firstRowAt: number | null;
   shifts: { at: number; moved: string[] }[];
+  statuses: { at: number; status: string }[];
   frames: {
     at: number;
-    status: string;
     names: Record<string, { width: number; status: string; marked: boolean }>;
   }[];
 }
@@ -48,7 +48,7 @@ interface Watch {
 /** Starts the watch: from now on the page records its layout shifts and, each frame, its rows. */
 const watchSidebar = (window: Page) =>
   window.evaluate(() => {
-    const watch: Watch = { firstRowAt: null, shifts: [], frames: [] };
+    const watch: Watch = { firstRowAt: null, shifts: [], statuses: [], frames: [] };
     (globalThis as unknown as { watch: Watch }).watch = watch;
     const sidebar = () => document.querySelector('[data-testid="sidebar"]');
     const tree = () => sidebar()?.querySelector('[role="tree"]') ?? null;
@@ -69,6 +69,17 @@ const watchSidebar = (window: Page) =>
         if (moved.length > 0) watch.shifts.push({ at: entry.startTime, moved });
       }
     }).observe({ type: "layout-shift", buffered: true });
+    const noteStatus = () => {
+      const status = sidebar()?.querySelector('[data-testid="sidebar-status"]')?.textContent ?? "";
+      if (status !== (watch.statuses.at(-1)?.status ?? "")) {
+        watch.statuses.push({ at: performance.now(), status });
+      }
+    };
+    new MutationObserver(noteStatus).observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
     const tick = () => {
       const names: Watch["frames"][number]["names"] = {};
       for (const row of sidebar()?.querySelectorAll('[data-testid="document-list-item"]') ?? []) {
@@ -84,11 +95,7 @@ const watchSidebar = (window: Page) =>
       if (watch.firstRowAt === null && Object.keys(names).length > 0) {
         watch.firstRowAt = performance.now();
       }
-      watch.frames.push({
-        at: performance.now(),
-        status: sidebar()?.querySelector('[data-testid="sidebar-status"]')?.textContent ?? "",
-        names,
-      });
+      watch.frames.push({ at: performance.now(), names });
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -113,17 +120,17 @@ const untilTagged = (window: Page) =>
     )
     .toBe(true);
 
-/** The statuses the footer showed for less than `leastMs`, by their text, from the sampled frames. */
-function shownTooShort(frames: Watch["frames"], leastMs: number): string[] {
+/** The statuses the footer showed for less than `leastMs`, by their text, from when its text changed. */
+function shownTooShort(statuses: Watch["statuses"], leastMs: number): string[] {
   const short: string[] = [];
   let runStart: number | null = null;
   let text = "";
-  for (const frame of frames) {
-    if (frame.status !== "" && runStart === null) {
-      runStart = frame.at;
-      text = frame.status;
-    } else if (frame.status === "" && runStart !== null) {
-      if (frame.at - runStart < leastMs) short.push(text);
+  for (const change of statuses) {
+    if (change.status !== "" && runStart === null) {
+      runStart = change.at;
+      text = change.status;
+    } else if (change.status === "" && runStart !== null) {
+      if (change.at - runStart < leastMs) short.push(text);
       runStart = null;
     }
   }
@@ -180,8 +187,9 @@ for (const language of ["en", "zh-CN"] as const) {
       const unasked = seen.shifts.filter((shift) => shift.at > arrived + 100);
       expect(unasked, "layout shifts in the sidebar's rows").toEqual([]);
 
-      // A status shows only after 300 ms, and stays at least 500 ms (a frame is about 17 ms).
-      expect(shownTooShort(seen.frames, 480), "a status shown for under 500 ms").toEqual([]);
+      // A status shows only after 300 ms, and stays at least 500 ms. Timed from the footer's own
+      // changes: a frame the busy page draws late would shorten a run sampled by frames.
+      expect(shownTooShort(seen.statuses, 480), "a status shown for under 500 ms").toEqual([]);
 
       // Once a Document is read, its name keeps its width while its Tags arrive; one that ends
       // with none only gets the room back its dot's place held.
@@ -227,7 +235,7 @@ for (const count of [3, 4, 5]) {
     await untilTagged(window);
     await expect(window.getByTestId("sidebar-status")).toHaveText("");
     const seen = await watched(window);
-    expect(shownTooShort(seen.frames, 480), "a status shown for under 500 ms").toEqual([]);
+    expect(shownTooShort(seen.statuses, 480), "a status shown for under 500 ms").toEqual([]);
     await app.close();
   });
 }
