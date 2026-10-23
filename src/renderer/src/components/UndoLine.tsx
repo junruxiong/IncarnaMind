@@ -14,7 +14,7 @@ import { useLanguage, useT } from "../i18n";
 import { type Said, saidInLine } from "../lineNames";
 import { useFade } from "../motion";
 import { useAppStore } from "../store";
-import { UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
+import { lineShownAt, UNDO_SHOWN_MS, type UndoLineState, useUndo } from "../undo";
 
 const lineClass =
   "mx-2 flex min-w-0 shrink-0 gap-1 pt-0.5 pb-1 pl-2 text-[12px] leading-4 text-ink-secondary";
@@ -27,32 +27,33 @@ const actionClass =
  * The undo line (CONTEXT.md) at the foot of the sidebar, above Settings: what
  * the User just changed, then Undo, which does what ⌘Z does. One at a time; it
  * goes after a few seconds, with Esc or with the next change, while ⌘Z still
- * reaches the change. An undo the core refuses shows here as one problem line
- * with one action, which stays until dismissed. Read out politely.
+ * reaches the change. An undo the core refuses shows as one problem line with
+ * one action, which stays until dismissed: here, or where its change showed
+ * its line. Read out politely.
  */
 export function UndoLine() {
-  const line = useUndo((state) => state.line);
+  const line = useUndo((state) => (lineShownAt(state) === null ? state.line : null));
   return (
     <div role="status" aria-live="polite" data-testid="undo-line" className="flex flex-col">
       {/* A change shown where the User made it, under an Answer in the assistant, isn't shown twice. */}
-      {line && !placeOf(line) && <Line key={line.id} line={line} />}
+      {line && <Line key={line.id} line={line} />}
     </div>
   );
 }
 
-/** The line of a change made in a place of its own, shown there instead of the sidebar's foot (`Undoable.shownAt`). */
+/**
+ * The line of a change made in a place of its own, shown there instead of the sidebar's foot
+ * (`Undoable.shownAt`), and so is a problem in taking it back or doing it again.
+ */
 export function UndoLineAt({ place, className }: { place: string; className?: string }) {
-  const line = useUndo((state) =>
-    state.line && placeOf(state.line) === place ? state.line : null,
-  );
+  const line = useUndo((state) => (lineShownAt(state) === place ? state.line : null));
+  useEffect(() => useUndo.getState().showPlace(place), [place]);
   return (
     <div aria-live="polite" data-testid="undo-line-here" className={className}>
       {line && <Line key={line.id} line={line} />}
     </div>
   );
 }
-
-const placeOf = (line: UndoLineState) => line.change?.shownAt ?? line.shownAt;
 
 const report = (error: unknown) => useAppStore.getState().reportError(error);
 
