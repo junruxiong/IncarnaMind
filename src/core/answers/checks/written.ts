@@ -99,6 +99,10 @@ export interface CheckWrittenInput {
   checking(count: number): void;
   /** Changes the Mind's content, in one transaction. */
   edit(change: (blocks: Y.XmlFragment) => void): void;
+  /** How many sentences may still be sent: a write checked a paragraph at a time shares one cap. */
+  atMost?: number;
+  /** The marks' shared id, for a write checked a paragraph at a time. */
+  request?: string;
 }
 
 /**
@@ -500,9 +504,10 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
     if (!prepared) return null;
     const { searchable, check: scope } = options.scopeOf(mindId);
     if (searchable === 0) return null;
-    const sending = sentences.slice(0, SENTENCES_CHECKED_AT_MOST);
+    const atMost = Math.max(0, input.atMost ?? SENTENCES_CHECKED_AT_MOST);
+    const sending = sentences.slice(0, atMost);
     input.checking(sending.length);
-    const request = randomUUID();
+    const request = input.request ?? randomUUID();
     const startedAt = options.now().toISOString();
     const { outcomes, stop } = await runItems(
       sending,
@@ -607,7 +612,7 @@ export function createWrittenCheck(options: WrittenCheckOptions) {
       landings.push({ sentence, nodes: null, mark });
     });
     const at = options.now().toISOString();
-    for (const sentence of sentences.slice(SENTENCES_CHECKED_AT_MOST)) {
+    for (const sentence of sentences.slice(atMost)) {
       landings.push({
         sentence,
         nodes: null,

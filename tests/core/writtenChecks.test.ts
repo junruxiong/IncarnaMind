@@ -63,6 +63,8 @@ interface Writing {
   cloud?: { kind: "anthropic"; modelId: string } | { kind: "ollama"; modelId: string };
   /** How the Answer ends: a spending cap reached during the check stops it too. */
   ends?: "finished" | "failed";
+  /** The content streams in as the model writes it, held after `after` parts until `until`. */
+  streamed?: { after: number; until: Promise<void> };
 }
 
 /**
@@ -71,7 +73,7 @@ interface Writing {
  * first clause and its marker.
  */
 function writingModel(
-  { content, into = false, during, check }: Writing,
+  { content, into = false, during, check, streamed }: Writing,
   calls: ModelCall[],
   coreOf: () => Core | null,
 ) {
@@ -101,7 +103,8 @@ function writingModel(
     }
     if (!results.some((result) => result.tool === tool)) {
       const input = into ? { content } : { title: "Tide notes", content };
-      return { calls: [{ tool, input }] };
+      if (!streamed) return { calls: [{ tool, input }] };
+      return { calls: [{ tool, input, streamInput: true }], pause: streamed };
     }
     return { text: "Wrote it from your Documents." };
   });
@@ -383,6 +386,52 @@ describe("What the assistant writes is checked before it lands", { timeout: 30_0
     expect(lastResult(model)).toContain(
       `Only the first ${SENTENCES_CHECKED_AT_MOST} of its ${many} sentences with Citations were checked`,
     );
+  });
+
+  // protects=a write is checked a paragraph at a time as each lands (#1635): the first paragraph's check starts while the model is still writing the rest, and the card counts every paragraph's sentences as one check; fails_when=the check waits for the whole text (the write then never finishes, as the stream waits for that check), or the counts leave a paragraph out; no_claim=a real model's speed, which eval/speed measures.
+  test("each paragraph is checked as it lands, while the rest is still being written", async () => {
+    let arrived = () => {};
+    const firstCheck = new Promise<void>((resolve) => {
+      arrived = resolve;
+    });
+    const paragraphs = [
+      "The first note on the tides is short [^1].",
+      `The second note goes on for a while about the tides and the harbour wall, the boats, the quay and the light at dusk ${"and more ".repeat(8)}[^1].`,
+      "The third note ends it [^1].",
+    ];
+    const content = paragraphs.join("\n\n");
+    const json = JSON.stringify({ title: "Tide notes", content });
+    // Characters into the input: past the first paragraph's end, well before the second's.
+    const after = json.indexOf("\\n\\n") + 40;
+    const { calls, change } = await write({
+      content,
+      streamed: { after, until: firstCheck },
+      check: (call) => {
+        if (call.prompt.includes("first note")) arrived();
+        return null;
+      },
+    });
+    expect(calls.filter((call) => isCheckRun(call) && call.results.length === 0)).toHaveLength(3);
+    expect(change?.selfCheck).toMatchObject({ cited: 3, sent: 3, checked: 3, failed: 0 });
+  });
+
+  // protects=a write checked a paragraph at a time still checks at most the first sentences in all, the rest marked not checked; fails_when=each paragraph gets its own cap; no_claim=which sentences come first, which the single-call test covers.
+  test("checked a paragraph at a time, a write still checks at most the first sentences", async () => {
+    const paragraph = (number: number) =>
+      Array.from({ length: 5 }, (_, index) => `Tide ${number}.${index + 1} is noted [^1].`).join(
+        " ",
+      );
+    const content = [1, 2, 3].map(paragraph).join("\n\n");
+    const { core, calls, change, client } = await write({
+      content,
+      streamed: { after: 1, until: Promise.resolve() },
+    });
+    expect(calls.filter((call) => isCheckRun(call) && call.results.length === 0)).toHaveLength(
+      SENTENCES_CHECKED_AT_MOST,
+    );
+    expect(change?.selfCheck).toMatchObject({ cited: 15, sent: SENTENCES_CHECKED_AT_MOST });
+    const marks = await marksIn(core, client);
+    expect(marks.filter((mark) => mark.check.reason === "too-many")).toHaveLength(3);
   });
 
   // protects=words the User types into what the assistant wrote while the check runs stay: only the sentences cut or marked are written, each only while unchanged (one with no cut too); fails_when=the User's words vanish, or a sentence they changed is cut over; no_claim=none beyond protects.
