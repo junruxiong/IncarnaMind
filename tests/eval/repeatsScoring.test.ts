@@ -121,42 +121,44 @@ describe("the repeated checks", () => {
 
   test("count a genuine conflict Supported as a false Supported, and a known miss apart", () => {
     const [summary] = summarise([
-      row(1, "number", "contradicted", "en-conflicts"),
-      row(1, "place", "supported", "en-conflicts"),
-      row(1, "scope", "partly", "en-conflicts"),
-      row(1, "duty", "supported", "en-conflicts"),
+      row(1, "number", "contradicted", "zh-conflicts"),
+      row(1, "place", "supported", "zh-conflicts"),
+      row(1, "scope", "partly", "zh-conflicts"),
+      row(1, "negation", "no-mark", "zh-conflicts"),
     ]);
     expect(summary).toMatchObject({
       falseSupported: 1,
       conflicts: { contradicted: 1, checked: 3 },
     });
     expect(summary?.misses.map((each) => each.key)).toEqual(["place", "scope"]);
-    expect(summary?.known.map((each) => [each.key, each.knownMiss])).toEqual([["duty", 1668]]);
+    expect(summary?.known.map((each) => [each.key, each.knownMiss])).toEqual([["negation", 1682]]);
     const shown = report(
       summarise([
-        row(1, "duty", "supported", "en-conflicts"),
-        row(2, "duty", "contradicted", "en-conflicts"),
-        row(1, "employer", "partly", "en-conflicts"),
+        row(1, "negation", "no-mark", "zh-conflicts"),
+        row(2, "negation", "contradicted", "zh-conflicts"),
       ]),
       RUN,
     );
-    expect(shown).toContain("### Known misses (#1668), outside the counts above");
+    expect(shown).toContain("### Known misses (#1682), outside the counts above");
     expect(shown).toContain(
-      "- duty: 1 of 2 Contradicted, 1 Supported, 0 unsupported, 0 not checked or not named",
-    );
-    expect(shown).toContain(
-      "- employer: 0 of 1 Contradicted, 0 Supported, 1 unsupported, 0 not checked or not named",
+      "- negation: 1 of 2 Contradicted, 0 Supported, 0 unsupported, 1 not checked or not named",
     );
     expect(shown).not.toContain("Genuine conflicts Contradicted");
   });
 
-  test("mark as known misses (#1668) the conflicts the first verdict or the claims miss today, and keep them in the sets", () => {
+  test("count must for may and reversed parties as ordinary conflicts, and only the negation the claims leave out apart", () => {
+    const conflicts = (id: string) => SETS.find((each) => each.id === id)?.sentences ?? [];
     const known = (id: string) =>
-      SETS.find((each) => each.id === id)
-        ?.sentences.filter((each) => each.knownMiss === 1668)
-        .map((each) => each.key);
-    expect(known("en-conflicts")).toEqual(["employer", "duty"]);
-    expect(known("zh-conflicts")).toEqual(["negation", "payer", "landlord", "share"]);
+      conflicts(id)
+        .filter((each) => each.knownMiss !== undefined)
+        .map((each) => [each.key, each.knownMiss]);
+    expect(known("en-conflicts")).toEqual([]);
+    expect(known("zh-conflicts")).toEqual([["negation", 1682]]);
+    for (const id of ["en-conflicts", "zh-conflicts"]) {
+      expect(conflicts(id).map((each) => each.key)).toEqual(
+        expect.arrayContaining(["duty-home", "permission", "party-secret"]),
+      );
+    }
   });
 
   test("expect every genuine conflict to be Contradicted, a dozen kinds in each language", () => {
