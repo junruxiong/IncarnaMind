@@ -345,13 +345,6 @@ export interface RecheckDocuments {
   ): { id: string; text: string }[];
 }
 
-/**
- * Checks a Citation again against its Document's current version (see
- * `CoreApi.recheckCitation`): in the cited Units first, then in each Unit,
- * and each two consecutive Units of one run, of the current version, in
- * order. The Passage given is one of the current version that holds the
- * Units, preferably one whose text holds the quote too.
- */
 const removedFrom = (range: PageRange): CitationRecheck => ({
   check: "cant-check",
   checkReason: "document-removed",
@@ -399,6 +392,13 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
   return { units, matching, inRange, result };
 }
 
+/**
+ * Checks a Citation again against its Document's current version (see
+ * `CoreApi.recheckCitation`): in the cited Units first, then in each Unit,
+ * and each two consecutive Units of one run, of the current version, in
+ * order. The Passage given is one of the current version that holds the
+ * Units, preferably one whose text holds the quote too.
+ */
 export function recheckCitation(
   documents: RecheckDocuments,
   input: { documentId: string; quote: string; pageFrom: number | null; pageTo: number | null },
