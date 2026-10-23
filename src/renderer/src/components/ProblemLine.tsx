@@ -21,6 +21,8 @@ export interface ProblemAction {
   label: string;
   /** What a screen reader says, where the label alone doesn't name what it acts on ("Change"). */
   ariaLabel?: string;
+  /** More on hover, such as where the action sends something. */
+  title?: string;
   onClick(event: MouseEvent<HTMLButtonElement>): void;
   testId?: string;
   /** Not while it is already running. */
@@ -39,6 +41,7 @@ export function LineAction({
       ref={ref}
       type="button"
       aria-label={action.ariaLabel}
+      title={action.title}
       data-testid={action.testId}
       disabled={action.disabled}
       onClick={action.onClick}

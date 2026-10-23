@@ -1687,20 +1687,23 @@ export interface CitationRecheck {
   location: CitationLocation | null;
 }
 
-/** Words the User selected in a Document's viewer, on one of its Units (`CoreApi.citeSelection`). */
+/** Words the User selected in a Document's viewer, on one of its Units (`citeSelection`). */
 export interface SelectedPart {
   /** The Unit they are on, from 1: a PDF's page. Null where the viewer doesn't know it. */
   unit: number | null;
   /** As the viewer shows them, a line break between lines. */
   text: string;
-  /** How many of the Unit's lines with text come before and after them: a running header or footer sits at a page's edge. */
+  /**
+   * How many of the Unit's lines with text come before and after them: a
+   * running header or footer sits at a page's edge.
+   */
   linesBefore?: number;
   linesAfter?: number;
 }
 
-/** A Citation of what the User selected: the attributes to store on its node, and the quote it cites. */
+/** A Citation of what the User selected: the attributes to store on its node, and its quote. */
 export interface CitedSelection extends CitationRecheck {
-  /** The words selected, read as words (`readableQuote`), without a running header or footer selected with them. */
+  /** The words selected, read as words, without a running header or footer selected with them. */
   quote: string;
 }
 
@@ -9123,8 +9126,9 @@ export interface CoreApi {
   /**
    * Cites words the User selected in a Document's viewer (#101), given in the
    * order selected, one part for each Unit: checked against the current
-   * version's text of those Units only, never found somewhere else. Only
-   * when no part names its Unit is the whole Document searched.
+   * version's text of those Units only, never found somewhere else, and kept
+   * there when it isn't found. With no Unit known, it is cited only where
+   * the Document has the words in one place.
    */
   citeSelection(input: { documentId: string; parts: SelectedPart[] }): Promise<CitedSelection>;
   /**

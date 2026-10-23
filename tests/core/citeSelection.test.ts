@@ -123,21 +123,45 @@ describe("citeSelection", () => {
     expect(cited.quote).toBe("Five Not on the page");
   });
 
-  test("words not on the page they were selected on are not found there, and not looked for elsewhere", async () => {
+  test("words not on the page they were selected on are not found there, and keep that page", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await addPaper(core);
 
+    // Within the lines at the page's top, as the viewer counts them: still not taken for a header.
+    for (const lines of [{}, { linesBefore: 1, linesAfter: 2 }]) {
+      const cited = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: 4, text: "Grocers studied across the eleven chains.", ...lines }],
+      });
+
+      expect(cited).toMatchObject({
+        check: "not-found",
+        checkReason: "quote-not-on-pages",
+        pageFrom: 4,
+        pageTo: 4,
+      });
+      expect(cited.location).toEqual({ kind: "page", from: 4, to: 4 });
+    }
+  });
+
+  test("is found only as the Citation check finds it again: a line with a page mark in it is not", async () => {
+    const core = startCore(await createTempDataFolder());
+    const line = "As shown in [p. 4] of the appendix, margins recover.";
+    const document = await addPaper(core, buildPdf([{ lines: [line] }]), "Appendix note.pdf");
+
     const cited = await core.citeSelection({
       documentId: document.id,
-      parts: [{ unit: 4, text: "Grocers studied across the eleven chains." }],
+      parts: [{ unit: 1, text: line, linesBefore: 0, linesAfter: 0 }],
+    });
+    const again = await core.recheckCitation({
+      documentId: document.id,
+      quote: cited.quote,
+      pageFrom: 1,
+      pageTo: 1,
     });
 
-    expect(cited).toMatchObject({
-      check: "not-found",
-      checkReason: "quote-not-on-pages",
-      pageFrom: 4,
-      pageTo: 4,
-    });
+    expect(again.check).toBe("not-found");
+    expect(cited).toMatchObject({ check: "not-found", pageFrom: 1 });
   });
 
   test("more than two pages can't be cited", async () => {
@@ -186,16 +210,21 @@ describe("citeSelection", () => {
     expect(cited).toMatchObject({ check: "found", quote: "covers asset management firms" });
   });
 
-  test("words on no known Unit are looked for in the whole Document", async () => {
+  test("words on no known Unit are cited where the Document has them, if it has them in one place only", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await addPaper(core);
 
-    const cited = await core.citeSelection({
+    const once = await core.citeSelection({
       documentId: document.id,
       parts: [{ unit: null, text: "Smaller chains recovered less" }],
     });
+    const twice = await core.citeSelection({
+      documentId: document.id,
+      parts: [{ unit: null, text: REPEATED }],
+    });
 
-    expect(cited).toMatchObject({ check: "found", pageFrom: 4, pageTo: 4 });
+    expect(once).toMatchObject({ check: "found", pageFrom: 4, pageTo: 4 });
+    expect(twice).toMatchObject({ check: "not-found", pageFrom: null, pageTo: null });
   });
 
   test("a selection that names its Unit for some parts and not others isn't looked for elsewhere", async () => {
@@ -210,7 +239,7 @@ describe("citeSelection", () => {
       ],
     });
 
-    expect(cited).toMatchObject({ check: "not-found", pageFrom: null });
+    expect(cited).toMatchObject({ check: "not-found", pageFrom: 4, pageTo: 4 });
   });
 
   test("a Unit that isn't one, or nothing but spaces, is refused", async () => {
