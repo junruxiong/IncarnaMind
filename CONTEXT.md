@@ -31,11 +31,11 @@ What is generated in response to exactly one Question, right after it: a Block i
 _Avoid_: output, response, reply
 
 **Question context**:
-What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers, and the Mind in focus when the Question was asked. Plus Passages from the Documents in the Question's Search scope.
+What an Answer is generated from: in a Mind, every Block above its Question, except Notes the User has excluded; in a Conversation, its earlier Questions and Answers, the Mind in focus when the Question was asked, and the names of the Documents open on screen then. Plus Passages from the Documents in the Question's Search scope.
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope while the Folder holds a Document, and with every Document while it holds none; the User can remove the Folder; a Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope while the Folder holds a Document, and with every Document while it holds none; the User can remove the Folder; a Question with no Search scope searches all Documents. The Search scope the User sets in a Mind's composer stays with the Mind, and checks of its sentences look there too; text added from an Answer brings its Question's Search scope to a Mind that has none.
 _Avoid_: filter, context
 
 ### The assistant

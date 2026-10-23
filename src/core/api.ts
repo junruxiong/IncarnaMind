@@ -181,8 +181,12 @@ export interface CreateMindInput {
  *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
  *   which an older version's editor would strip, so the sentence would count
  *   and be checked again. Older content is version 25 content as it is.
+ * - 26: a check made in the Search scope the User set for the Mind (#1623):
+ *   `chosen` in the `claimCheck` mark's `scope`. An older version would read
+ *   it as made in the Mind's Folder or in every Document, and say so on its
+ *   card. Older content is version 26 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 25;
+export const CONTENT_SCHEMA_VERSION = 26;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -2032,6 +2036,8 @@ export interface GettingStarted {
   started: boolean;
   /** The User opened a Citation's card. */
   citationChecked: boolean;
+  /** The User opened a red ≠ mark, a mistake the check caught, in the example or in a Mind of their own. */
+  mistakeSeen: boolean;
   /** A Document of the User's own has been read, not only added, or the User connected an app. */
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
@@ -2074,6 +2080,11 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
+  /**
+   * How many times each tip has shown on this device, by its id: a tip shows at most twice, and
+   * a closed or used one is counted as shown twice (docs/agents/interaction.md, rule 14).
+   */
+  tips: Record<string, number>;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
@@ -2770,6 +2781,19 @@ export interface SaveWebPageInput {
    * `UserSettings.keepWebPageLook` says. Ignored with `html`.
    */
   keepLook?: boolean;
+  /**
+   * Local mode is on and the User let this one page be fetched ("Fetch this
+   * page once"): without it, an address that isn't saved yet isn't fetched in
+   * Local mode, and the result says why ("local-mode"). It doesn't turn Local
+   * mode off.
+   */
+  localModeOnce?: boolean;
+}
+
+/** What `fetchWebPageAgain` takes besides the Document. */
+export interface FetchWebPageAgainOptions {
+  /** As `SaveWebPageInput.localModeOnce`. */
+  localModeOnce?: boolean;
 }
 
 /**
@@ -2789,10 +2813,17 @@ export type WebPageLook =
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
  * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
- * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "local-mode",
+ * "Keep everything on this computer" is on, so the page wasn't loaded; "failed",
  * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
+export type WebPageLookFailure =
+  | "timed-out"
+  | "unreachable"
+  | "too-large"
+  | "stopped"
+  | "local-mode"
+  | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -2812,6 +2843,9 @@ export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "st
  * - "too-many-redirects": it redirected more than web search's fetcher follows.
  * - "not-from-search": web search fetches only the pages its search returned
  *   in the same Answer, and this wasn't one.
+ * - "local-mode": "Keep everything on this computer" is on, so nothing was
+ *   fetched: the site would have seen the request, and the address can name
+ *   a matter. The User can let this one page go (`localModeOnce`).
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -2826,7 +2860,8 @@ export type WebPageFailureReason =
   | "not-text"
   | "not-public"
   | "too-many-redirects"
-  | "not-from-search";
+  | "not-from-search"
+  | "local-mode";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -4899,15 +4934,17 @@ export interface CheckClaimInput {
 }
 
 /**
- * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document (`widened`)
- * because the User asked ("Search all Documents") or the Mind's Folder held
- * no Document (#1359). A Mind moved to another Folder since needs its
- * sentences checked again; one whose check was widened doesn't.
+ * Where a sentence's check searched: the Search scope the User set for the
+ * Mind (`chosen`, #1623), else the Mind's Folder (null for a Mind in none,
+ * which searches every Document), or every Document (`widened`) because the
+ * User asked ("Search all Documents") or the Mind's Folder held no Document
+ * (#1359). A Mind moved to another Folder since needs its sentences checked
+ * again, unless they were checked in its chosen scope or widened.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
   widened: boolean;
+  chosen?: SearchScope;
 }
 
 /**
@@ -4988,8 +5025,17 @@ export type CheckSentencesResult =
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** Nothing was sent: the scope holds no Document with text to check against. */
-  | { kind: "no-documents"; folderId: string | null }
+  /**
+   * Nothing was sent: the scope holds no Document with text to check against. `chosen`: that
+   * scope is the Search scope the User set for the Mind, while other Documents are there; its
+   * items may be deleted, or, `onlyLeftOut`, hold only what the check leaves out (the file the
+   * Mind was made from).
+   */
+  | {
+      kind: "no-documents";
+      folderId: string | null;
+      chosen?: { scope: SearchScope; onlyLeftOut: boolean };
+    }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
   /** Nothing was sent: every sentence of the selection holds changes still waiting. */
@@ -5097,6 +5143,12 @@ export type MindCheckPlan =
       /** The Mind's own model; null for the default. */
       model: ChatModelChoice | null;
     }
+  /**
+   * "Changed" mode with nothing to send: every claim has a check that still holds, made no
+   * earlier than `since` (ISO 8601 UTC; the oldest of them, else the last whole-Mind check;
+   * null when neither says).
+   */
+  | { kind: "unchanged"; since: string | null }
   | Extract<CheckSentencesResult, { kind: "no-documents" | "nothing" }>;
 
 /** The claims a Check this Mind run would check, once the model has named them (`findMindClaims`). */
@@ -5615,6 +5667,12 @@ export interface AskInConversationInput {
   mindId?: string | null;
   /** Where the User is in that Mind; ignored with no Mind. */
   focus?: MindFocus | null;
+  /**
+   * The Documents open on screen, by id, the focused group's first: what "this document"
+   * means (#1334). Read for this Answer only, never kept with the Question; those outside
+   * its Search scope are left out.
+   */
+  onScreen?: string[] | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */
@@ -5632,6 +5690,8 @@ export interface ConversationAnswerInput {
    * is written from every Document ("Search all Documents", #748).
    */
   clearScope?: boolean;
+  /** Regenerating: the Documents open on screen now, as `AskInConversationInput.onScreen`. */
+  onScreen?: string[] | null;
 }
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
@@ -7447,6 +7507,22 @@ export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 export const CHECK_RECORD_FORMATS = ["pdf", "csv"] as const;
 export type CheckRecordFormat = (typeof CHECK_RECORD_FORMATS)[number];
 
+/** A file of the check record that could not be saved, and why (`message` is English; `wording` says it in the interface language). */
+export interface CheckRecordFailure {
+  format: CheckRecordFormat;
+  message: string;
+  wording: ErrorWording | null;
+}
+
+/**
+ * What `saveCheckRecord` did. Saved: `file` is the PDF, or the CSV when the PDF could not be made;
+ * `withCsv` says the CSV is beside it; each file that failed is in `failures`, and the other was kept.
+ * When neither could be saved, it throws the first failure.
+ */
+export type SavedCheckRecord =
+  | { status: "saved"; file: SavedFile; withCsv: boolean; failures: CheckRecordFailure[] }
+  | Exclude<SavedExport, { status: "saved" }>;
+
 /**
  * The User's export choices (`UserSettings.exportOptions`): the format Export uses, and each
  * format's own options. Markdown, the archive, always keeps the Questions; a source pack has
@@ -8752,9 +8828,10 @@ export interface CoreApi {
    * page that changed becomes a new version. Citations keep pointing at the
    * version they quote. One that can't be fetched now leaves the Document as
    * it was: the result says why. Throws NotFoundError for an unknown
-   * Document, and InvalidInputError for one that isn't a web page.
+   * Document, and InvalidInputError for one that isn't a web page. In Local
+   * mode nothing is fetched unless `localModeOnce` says the User let it.
    */
-  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  fetchWebPageAgain(documentId: string, options?: FetchWebPageAgainOptions): Promise<WebPageResult>;
   /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
@@ -9355,7 +9432,8 @@ export interface CoreApi {
   /**
    * What "Check this Mind" (#737) would send in `mode`, against the Mind's
    * Folder or, with `allDocuments`, every Document; or why there is nothing
-   * to check. Sends nothing.
+   * to check. Sends nothing. In "changed" mode the checks that couldn't be
+   * made count as changed.
    */
   planMindCheck(
     mindId: string,
@@ -9374,7 +9452,9 @@ export interface CoreApi {
    * sentences, leaving out headings, questions and the User's own opinions,
    * then each claim is checked as Check against Documents checks it, against
    * the Mind's Folder (or every Document). In "changed" mode only the checks
-   * that need a re-check, and the sentences never checked since, are sent.
+   * that need a re-check or couldn't be made, and the sentences never checked
+   * since, are sent. In "all" mode a sentence with a check is checked again,
+   * and neither it nor a skipped one is sent to the model to be named again.
    * Each claim gets its mark at once, then its result; a cloud model checks a
    * few at once, and the monthly cap or a plan's limit stops the run. Records
    * the run in the Mind (`MindCheckRun`). `cancelCheck` stops it.
@@ -9829,10 +9909,11 @@ export interface CoreApi {
   saveMindExport(mindId: string, options: ExportMindOptions): Promise<SavedMindExport>;
   /**
    * Saves a record of what was checked in a Mind (#738) into the Output location, as
-   * `saveMindExport` does: each checked sentence and each Citation with its result, the Document
-   * version, the model and the time. Nothing is sent anywhere.
+   * `saveMindExport` does, as a PDF and a CSV side by side under one name: each checked sentence
+   * and each Citation with its result, the Document version, the model and the time. Nothing is
+   * sent anywhere.
    */
-  saveCheckRecord(mindId: string, format: CheckRecordFormat): Promise<SavedExport>;
+  saveCheckRecord(mindId: string): Promise<SavedCheckRecord>;
   /**
    * Saves a comparison table as an Excel workbook (#132) into the Output location, as
    * `saveMindExport` does. A Document a row, a Question a column: each cell its Answer's text,

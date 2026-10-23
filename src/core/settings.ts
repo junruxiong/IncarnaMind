@@ -46,6 +46,12 @@ const isPaneWidth = (value: unknown): value is number =>
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 
+const isTipCounts = (value: unknown): value is Record<string, number> =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (count) => typeof count === "number" && Number.isInteger(count) && count >= 0 && count <= 100,
+  );
+
 const isNonBlankText = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "" && value.length <= 500;
 
@@ -186,6 +192,7 @@ const userScope: Scope<UserSettings> = {
 const GETTING_STARTED_STEPS = [
   "started",
   "citationChecked",
+  "mistakeSeen",
   "indexed",
   "askedOwn",
   "askedReady",
@@ -193,11 +200,14 @@ const GETTING_STARTED_STEPS = [
 ];
 
 // Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
+// Progress kept before the mistake had its own step has no `mistakeSeen`; `get` takes it from
+// `citationChecked`, so a first open already finished stays finished.
+const ADDED_LATER = ["askedReady", "mistakeSeen"];
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
   Object.keys(value).every((key) => GETTING_STARTED_STEPS.includes(key)) &&
   GETTING_STARTED_STEPS.every(
-    (key) => isBoolean(value[key]) || (key === "askedReady" && value[key] === undefined),
+    (key) => isBoolean(value[key]) || (ADDED_LATER.includes(key) && value[key] === undefined),
   );
 
 const isScriptTimeout = (value: unknown): value is number =>
@@ -219,6 +229,7 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: {
       started: false,
       citationChecked: false,
+      mistakeSeen: false,
       indexed: false,
       askedOwn: false,
       askedReady: false,
@@ -227,6 +238,7 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptsEnabled: true,
     skillScriptTimeoutSeconds: SKILL_SCRIPT_LIMITS.defaultTimeoutSeconds,
     suggestionOffers: 0,
+    tips: {},
     meetingSystemAudio: true,
     transcriptionRoute: null,
     modelSource: "auto",
@@ -248,6 +260,7 @@ const deviceScope: Scope<DeviceSettings> = {
     skillScriptTimeoutSeconds: isScriptTimeout,
     suggestionOffers: (value): value is number =>
       typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100,
+    tips: isTipCounts,
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
@@ -353,7 +366,12 @@ export function createSettings(
       "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
-    device.gettingStarted = { ...deviceScope.defaults.gettingStarted, ...device.gettingStarted };
+    const progress: Partial<GettingStarted> = device.gettingStarted;
+    device.gettingStarted = {
+      ...deviceScope.defaults.gettingStarted,
+      ...progress,
+      mistakeSeen: progress.mistakeSeen ?? progress.citationChecked ?? false,
+    };
     const language = resolveLanguage(user.language, systemLanguages());
     const author = user.authorName ?? systemUserName().trim();
     return { user, device, language, scriptSandbox, meetingAudio, author };

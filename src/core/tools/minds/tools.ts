@@ -1602,7 +1602,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
         answer: {
           type: "boolean",
           description:
-            'true to put your last Answer in this conversation in as it is, with its Citations, instead of content: when the User asks to put that Answer ("it", "this") in a Mind.',
+            'true to put your last Answer in this conversation in as it is, with its Citations, instead of content: when the User asks to put that Answer ("it", "this") in a Mind, as "add this to my notes" does after a Question.',
         },
       }
     : {};

@@ -650,6 +650,9 @@ export const en = {
   "claim.calculated.negative": "counted as negative",
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.notFound": "I didn’t find this in “{scope}”.",
+  "claim.unsupported.notFound.more": "I didn’t find this in “{scope}” or {count} more.",
+  "claim.checkedIn": "Checked against “{scope}”",
+  "claim.checkedIn.more": "Checked against “{scope}” and {count} more",
   "claim.unsupported.differs": "Your Documents say something different:",
   "claim.unsupported.covers.one":
     "Your Citation supports {covered}, not the parts about {uncovered}.",
@@ -704,6 +707,7 @@ export const en = {
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
   "claim.recheck.scope": "The Mind is in another Folder now.",
+  "claim.recheck.search-scope": "The Mind’s Search scope has changed since.",
   "health.label": "Sentences and Citations",
   "health.found.one": "1 Citation found",
   "health.found": "{count} Citations found",
@@ -744,6 +748,21 @@ export const en = {
   "editor.ai.addDocumentsToCheck": "Add Documents to check",
   "editor.ai.addDocumentsToFindSupport": "Add Documents to find support",
   "checks.problem.no-documents.all": "Nothing to check against: add Documents first.",
+  "checks.problem.scope.empty":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, has no Documents.",
+  "checks.problem.scope.empty.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, have no Documents.",
+  "checks.problem.scope.ownFile":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, holds only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.ownFile.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, hold only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.gone.folder":
+    "Nothing to check against: the Folder this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.tag":
+    "Nothing to check against: the Tag this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.document":
+    "Nothing to check against: the Document this Mind’s Search scope names was deleted.",
+  "checks.changeScope": "Change the Search scope…",
   "checks.problem.nothing": "There’s no sentence to check in what you selected.",
   "checks.waiting.one": "1 sentence with changes waiting wasn’t checked",
   "checks.waiting": "{count} sentences with changes waiting weren’t checked",
@@ -772,9 +791,10 @@ export const en = {
   "contradictions.after": "After “{document}” changed: {result}",
   "mindCheck.command": "Check this Mind",
   "mindCheck.every": "Check every sentence again",
-  "mindCheck.changed.none": "Nothing changed: checks every sentence",
-  "mindCheck.changed.one": "1 changed sentence",
-  "mindCheck.changed": "{count} changed sentences",
+  "mindCheck.changed.none": "Nothing changed",
+  "mindCheck.unchanged": "Nothing changed since {when}",
+  "mindCheck.changed.one": "1 sentence to check",
+  "mindCheck.changed": "{count} sentences to check",
   "mindCheck.command.keywords": "check all whole draft before sending claims sentences verify",
   "mindCheck.ask.unestimated": "The cost couldn’t be estimated",
   "mindCheck.ask.claims.folder.one": "Check this Mind’s claim against this Folder’s Documents?",
@@ -1105,6 +1125,8 @@ export const en = {
     "The page as it looks wasn’t kept: its PDF would be over 50 MB.",
   "viewer.web.look.failed.stopped":
     "The page as it looks wasn’t kept: IncarnaMind stopped while making it.",
+  "viewer.web.look.failed.local-mode":
+    "Not kept as it looks: “Keep everything on this computer” is on. It would load the page from its site.",
   "viewer.web.look.failed.failed": "The page as it looks wasn’t kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
@@ -1480,6 +1502,11 @@ export const en = {
   "webPages.reason.not-public": "it’s on this computer or a local network",
   "webPages.reason.too-many-redirects": "it redirects too many times",
   "webPages.reason.not-from-search": "the web search didn’t return it",
+  "webPages.reason.local-mode": "“Keep everything on this computer” is on",
+  "webPages.localMode":
+    "Not fetched: “Keep everything on this computer” is on. It would contact {site}.",
+  "webPages.localMode.once": "Fetch this page once",
+  "webPages.localMode.keep": "Don’t fetch",
   "webPages.fetchAgain": "Fetch again",
   "webPages.openLive": "Open the live page",
   "webPages.copyAddress": "Copy address",
@@ -1973,6 +2000,7 @@ export const en = {
   "providers.test.network": "Couldn’t reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
   "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
+  "providers.key.notChecked": "Saved, not checked: nothing was sent to {provider}.",
   "providers.test.consent-revoked": "Not sent: you turned off sending to this service.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",
@@ -2477,6 +2505,8 @@ export const en = {
   "composer.scope.allEmptyFolder":
     "“{folder}” has no Documents yet, so all your Documents are searched. Type @ to limit it",
   "composer.scope.change": "{name}. Change the Search scope (@)",
+  "composer.scope.back": "Back to “{name}”",
+  "composer.scope.backAll": "Back to All Documents",
   "composer.skills.label": "Skills",
   "composer.skills.manage": "Manage Skills…",
   "composer.expand": "Expand the composer",
@@ -3342,11 +3372,12 @@ export const en = {
     "When these sentences were checked, {count} files they were checked against couldn’t be read, so the checks didn’t search them:",
   "aiStatement.note":
     "Schools have their own forms for declaring AI use. Use these counts to fill in yours.",
-  "checkRecord.as": "Export check record as {format}",
-  "checkRecord.format.csv": "CSV",
+  "checkRecord.command": "Export check record…",
+  "checkRecord.failed.pdf": "Couldn’t save the PDF: {reason}",
+  "checkRecord.failed.csv": "Couldn’t save the CSV: {reason}",
   "checkRecord.saving": "Exporting the check record…",
   "checkRecord.keywords": "check record audit evidence log verification export CSV PDF",
-  "checkRecord.fileName": "{name} - check record",
+  "checkRecord.fileName": "Check record – {name}",
   "checkRecord.title": "Check record: {name}",
   "checkRecord.summary.mind": "Mind",
   "checkRecord.summary.exported": "Exported",
@@ -3418,6 +3449,7 @@ export const en = {
   "export.changeLocation": "Change output location…",
   "export.allow": "Allow",
   "export.doneIn": "Saved “{name}” in {folder}",
+  "export.record.doneIn": "Saved “{name}” and its CSV in {folder}",
   "export.changeFolder": "Change folder…",
   "export.parts.separator": ", ",
   "export.parts.last": " and ",
@@ -3474,6 +3506,8 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: I didn’t find this in “{scope}”.",
+  "export.comment.sentence.unsupported.more":
+    "Unsupported: I didn’t find this in “{scope}” or {count} more.",
   "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.ownWorkings": "Unsupported: only your own working file says this.",
   "export.comment.sentence.unsupported.citation":
@@ -3491,6 +3525,8 @@ export const en = {
     "Needs re-check: a Document it was checked against was deleted.",
   "export.comment.sentence.needs-recheck.scope":
     "Needs re-check: the Mind is in another Folder now.",
+  "export.comment.sentence.needs-recheck.search-scope":
+    "Needs re-check: the Mind’s Search scope has changed since.",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
@@ -3576,9 +3612,7 @@ export const en = {
   "error.examples.reading": "The example’s Documents are still being read. Try again in a moment.",
   "error.document.notFound": "There is no such Document.",
   "sheet.noSavedValue": "No saved value",
-  "error.checkRecord.format": "The check record can be saved as PDF or CSV.",
-  "error.checkRecord.noPdf":
-    "This copy of IncarnaMind can’t make PDFs. Save the check record as CSV instead.",
+  "error.checkRecord.noPdf": "This copy of IncarnaMind can’t make PDFs.",
   "error.export.choice": "{name} must be true or false.",
   "error.export.textOnly": "The Documents kept as text must be a list of their ids.",
   "error.export.theirChanges": "theirChanges must be “shown” or “accepted”.",
@@ -3599,6 +3633,7 @@ export const en = {
   "error.document.fileCantOpen": "The Document’s file can’t be opened.",
   "error.document.noSuchPicture": "The Document shows no such picture.",
   "error.document.idRequired": "A Document id is required.",
+  "error.webPage.localModeOnceNotBoolean": "Letting a page go in this mode must be true or false.",
   "error.webPage.keepLookNotBoolean": "Whether to keep a page as it looks must be true or false.",
   "error.webPage.lookNotWebPage": "Only a web page can be kept as it looks.",
   "error.webPage.lookGone": "The PDF of how this page looked is gone.",
@@ -3936,6 +3971,7 @@ export const en = {
     "Confirm the risk warning before always running a Skill’s scripts.",
   "error.approval.commandOnce": "A command is allowed one call at a time, never always.",
   "error.question.answer": "That isn’t an answer this question takes.",
+  "error.question.onScreen": "IncarnaMind couldn’t tell which Documents are open. Ask again.",
   "error.mindStyle.invalid": "That isn’t a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
     "Usage data stays off: “Keep everything on this computer” is on.",
@@ -4999,6 +5035,9 @@ export const en = {
   "answer.newMind.label": "Put this Answer in a new Mind, or in the empty Mind in front",
   "answer.add.to": "Add to “{mind}” ({shortcut})",
   "answer.add.choose": "Choose a Mind to add it to",
+  "answer.add.named": "Add to “{mind}”",
+  "tip.addAnswer": "Add it, and its Citations come too.",
+  "tip.close": "Close tip",
   "mindChanges.minds": "{count} Minds changed",
   "mindChanges.changed": "Changed {count} paragraphs in “{mind}”",
   "mindChanges.changed.one": "Changed 1 paragraph in “{mind}”",

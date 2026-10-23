@@ -193,7 +193,7 @@ function Row({
         ref={focusRef}
         tabIndex={focusRef ? -1 : undefined}
         data-testid={testId}
-        className="min-w-0 break-words text-ink outline-none [overflow-wrap:anywhere]"
+        className="min-w-0 break-words text-ink [overflow-wrap:anywhere]"
       >
         {children}
       </dd>

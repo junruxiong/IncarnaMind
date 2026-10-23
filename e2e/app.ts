@@ -1594,6 +1594,17 @@ export async function markSteps(window: Page, done: object): Promise<void> {
   }, done);
 }
 
+/** One step of the Welcome card. */
+export const welcomeStep = (window: Page, key: "citation" | "question" | "files") =>
+  window.locator(`[data-testid="first-open-step"][data-step="${key}"]`);
+
+/** Which steps of the first open the core holds as done. */
+export const gettingStarted = (window: Page) =>
+  window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.getSettings()).device.gettingStarted;
+  });
+
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
   const id = await window

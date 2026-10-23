@@ -38,7 +38,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
-import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
+import { hasSearchScope, holdsText, mindSearchScope, type ScopeKind } from "../shared/searchScope";
 import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -66,6 +66,8 @@ import {
   type AddDocumentsResult,
   type ChatModelChoice,
   type ChatProviderKind,
+  type CheckRecordFailure,
+  type CheckRecordFormat,
   type ConversationAskResult,
   type CoreApi,
   type CoreEventSource,
@@ -85,6 +87,7 @@ import {
   type OwnFileKind,
   type ProviderError,
   type SavedExport,
+  type SavedFile,
   type ScannedQuoteInput,
   type SearchScope,
   type Task,
@@ -145,6 +148,7 @@ import {
   MindReadOnlyError,
   NotFoundError,
   TaggingNotReadyError,
+  TranslatableError,
 } from "./errors";
 import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
@@ -825,6 +829,7 @@ export function createCore(adapters: CoreAdapters): Core {
     pictureFetch: pictureFetcher.fetch,
     ...(adapters.pageLook ? { look: adapters.pageLook } : {}),
     keepLookByDefault: () => settings.get().user.keepWebPageLook,
+    localOnly: () => embedding.localOnly(),
     signal: lifetime.signal,
     reportError: (error) => console.error("A web page's picture or look couldn't be kept:", error),
     ...adapters.webPages,
@@ -1224,6 +1229,13 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     return hasSearchScope(searched) ? searched : null;
   };
+  // A scope's Folder is a Library Folder, or one of a Linked folder's (the "@" picker offers both).
+  const scopeItemName = (kind: ScopeKind, id: string): string | null =>
+    kind === "folder"
+      ? ([...library.folders(), ...folders.list()].find((folder) => folder.id === id)?.name ?? null)
+      : kind === "tag"
+        ? (tags.list().find((tag) => tag.id === id)?.name ?? null)
+        : (documents.getMany([id])[0]?.name ?? null);
   // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
   // its Documents are in: a Linked folder filed into it whole names the Linked folder.
   const foldersOnDisk = (folderIds: readonly string[]) => {
@@ -1973,6 +1985,11 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     requireMind: (mindId) => writableMind(mindId).id,
     recheck: (input) => recheckCitation(documents, input),
+    askedScope: ({ from }) =>
+      from.artifactKind === "conversation"
+        ? conversations.askedScope(from.artifactId, from.anchor.messageId)
+        : null,
+    mindFolder: (mindId) => minds.get(mindId).folderId,
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
   });
@@ -2014,8 +2031,7 @@ export function createCore(adapters: CoreAdapters): Core {
           })
         : null,
     language: () => settings.get().language,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     citationStyle: (mindId) => {
       const { style, textLanguage } = mindStyleAndText(mindId);
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
@@ -2061,8 +2077,7 @@ export function createCore(adapters: CoreAdapters): Core {
             quote,
           })
         : null,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     localMode: () => embedding.localOnly(),
     language: () => settings.get().language,
     printer: adapters.printer ?? null,
@@ -3600,7 +3615,7 @@ export function createCore(adapters: CoreAdapters): Core {
         : result;
     },
     keepWebPageLook: async (documentId) => webPages.keepLook(documentId),
-    fetchWebPageAgain: async (documentId) => webPages.fetchAgain(documentId),
+    fetchWebPageAgain: async (documentId, options) => webPages.fetchAgain(documentId, options),
     saveTextAsDocument: async (input) => {
       if (!isRecord(input) || typeof input.text !== "string" || input.text.trim() === "") {
         throw new InvalidInputError("There is no text to save.");
@@ -4354,9 +4369,33 @@ export function createCore(adapters: CoreAdapters): Core {
       );
       return saved.status === "saved" ? { ...saved, ...counts, word } : saved;
     },
-    saveCheckRecord: async (mindId, format) => {
-      const { fileName, data } = await checkRecord.file(mindId, format);
-      return saveExport(fileName, data);
+    saveCheckRecord: async (mindId) => {
+      const saved: { format: CheckRecordFormat; file: SavedFile }[] = [];
+      const failures: CheckRecordFailure[] = [];
+      let firstError: unknown;
+      for (const { format, make } of await checkRecord.files(mindId)) {
+        try {
+          const { fileName, data } = await make();
+          const result = await saveExport(fileName, data);
+          if (result.status !== "saved") return result;
+          saved.push({ format, file: result.file });
+        } catch (error) {
+          firstError ??= error;
+          failures.push({
+            format,
+            message: error instanceof Error ? error.message : String(error),
+            wording: error instanceof TranslatableError ? error.wording : null,
+          });
+        }
+      }
+      const [first] = saved;
+      if (!first) throw firstError;
+      return {
+        status: "saved",
+        file: first.file,
+        withCsv: first.format === "pdf" && saved.some((each) => each.format === "csv"),
+        failures,
+      };
     },
     saveComparisonExport: async (input) => {
       const ref: Record<string, unknown> = isRecord(input) ? input : {};

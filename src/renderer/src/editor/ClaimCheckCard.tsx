@@ -4,10 +4,11 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import type { ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
-import { coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
+import { checkedScope, coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { comparableSentence } from "../../../shared/sentences";
+import { verificationOf } from "../../../shared/verification";
 import { savedPageSource } from "../../../shared/webSource";
 import { useAddedDocuments } from "../addedDocuments";
 import {
@@ -27,6 +28,7 @@ import { translateNow, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
+import { useScopeName } from "../scopeDocuments";
 import { useAppStore } from "../store";
 import { cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
 import { alreadyCitedBy, citationsOf } from "./alreadyCited";
@@ -36,6 +38,7 @@ import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
+import { isQuietFocus } from "./mistakeMark";
 import { Popover } from "./Popover";
 import { CitationChip, OpenCitation, UnsupportedCited } from "./UnsupportedCited";
 
@@ -128,7 +131,7 @@ export function ClaimMark({
 
   const guided = useAppStore((app) => {
     const progress = app.settings?.device.gettingStarted;
-    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+    return state === "contradicted" && !progress?.mistakeSeen && firstOpenOf(progress);
   });
 
   /** After an action the card goes, and the focus stays in the Mind. */
@@ -158,13 +161,16 @@ export function ClaimMark({
         onMouseDown={(event) => event.preventDefault()}
         onPointerEnter={() => hold("pointer", true)}
         onPointerLeave={() => hold("pointer", false)}
-        onFocus={() => hold("focus", true)}
+        onFocus={(event) => {
+          if (!isQuietFocus(event.currentTarget)) hold("focus", true);
+        }}
         onBlur={() => hold("focus", false)}
         onClick={() => {
           setOpenClaim(place, id);
           // Step 1 of the first open's steps, "See a mistake it caught".
-          const { examples, updateGettingStarted } = useAppStore.getState();
-          if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
+          if (state === "contradicted") {
+            useAppStore.getState().updateGettingStarted({ mistakeSeen: true });
+          }
         }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && reveal) onRevealed();
@@ -196,6 +202,7 @@ export function ClaimMark({
           >
             <ClaimCard
               claim={claim}
+              verified={verificationOf(doc)?.documentId ?? null}
               cited={citationsOf(editor.state, claim)}
               fixes={offersFixes(editor, claim)}
               addable={plus}
@@ -325,11 +332,12 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * unsupported part, Search all Documents and Keep as my view (#1111); for one
  * without, the Passage the check quoted for part of it, with what that part is
  * and what it doesn't cover; otherwise why, with Check again. A Passage from a
- * saved web page names the page. Documents IncarnaMind wrote that matched are
- * named, with Count it.
+ * saved web page names the page. Every verdict says where the check looked (#1623).
+ * Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
+  verified,
   cited,
   fixes,
   addable,
@@ -347,6 +355,8 @@ function ClaimCard({
   onKeep,
 }: {
   claim: ShownClaim;
+  /** The Document a Verify Mind checks: left out of every check, as itself, never as a copy. */
+  verified: string | null;
   cited: readonly NumberedCitation[];
   fixes: boolean;
   addable: boolean;
@@ -395,11 +405,8 @@ function ClaimCard({
     (state === "supported" || state === "contradicted" || state === "unsupported") &&
     evidence !== null &&
     where !== null;
-  const folderName = useAppStore((store) =>
-    check.scope.folderId === null
-      ? null
-      : (store.library?.groups.find((group) => group.id === check.scope.folderId)?.name ?? null),
-  );
+  const looked = useScopeName(checkedScope(check.scope));
+  const lookedIn = looked?.name ?? t("composer.scope.all");
   const documents = useAppStore((store) => store.documents);
   const savedPage = evidence
     ? documents.find((each) => each.id === evidence.documentId)?.web
@@ -410,7 +417,9 @@ function ClaimCard({
       savedPage.versions.find((each) => each.contentHash === evidence?.contentHash)?.fetchedAt ??
       savedPage.fetchedAt,
   };
-  const searchedFolder = !check.scope.widened && folderName !== null;
+  const saysNotFound =
+    state === "unsupported" && !differs && !decisionMissing && !fixes && !covers && !ownWorkings;
+  const checkedIn = decided || state === "unsupported";
   const cuttable = fixes && uncoveredOf(claim) !== null;
   const pastCap = shown.state === "not-checked" && shown.reason === "too-many";
   const reason =
@@ -526,9 +535,13 @@ function ClaimCard({
             >
               {ownWorkings
                 ? t("claim.unsupported.ownWorkings")
-                : t("claim.unsupported.notFound", {
-                    scope: searchedFolder && folderName ? folderName : t("composer.scope.all"),
-                  })}
+                : looked && looked.more > 0
+                  ? t("claim.unsupported.notFound.more", {
+                      scope: lookedIn,
+                      count: looked.more,
+                      total: looked.more + 1,
+                    })
+                  : t("claim.unsupported.notFound", { scope: lookedIn })}
             </p>
           )}
         </>
@@ -589,13 +602,34 @@ function ClaimCard({
           />
         </div>
       )}
+      {checkedIn && !saysNotFound && (
+        <p data-testid="claim-checked-in" className="citation-card-note">
+          {looked && looked.more > 0
+            ? t("claim.checkedIn.more", {
+                scope: lookedIn,
+                count: looked.more,
+                total: looked.more + 1,
+              })
+            : t("claim.checkedIn", { scope: lookedIn })}
+        </p>
+      )}
       {check.excluded.map((left) => {
-        const document =
-          left.reason === "own-file" && documents.find((each) => each.id === left.documentId);
+        const document = documents.find((each) => each.id === left.documentId);
+        const name = left.documentName || document?.name || "";
+        // The file being checked says every sentence of it: only where nothing else did is it news.
+        if (left.reason === "checked-document" && state === "unsupported") {
+          if (left.documentId === verified) return null;
+          return (
+            <p key={left.documentId} data-testid="claim-left-out" className="citation-card-note">
+              {t("evidence.excluded.checked", { name })}
+            </p>
+          );
+        }
         return (
+          left.reason === "own-file" &&
           document && (
             <CountItLine key={left.documentId} document={document} testId="claim-left-out">
-              {t("evidence.excluded.ownFile", { name: left.documentName || document.name })}
+              {t("evidence.excluded.ownFile", { name })}
             </CountItLine>
           )
         );
@@ -648,7 +682,7 @@ function ClaimCard({
             {t("claim.cutUnsupported")}
           </button>
         )}
-        {state === "unsupported" && searchedFolder && !decisionMissing && (
+        {state === "unsupported" && looked !== null && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"
