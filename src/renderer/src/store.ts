@@ -1810,7 +1810,10 @@ core.on("minds.changed", (minds) => {
   }
 });
 
-followLayout((partial) => useAppStore.setState(partial));
+followLayout(
+  (partial) => useAppStore.setState(partial),
+  (error) => useNotices.getState().showError(error),
+);
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {

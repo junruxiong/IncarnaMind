@@ -6,8 +6,8 @@ import { openCited, quoteSaysSo } from "../openCited";
 import type { NumberedCitation } from "./citationNumbers";
 
 /**
- * What a cited sentence's Unsupported card says in place of "Nothing in your
- * Documents says this": what its Citations support and what they don't, or
+ * What a cited sentence's Unsupported card says in place of where the check
+ * looked: what its Citations support and what they don't, or
  * the reason the check gave, or that it gave none; then each Citation's quote,
  * which opens at its place.
  */

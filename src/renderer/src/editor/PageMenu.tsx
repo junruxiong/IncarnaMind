@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import type * as Y from "yjs";
 import { mindName } from "../../../shared/naming";
 import type { Verification } from "../../../shared/verification";
+import { ExampleChoices } from "../components/ExamplesMenu";
 import { ChevronRightLineIcon } from "../components/lineIcons";
 import { MindStyleChoices, useStyleValue } from "../components/MindStyle";
 import { MoveToPicker } from "../components/MoveToPicker";
@@ -13,6 +14,7 @@ import {
   menuItemClass,
   menuItemUnavailableClass,
   menuRuleClass,
+  menuTitleClass,
 } from "../components/ui";
 import { useSubmenu } from "../components/usePopoverMenu";
 import { files } from "../core";
@@ -22,7 +24,7 @@ import { moveIntoFolder } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { fileStatusLabel } from "../linkedFolders";
 import { useMindStylePanel } from "../mindStylePanel";
-import { useAppStore } from "../store";
+import { allExamples, useAppStore } from "../store";
 import { openDocumentBeside } from "../verify";
 import { MindCounts } from "./WordCount";
 import { openOriginalAtCaret, useWordFile, wordFileTooltip } from "./WordOrigin";
@@ -70,6 +72,9 @@ export function PageMenu({
     origin?.documentId ? state.documents.find((each) => each.id === origin.documentId) : undefined,
   );
   const away = original ? fileStatusLabel(original.fileStatus) : null;
+  const otherExamples = useAppStore(
+    (state) => allExamples(state).find((each) => each.mindId === mindId)?.more,
+  );
   return (
     <span ref={holder} className="contents">
       <ObjectMenu
@@ -90,7 +95,7 @@ export function PageMenu({
         // The Mind is open on this page: nothing to open, and Style is below.
         without={["mind.style", "mind.open", "mind.openTab"]}
         more={
-          readOnly && !origin
+          readOnly && !origin && !otherExamples
             ? undefined
             : (close) => (
                 <>
@@ -155,6 +160,13 @@ export function PageMenu({
                           {t(showFileLabelKey(navigator.platform))}
                         </button>
                       )}
+                    </>
+                  )}
+                  {otherExamples && (
+                    <>
+                      {(!readOnly || origin) && <div className={menuRuleClass} />}
+                      <p className={menuTitleClass}>{t("examples.banner.more")}</p>
+                      <ExampleChoices more={otherExamples} close={close} />
                     </>
                   )}
                 </>
