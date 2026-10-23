@@ -1,25 +1,36 @@
 /**
  * Finding a citation style (#910): the picker's search over the common list and every style of
- * the pack, in either interface language.
+ * the pack, in either interface language, a style's whole name first (#1497).
  */
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { createCatalogue } from "../../src/core/citationStyles/catalogue";
 import {
   commonEntries,
+  keepShown,
+  type StyleEntry,
+  type StyleMatches,
   searchStyles,
   styleEntries,
 } from "../../src/renderer/src/citationStyleSearch";
+import { CITATION_STYLES as COMMON_STYLES } from "../../src/shared/citationStyles";
+import { translate } from "../../src/shared/i18n";
 import { CITATION_STYLES } from "../helpers/core";
 
 const catalogue = createCatalogue(join(CITATION_STYLES, "styles.pack")).catalogue();
 
+/** The styles in the order the picker lists them. */
+const listed = (found: StyleMatches) =>
+  (found.journalsFirst
+    ? [...found.journals, ...found.styles]
+    : [...found.styles, ...found.journals]
+  ).map((entry) => entry.id);
+
 describe.each(["en", "zh-CN"] as const)("searching the styles, in the %s interface", (language) => {
   const entries = styleEntries(language, catalogue);
-  const first = (query: string) => {
-    const found = searchStyles(entries, query);
-    return (found.journalsFirst ? found.journals : found.styles)[0]?.id;
-  };
+  const common = styleEntries(language, null);
+  const first = (query: string, among: readonly StyleEntry[] = entries) =>
+    listed(searchStyles(among, query))[0];
 
   test.each([
     ["Nature", "nature"],
@@ -30,8 +41,35 @@ describe.each(["en", "zh-CN"] as const)("searching the styles, in the %s interfa
     ["APA", "apa"],
     ["Cite Them Right", "harvard"],
     ["Nature Genetics", "nature-genetics"],
+    // A journal whose name is also a field comes before the styles in that field.
+    ["Science", "science"],
+    ["Medicine", "medicine"],
+    ["Engineering", "engineering"],
   ])("“%s” puts %s first", (query, id) => {
     expect(first(query)).toBe(id);
+  });
+
+  test("a common style's whole name, in either language, puts it first before every style has arrived and after", () => {
+    for (const style of COMMON_STYLES) {
+      for (const name of [translate("en", style.label), translate("zh-CN", style.label)]) {
+        expect(first(name, common), name).toBe(style.id);
+        expect(first(name), name).toBe(style.id);
+      }
+    }
+  });
+
+  test("what a query showed before every style arrived keeps its place, and the rest follow", () => {
+    const arrived = (query: string) =>
+      listed(keepShown(searchStyles(common, query), searchStyles(entries, query)));
+    // "CHI" is a journal's short name, but "chi" was showing Chicago, which stays first.
+    expect(first("chi", common)).toBe("chicago-notes");
+    expect(first("chi")).toBe("childhood-obesity");
+    expect(arrived("chi").slice(0, 2)).toEqual(["chicago-notes", "chicago-author-date"]);
+    expect(arrived("chi")).toContain("childhood-obesity");
+    expect(arrived("Medicine")[0]).toBe("vancouver");
+    // Where the first shown is first anyway, or nothing was shown, the list is the full ranking.
+    expect(arrived("ieee")).toEqual(listed(searchStyles(entries, "ieee")));
+    expect(arrived("Nature")).toEqual(listed(searchStyles(entries, "Nature")));
   });
 
   test("a journal's style is found among the journals, a style among the styles", () => {
