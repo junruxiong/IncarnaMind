@@ -75,9 +75,13 @@ export function ConversationThread({ focusedMindId }: { focusedMindId: string | 
     ? (focusedMind && mindName(focusedMind)) || t("mind.untitled")
     : null;
   const nextScope = useNextScope(focusedMindId);
-  // While the Mind's meeting records, the assistant listens to its live transcript (#144).
+  // While the Mind's meeting records, the assistant listens to its live transcript (#144). A
+  // voice memo has no call to ask about (#1568).
   const listening = useMeetings((state) =>
-    state.meetings.some((meeting) => meeting.mindId === focusedMindId && isLive(meeting)),
+    state.meetings.some(
+      (meeting) =>
+        meeting.mindId === focusedMindId && isLive(meeting) && meeting.kind === "meeting",
+    ),
   );
   const reads =
     listening && focusedMindName

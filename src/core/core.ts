@@ -168,10 +168,11 @@ import { documentCitedPages, documentPageImages } from "./library/pageImages";
 import { createPlanPace, type Plan } from "./library/planPace";
 import { createTagging } from "./library/tagging";
 import type { TaggingClassifier } from "./library/types";
-import { createMeetings } from "./meetings";
+import { createMeetings, isMemo } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createMeetingFill } from "./meetings/fill";
 import { createCaptureHealth } from "./meetings/health";
+import { memoTitle } from "./meetings/memo";
 import { createSpeakerPass } from "./meetings/speakerPass";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
@@ -2890,8 +2891,13 @@ export function createCore(adapters: CoreAdapters): Core {
       name: (meetingId) => {
         const meeting = listMeetings?.().find((each) => each.id === meetingId);
         const mind = meeting ? minds.get(meeting.mindId) : null;
-        const title = mind ? mind.title || mind.autoTitle : "";
         const language = settings.get().language;
+        // A voice memo's Mind is named by its note, which is written from the saved Transcript.
+        const title =
+          (mind ? mind.title || mind.autoTitle : "") ||
+          (meeting?.kind === "memo"
+            ? memoTitle(language, Date.parse(meeting.startedAt ?? meeting.createdAt))
+            : "");
         return title
           ? translate(language, "meetings.transcript.name", { meeting: title })
           : translate(language, "meetings.transcript.nameAlone");
@@ -2911,6 +2917,7 @@ export function createCore(adapters: CoreAdapters): Core {
         });
       },
       health: captureHealth,
+      memo: (meetingId) => isMemo(db, meetingId),
       saved: (meetingId) => transcriptSaved(meetingId),
       changed: meetingsChanged,
       log: adapters.log ?? silentLogger,
@@ -3090,6 +3097,7 @@ export function createCore(adapters: CoreAdapters): Core {
       });
       return result.verdict === "supported";
     },
+    cite: (passageId, quote) => citing.citeQuote(passageId, quote),
     checkpoint: (mindId) => checkpoints.save(mindId, "enhance"),
     language: () => settings.get().language,
     filled(meeting) {
@@ -3101,9 +3109,13 @@ export function createCore(adapters: CoreAdapters): Core {
       } catch {
         name = "";
       }
+      const language = settings.get().language;
       notifications.show(
         {
-          title: translate(settings.get().language, "meetings.fill.notify", { meeting: name }),
+          title:
+            meeting.kind === "memo"
+              ? translate(language, "memos.fill.notify", { memo: name })
+              : translate(language, "meetings.fill.notify", { meeting: name }),
           body: "",
         },
         (windowIds) => mindShown(meeting.mindId, windowIds),
@@ -4269,6 +4281,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createMeeting: async (input) => meetings.create(input),
     discardMeeting: async (meetingId) => meetings.discard(meetingId),
     startMeeting: async (input) => meetings.start(input),
+    recordMemo: async (input) => meetings.recordMemo(input),
     pauseMeeting: async (meetingId) => meetings.pause(meetingId),
     resumeMeeting: async (meetingId) => meetings.resume(meetingId),
     stopMeeting: async (meetingId) => {

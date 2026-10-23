@@ -1797,6 +1797,16 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE meetings ADD COLUMN fill TEXT;
     `,
   },
+  {
+    version: 103,
+    description: "A Meeting can be a voice memo, the User alone (#1568)",
+    // 'meeting': a call, as every row before; 'memo': the microphone alone, its note tidied
+    // from its Transcript under a title line after Stop.
+    sql: `
+      ALTER TABLE meetings ADD COLUMN kind TEXT NOT NULL DEFAULT 'meeting'
+        CHECK (kind IN ('meeting', 'memo'));
+    `,
+  },
 ];
 
 /**
