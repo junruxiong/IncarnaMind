@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import * as Y from "yjs";
 import {
   CITATION_NODE,
+  type Core,
   DATABASE_FILE,
   MIND_CONTENT_FIELD,
   NotFoundError,
@@ -13,9 +14,11 @@ import {
 import { PROCESSING_VERSION } from "../../src/core/documents/processing";
 import { migrate, openDatabase } from "../../src/core/storage";
 import { migrations } from "../../src/core/storage/migrations";
-import { createTempDataFolder, queryDatabase, startCore } from "../helpers/core";
+import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import {
+  addAndProcess,
   createSourceFolder,
+  linkAndProcess,
   sha256,
   storedFile,
   waitForDocuments,
@@ -228,5 +231,152 @@ describe("Migration 21: from copies in the data folder to Documents in place", {
     expect(citationsIn((await core.openMind(MIND)).state)[0]).toMatchObject({
       documentId: DOCUMENT,
     });
+  });
+});
+
+describe("Deleting a Document the copy layout left in the data folder (#1432)", {
+  timeout: 30_000,
+}, () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const copyOf = (dataDir: string) => join(dataDir, "documents", `${HASH}.md`);
+  const textOf = async (core: Core, id = DOCUMENT) =>
+    new Response((await core.openDocumentFile(id)).stream).text();
+  const deletePermanently = (core: Core) =>
+    core.deletePermanently([{ kind: "document", id: DOCUMENT }]);
+
+  async function start() {
+    const dataDir = await copyLayoutDataFolder();
+    const clock = manualClock();
+    return { dataDir, clock, core: startCore(dataDir, { now: clock.now }) };
+  }
+
+  test("deleted, its copy stays and it comes back whole; deleted permanently, the copy goes", async () => {
+    const { dataDir, clock, core } = await start();
+
+    await core.deleteDocument(DOCUMENT);
+    expect(existsSync(copyOf(dataDir))).toBe(true);
+    expect((await core.listDeleted()).map((item) => item.id)).toEqual([DOCUMENT]);
+
+    clock.advance(1000);
+    await core.restore([{ kind: "document", id: DOCUMENT }]);
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: DOCUMENT, path: copyOf(dataDir), fileStatus: "available" }),
+    ]);
+    expect(await textOf(core)).toBe(NOTES);
+
+    clock.advance(1000);
+    await core.deleteDocument(DOCUMENT);
+    expect(existsSync(copyOf(dataDir))).toBe(true);
+    await deletePermanently(core);
+    expect(existsSync(copyOf(dataDir))).toBe(false);
+  });
+
+  test("a quit between the delete and the purge keeps the copy; the start-up purge 30 days on removes it", async () => {
+    const { dataDir, clock, core } = await start();
+    await core.deleteDocument(DOCUMENT);
+    core.close();
+
+    clock.advance(DAY);
+    const next = startCore(dataDir, { now: clock.now });
+    expect(existsSync(copyOf(dataDir))).toBe(true);
+    await next.restore([{ kind: "document", id: DOCUMENT }]);
+    expect(await textOf(next)).toBe(NOTES);
+    clock.advance(1000);
+    await next.deleteDocument(DOCUMENT);
+    next.close();
+
+    clock.advance(31 * DAY);
+    const later = startCore(dataDir, { now: clock.now });
+    await vi.waitFor(() => expect(existsSync(copyOf(dataDir))).toBe(false));
+    await expect(later.restore([{ kind: "document", id: DOCUMENT }])).rejects.toThrow(
+      "“Tide notes” was deleted permanently, so it can’t be restored.",
+    );
+  });
+
+  test("a copy a quit left behind after the purge goes at the next start", async () => {
+    const { dataDir, core } = await start();
+    await core.deleteDocument(DOCUMENT);
+    await deletePermanently(core);
+    core.close();
+    await writeFile(copyOf(dataDir), NOTES);
+
+    startCore(dataDir);
+
+    await vi.waitFor(() => expect(existsSync(copyOf(dataDir))).toBe(false));
+  });
+
+  test("one an older build deleted, its copy gone, comes back missing, as any Document whose file went", async () => {
+    const { dataDir, clock, core } = await start();
+    await core.deleteDocument(DOCUMENT);
+    // What deleting did before #1432.
+    await rm(copyOf(dataDir), { force: true });
+
+    clock.advance(1000);
+    await core.restore([{ kind: "document", id: DOCUMENT }]);
+
+    expect((await core.listDocuments()).map((document) => document.id)).toEqual([DOCUMENT]);
+    await expect(core.openDocumentFile(DOCUMENT)).rejects.toThrow(
+      "The Document’s file is missing.",
+    );
+    expect(await core.listDocuments()).toEqual([
+      expect.objectContaining({ id: DOCUMENT, fileStatus: "missing" }),
+    ]);
+    // Its text stays, so the Citation that quotes it still checks.
+    expect(
+      await core.recheckCitation({
+        documentId: DOCUMENT,
+        quote: "Spring tides happen at new moon and at full moon.",
+        pageFrom: null,
+        pageTo: null,
+      }),
+    ).toMatchObject({ check: "found", contentHash: HASH });
+
+    clock.advance(1000);
+    await core.deleteDocument(DOCUMENT);
+    await deletePermanently(core);
+    expect(await core.listDeleted()).toEqual([]);
+  });
+
+  test("a copy another Document is at stays when the deleted one is purged", async () => {
+    const { dataDir, clock, core } = await start();
+    await core.deleteDocument(DOCUMENT);
+    const [again] = await addAndProcess(core, [copyOf(dataDir)]);
+    if (!again) throw new Error("The copy wasn't added.");
+    expect(again.id).not.toBe(DOCUMENT);
+
+    clock.advance(1000);
+    await deletePermanently(core);
+
+    expect(existsSync(copyOf(dataDir))).toBe(true);
+    expect(await textOf(core, again.id)).toBe(NOTES);
+  });
+
+  test("a Linked folder's file is never removed by the purge: one that took over a copy, or one inside the data folder", async () => {
+    const { dataDir, clock, core } = await start();
+    const papers = await createSourceFolder();
+    const original = await writeSourceFile(papers, "Tide notes.md", NOTES);
+    await core.addLinkedFolder(papers);
+    await core.reconcileDocuments();
+    await waitForDocuments(core, (documents) => {
+      expect(documents).toEqual([expect.objectContaining({ id: DOCUMENT, path: original })]);
+    });
+    const kept = join(dataDir, "documents", "Kept");
+    const inside = await writeSourceFile(
+      kept,
+      "Neap tides.md",
+      "# Neap tides\n\nNeap tides come at the quarter moons.\n",
+    );
+    const [linked] = await linkAndProcess(core, kept);
+    if (!linked) throw new Error("The Linked folder inside the data folder holds no Document.");
+
+    clock.advance(1000);
+    await core.deleteDocuments([DOCUMENT, linked.id]);
+    await core.deletePermanently([
+      { kind: "document", id: DOCUMENT },
+      { kind: "document", id: linked.id },
+    ]);
+
+    expect(await readFile(original, "utf8")).toBe(NOTES);
+    expect(existsSync(inside)).toBe(true);
   });
 });

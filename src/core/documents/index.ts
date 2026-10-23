@@ -2427,9 +2427,9 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes Documents from the index, all in one step, or none when one isn't found. The
-     * User's files aren't touched; only copies the old layout made in the data folder go with
-     * them.
+     * Removes Documents from the index, all in one step, or none when one isn't found. No file
+     * is touched, so a restored Document still has its file: a copy the old layout made in the
+     * data folder goes once its Document is deleted permanently (`dropPurged`).
      */
     async delete(idsInput: unknown): Promise<string[]> {
       const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
@@ -2439,11 +2439,6 @@ export function createDocuments(options: DocumentsOptions) {
         return row;
       });
       removeFromIndex(ids, now());
-      for (const row of rows) {
-        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-          await rm(row.path, { force: true }).catch(reportError);
-        }
-      }
       // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
       for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
         library.documentsChanged(linkedFolderId);
@@ -2719,6 +2714,30 @@ export function createDocuments(options: DocumentsOptions) {
         }
       });
       options.emitKept?.(keptCitationTexts());
+    },
+
+    /**
+     * Removes the copies the old layout made in the data folder (ADR-0010) of Documents deleted
+     * permanently, unless a Document not deleted permanently is at the same place. Run after the
+     * purge, and at each start for one a quit left behind.
+     */
+    async dropPurged(): Promise<void> {
+      const rows = db.all<{ relative_path: string }>(
+        `SELECT DISTINCT d.relative_path FROM documents d
+         WHERE d.purged_at IS NOT NULL AND d.source_kind = 'data-folder'
+           AND d.linked_folder_id IS NULL AND d.relative_path IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM documents o
+                           WHERE o.purged_at IS NULL
+                             AND (o.path = d.path OR (o.source_kind = 'data-folder'
+                                                      AND o.relative_path = d.relative_path)))`,
+      );
+      await Promise.all(
+        rows.map(async (row) => {
+          const copy = join(dataDir, ...row.relative_path.split("/"));
+          if (copy === legacyFolder || !isInside(legacyFolder, copy)) return;
+          await rm(copy, { force: true }).catch(reportError);
+        }),
+      );
     },
 
     /**
