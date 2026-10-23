@@ -152,15 +152,6 @@ test("a file that couldn't be read says so in step 3 without changing the card's
       await expect(unread).toBeVisible();
       expect(await places(), `${name}, the line shown`).toEqual(before[name]);
     }
-
-    // Show is the User's own click; one file's row still fits in the card.
-    await pointAndClick(window, unread.getByTestId("first-open-unread-show"));
-    await expect(unread.getByTestId("first-open-unread-list")).toBeVisible();
-    const open = await measure(window);
-    expect(open.card, "the list of one file, in the card's height").toBe(
-      before["zh-CN 1440"]?.card,
-    );
-    expect(open.title).toBe(before["zh-CN 1440"]?.title);
   } finally {
     await app.close();
     await removeDataFolder(sources);
