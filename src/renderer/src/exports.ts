@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import type {
   CheckRecordFormat,
+  CitationPlace,
   ExportFormat,
   ExportPreferences,
+  MarkAiTextChoice,
   SavedCheckRecord,
   SavedComparisonExport,
   SavedExport,
@@ -10,7 +12,7 @@ import type {
   SentenceChecksExported,
   WordExportReport,
 } from "../../core/api";
-import { optionsFor } from "../../shared/exportOptions";
+import { type CitedCount, hasCitationPlace, optionsFor } from "../../shared/exportOptions";
 import type { MessageKey } from "../../shared/i18n";
 import { core } from "./core";
 import { errorMessage } from "./errors";
@@ -34,7 +36,7 @@ const DEFAULT_PREFERENCES: ExportPreferences = {
   docx: {
     includeQuestions: false,
     trackChanges: true,
-    markAiText: true,
+    markAiText: null,
     commentFailedChecks: true,
   },
   pdf: { includeQuestions: false },
@@ -86,6 +88,17 @@ export type ExportResult = { tableId?: string } & (
     }
   /** Not saved yet: what a Word file can't keep, for the User to see first (#105). */
   | { mindId: string; state: "review"; format: ExportFormat; word: WordExportReport }
+  /**
+   * Not started yet: the export waits for what the User hasn't said, whether Word marks the text
+   * IncarnaMind wrote (`mark`) and where Word or PDF puts the Citations (`places`, with how many).
+   */
+  | {
+      mindId: string;
+      state: "ask";
+      format: "docx" | "pdf";
+      mark: boolean;
+      places: CitedCount | null;
+    }
   | { mindId: string; state: "failed"; format: ExportKind; message: string }
   /** A source pack of a Mind with no Citations: nothing to make, and nothing went wrong. */
   | { mindId: string; state: "empty"; format: ExportFormat }
@@ -124,6 +137,61 @@ function begin(
       useExports.setState({ result: next });
     }
   };
+}
+
+function ask(mindId: string, format: "docx" | "pdf", mark: boolean, places: CitedCount | null) {
+  const { result } = useExports.getState();
+  if (result?.mindId === mindId && result.state === "saving") return;
+  useExports.setState({ result: { mindId, state: "ask", format, mark, places } });
+}
+
+/** Mind ids whose export is looking for what to ask, so a held ⇧⌘E asks once. */
+const looking = new Set<string>();
+
+async function toAsk(
+  mindId: string,
+  format: "docx" | "pdf",
+  preferences: ExportPreferences,
+): Promise<{ mark: boolean; places: CitedCount | null } | null> {
+  const mark = format === "docx" && preferences.docx.markAiText === null;
+  let places: CitedCount | null = null;
+  if (preferences.citationPlace === undefined) {
+    const preview = await core.previewMindExport(mindId, { format });
+    if (preview.numbered && preview.citations > 0) {
+      places = { citations: preview.citations, documents: preview.citedDocuments };
+    }
+  }
+  return mark || places ? { mark, places } : null;
+}
+
+async function keep(update: (preferences: ExportPreferences) => ExportPreferences) {
+  await useAppStore.getState().updateSettings({
+    user: { exportOptions: update(exportPreferences()) },
+  });
+}
+
+/** Keeps the User's answer to the question the Word export asked, then exports as they asked. */
+export async function answerMarkAiText(
+  mindId: string,
+  format: ExportFormat,
+  answer: MarkAiTextChoice,
+): Promise<void> {
+  await keep((preferences) => ({
+    ...preferences,
+    docx: { ...preferences.docx, markAiText: answer },
+  }));
+  // A refusal is already said in a notice, and the question stays for another try.
+  if (exportPreferences().docx.markAiText === answer) await exportMind(mindId, format);
+}
+
+/** Keeps the User's answer to where Citations go, then exports as they asked. */
+export async function answerCitationPlace(
+  mindId: string,
+  format: ExportFormat,
+  answer: CitationPlace,
+): Promise<void> {
+  await keep((preferences) => ({ ...preferences, citationPlace: answer }));
+  if (exportPreferences().citationPlace === answer) await exportMind(mindId, format);
 }
 
 const NO_CHECKS: SentenceChecksExported = {
@@ -186,6 +254,9 @@ function savedResult(
  * the last one, which it becomes; the result line says how it went. `first` fixes what stopped
  * the last try (another Output location, allowing a Linked folder), unless it returns false.
  * `accept` is what a Word file can't keep that the User has seen and exports anyway (#105).
+ * Until the User has said whether Word marks the text IncarnaMind wrote, and where Word and PDF
+ * put the Citations of a Mind that has some, an export asks that first, in the result line, and
+ * exports once it is answered (`answerMarkAiText`, `answerCitationPlace`).
  */
 export async function exportMind(
   mindId: string,
@@ -195,6 +266,36 @@ export async function exportMind(
 ): Promise<void> {
   const preferences = exportPreferences();
   const chosen = format ?? preferences.format;
+  if (hasCitationPlace(chosen)) {
+    if (looking.has(mindId)) return;
+    looking.add(mindId);
+    try {
+      const asks = await toAsk(mindId, chosen, preferences);
+      if (asks) {
+        ask(mindId, chosen, asks.mark, asks.places);
+        return;
+      }
+    } catch (failure) {
+      const { result } = useExports.getState();
+      if (result?.mindId === mindId && result.state === "saving") {
+        console.error(`What the export of Mind ${mindId} asks couldn't be worked out.`, failure);
+      } else {
+        useExports.setState({
+          result: {
+            mindId,
+            state: "failed",
+            format: chosen,
+            message: errorMessage(failure, translateNow),
+          },
+        });
+      }
+      return;
+    } finally {
+      looking.delete(mindId);
+    }
+  }
+  const options = optionsFor(chosen, preferences);
+  if (!options) return;
   const settle = begin(mindId, chosen);
   if (!settle) return;
   if (chosen !== preferences.format) {
@@ -215,7 +316,7 @@ export async function exportMind(
       return;
     }
     const saved = await core.saveMindExport(mindId, {
-      ...optionsFor(chosen, preferences),
+      ...options,
       ...(accept && { accept: [...accept] }),
     });
     settle(

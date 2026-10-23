@@ -4,6 +4,7 @@ import type { Document, LibraryGroup, Mind } from "../../../core/api";
 import { shortcutLabel } from "../commands/keymap";
 import { commands } from "../commands/registry";
 import { useDropTarget } from "../dragDrop";
+import { useFolderContents } from "../folderContents";
 import { folderTarget, useDraggedOutOfFolder } from "../folderDrag";
 import { useLanguage, useT } from "../i18n";
 import { currentMindIdOf, currentTabOf } from "../layoutSlice";
@@ -11,10 +12,11 @@ import { useRequests } from "../requests";
 import { useSelectable, useSeveralSelected } from "../selection";
 import { sorted } from "../sort";
 import { type SortScope, sortOf, useSort } from "../sortChoices";
-import { documentFields, folderFields, mindFields } from "../sortFields";
+import { documentFields, mindFields } from "../sortFields";
 import { allExamples, useAppStore } from "../store";
 import { foldKeys, useTreeItem } from "../treeKeys";
 import { useRename } from "../useRename";
+import { ExamplesMenu } from "./ExamplesMenu";
 import { InlineName } from "./InlineName";
 import {
   ChevronDownLineIcon,
@@ -141,9 +143,6 @@ export function LibraryFolders({
   quiet?: boolean;
 }) {
   const t = useT();
-  const groups = useAppStore((state) => state.library?.groups) ?? [];
-  const assignments = useAppStore((state) => state.library?.assignments);
-  const minds = useAppStore((state) => state.minds);
   const openMindFolder = useAppStore(
     (state) =>
       state.minds.find((mind) => mind.id === currentMindIdOf(state.layout))?.folderId ?? null,
@@ -156,37 +155,7 @@ export function LibraryFolders({
     if (openMindFolder) useFolds.getState().reveal(openMindFolder);
   }, [openMindId, openMindFolder]);
 
-  // Each Folder's Documents and Minds (those in none under null), in one pass, again only when they change.
-  const documentsByFolder = useMemo(() => {
-    const folderOf = new Map(assignments?.map((item) => [item.documentId, item.groupId]));
-    const grouped = new Map<string | null, Document[]>();
-    for (const doc of documents) {
-      const key = folderOf.get(doc.id) ?? null;
-      const list = grouped.get(key);
-      if (list) list.push(doc);
-      else grouped.set(key, [doc]);
-    }
-    return grouped;
-  }, [documents, assignments]);
-  const mindsByFolder = useMemo(() => {
-    const live = new Set(groups.map((group) => group.id));
-    const grouped = new Map<string | null, Mind[]>();
-    for (const mind of minds) {
-      // A Mind whose Folder this window doesn't know (yet) shows outside any.
-      const key = mind.folderId !== null && live.has(mind.folderId) ? mind.folderId : null;
-      const list = grouped.get(key);
-      if (list) list.push(mind);
-      else grouped.set(key, [mind]);
-    }
-    return grouped;
-  }, [minds, groups]);
-
-  const language = useLanguage();
-  const sidebarSort = useSort(sortOf("sidebar"));
-  const orderedGroups = useMemo(
-    () => sorted(groups, sidebarSort, folderFields, language),
-    [groups, sidebarSort, language],
-  );
+  const { orderedGroups, documentsByFolder, mindsByFolder } = useFolderContents(documents);
 
   const draggingOut = useDraggedOutOfFolder();
   const looseMinds = mindsByFolder.get(null) ?? NO_MINDS;
@@ -195,7 +164,7 @@ export function LibraryFolders({
 
   return (
     <div data-testid="library-folders">
-      {groups.length > 0 && (
+      {orderedGroups.length > 0 && (
         <SidebarSection
           testId="folders-section"
           title={t("library.groups")}
@@ -481,6 +450,7 @@ function NotInAFolder({
         title={title}
         headingTestId="not-in-a-folder-title"
         tooltip={examplesOnly ? undefined : t("sidebar.notInFolder.hint")}
+        actions={examplesOnly ? <ExamplesMenu /> : undefined}
         drop={drop}
       >
         <Contents

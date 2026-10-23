@@ -63,6 +63,7 @@ import { agreesWith, statedFigure } from "./calculated";
 import { figuresMatch, nearestLine } from "./nearest";
 import {
   CONFIRM_INSTRUCTIONS,
+  COVERED_EVIDENCE_INSTRUCTIONS,
   checkInstructions,
   claimPrompt,
   confirmPrompt,
@@ -151,9 +152,13 @@ export function recordJudged(
   ]);
 }
 
+const SEARCH_FIRST =
+  "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
+
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
+    let searched = false;
     const read = new Map<string, string>();
     const excluded = new Map<string, LeftOutDocument>();
     const decisions = caseCitations(request.claim);
@@ -204,8 +209,11 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         return session.tools.documentCount;
       },
       documentLanguages: deps.documents.searchableLanguages(scope.documentIds),
-      searchDocuments: (query, searchSignal, options) =>
-        session.tools.searchDocuments(query, searchSignal, options),
+      // Only the model's searches count: looking up a cited court decision shows it nothing.
+      searchDocuments: (query, searchSignal, options) => {
+        searched = true;
+        return session.tools.searchDocuments(query, searchSignal, options);
+      },
       cite: (records, options) => session.tools.cite(records, options),
       hasRecord: (marker) => session.tools.hasRecord?.(marker) ?? false,
       unfoundQuotes: () => session.tools.unfoundQuotes?.() ?? [],
@@ -312,6 +320,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       window: model.window,
       retryQuotes: model.retryQuotes,
       cacheKey: request.cacheKey,
+      // A model may give its verdict before it has looked: Claude Haiku 5.5 did, about one check
+      // in six of a whole Mind.
+      turnChecks: [
+        {
+          name: "search-first",
+          check: (text) =>
+            !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
+        },
+      ],
       signal,
     })) {
       if (event.type === "text-delta") reply += event.text;
@@ -356,19 +373,36 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (!verdict) {
       return byCalculation ?? notChecked(readsAsRefusal(reply) ? "refused" : "malformed");
     }
+    if (!searched) return notChecked("unread");
     if (byCalculation && verdict.verdict !== "contradicted") return byCalculation;
     /** Unsupported, with the nearest line when it states another value for the same thing (#770). */
     const unsupported = async (
       why: UnsupportedReason = { reason: null, covered: null, uncovered: null },
+      found: Citation | null = null,
     ): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
+      if (signal.aborted) return notChecked("stopped");
+      // A card that quotes the Passage covering part of the sentence never says it found nothing.
+      // A sentence's own Citations, a court decision no Document holds, or only the User's own
+      // workings saying it take the card instead, so their check asks for no quote.
+      const quoted =
+        nearest ||
+        !why.covered ||
+        !why.uncovered ||
+        (request.cited?.length ?? 0) > 0 ||
+        opinions.missing ||
+        workingsSayingIt().length > 0
+          ? null
+          : (found ??
+            decidingCitation(session.finalCitation) ??
+            (await askForEvidence(request, verdict, session, signal, why.covered)));
       if (signal.aborted) return notChecked("stopped");
       const left = facts();
       return {
         verdict: "unsupported",
         evidence: nearest,
         says: null,
-        unsupported: why,
+        unsupported: quoted ? { ...why, quoted } : why,
         calculation: null,
         ...citedCase(nearest),
         ...left,
@@ -377,10 +411,13 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     };
     session.check();
     if (verdict.verdict === "unsupported") {
+      // A part covered stands only for a claim whose own topic a Passage is about: the reply's own
+      // field says so, so a neighbouring topic's line is never shown as part of the claim.
+      const onTopic = verdict.topic !== "not found";
       return unsupported({
         reason: verdict.says,
-        covered: verdict.covered,
-        uncovered: verdict.uncovered,
+        covered: onTopic ? verdict.covered : null,
+        uncovered: onTopic ? verdict.uncovered : null,
       });
     }
     const evidence =
@@ -391,14 +428,29 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     const unit = byCalculation
       ? null
       : unstatedUnit([evidence, ...foundCitations(session.finalCitation, evidence)]);
-    if (unit && verdict.verdict !== "contradicted") return unsupported(unit);
+    if (unit && verdict.verdict !== "contradicted") return unsupported(unit, evidence);
+    // A general word for the Passage's own party is backed for that party only: the wider group
+    // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
+    // its own, so the verdict doesn't rest on the model weighing it.
+    if (
+      verdict.verdict === "supported" &&
+      verdict.scope === "wider" &&
+      verdict.covered &&
+      verdict.uncovered &&
+      !byCalculation
+    ) {
+      return unsupported(
+        { reason: verdict.says, covered: verdict.covered, uncovered: verdict.uncovered },
+        evidence,
+      );
+    }
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
       if (judged === "same") {
-        if (unit) return unsupported(unit);
+        if (unit) return unsupported(unit, evidence);
         return (
           byCalculation ?? {
             verdict: "supported",
@@ -456,13 +508,15 @@ function calculated(
  * it, or with a quote the check doesn't find, is asked once more, in one
  * request, for that record from the Passages it read (Claude Haiku 5.5 left
  * `cite` out of about one check in four). The record is taken as structured
- * output's are, and counts only when the check finds its quote.
+ * output's are, and counts only when the check finds its quote. With
+ * `covered`, it is the Passage that states that part of an unsupported sentence.
  */
 async function askForEvidence(
   request: ClaimCheckRequest,
   verdict: ReadVerdict,
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
+  covered: string | null = null,
 ): Promise<Citation | null> {
   const passages = session.shownPassages();
   if (passages.length === 0) return null;
@@ -471,8 +525,8 @@ async function askForEvidence(
   try {
     ({ text: reply } = await generateText({
       model: model.model,
-      instructions: EVIDENCE_INSTRUCTIONS,
-      prompt: evidencePrompt({ claim: request.claim, ...verdict, passages }),
+      instructions: covered === null ? EVIDENCE_INSTRUCTIONS : COVERED_EVIDENCE_INSTRUCTIONS,
+      prompt: evidencePrompt({ claim: request.claim, ...verdict, covered, passages }),
       temperature: answerTemperature(model.capabilities.facts.temperature),
       maxOutputTokens: 600,
       maxRetries: 1,

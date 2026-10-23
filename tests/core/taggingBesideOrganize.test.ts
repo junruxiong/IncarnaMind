@@ -212,6 +212,29 @@ describe("with Organize moving new Documents by itself", () => {
 
     expect(chat.calls.map((call) => call.purpose)).toEqual(["organize"]);
   });
+
+  test("back online, a Document Organize couldn't reach the model for is organized again, once however many windows say so", async () => {
+    const { core, chat, reports } = await start(true);
+    chat.fail(
+      new APICallError({
+        message: "fetch failed",
+        url: "http://127.0.0.1:11434/v1/chat/completions",
+        requestBodyValues: {},
+        isRetryable: false,
+      }),
+    );
+    const [document] = await add(core, { "One.txt": "The first report, about revenue." });
+    if (!document) throw new Error("Nothing was added.");
+    const [failed] = await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
+    expect(failed?.taggingError).toMatchObject({ kind: "network" });
+    const before = chat.calls.length;
+
+    chat.fail(null);
+    await Promise.all([core.backOnline(), core.backOnline()]);
+
+    await filed(core, [document.id], reports.id);
+    expect(chat.calls.slice(before).map((call) => call.purpose)).toEqual(["organize"]);
+  });
 });
 
 describe("turning on Organize filing new Documents by itself", () => {
@@ -259,25 +282,25 @@ describe("turning on Organize filing new Documents by itself", () => {
 });
 
 describe("with Organize filing new Documents by itself, a Document the tagger holds", () => {
-  const wrongKey = () =>
+  const unknownModel = () =>
     new APICallError({
-      message: "Invalid API key",
+      message: "The model does not exist",
       url: "https://api.example.com/v1/messages",
       requestBodyValues: {},
-      statusCode: 401,
+      statusCode: 404,
       isRetryable: false,
     });
 
   test("shows its failure, and Retry tags it without filing it", async () => {
     const { core, chat, save } = await start(false);
-    chat.fail(wrongKey());
+    chat.fail(unknownModel());
     const [held] = await add(core, { "One.txt": "The first report, about revenue." });
     if (!held) throw new Error("Nothing was added.");
     await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
 
     await save(true);
     const [failed] = await waitForTagging(core, [held.id], (each) => each.tagging === "failed");
-    expect(failed?.taggingError).toMatchObject({ kind: "auth" });
+    expect(failed?.taggingError).toMatchObject({ kind: "model" });
 
     chat.fail(null);
     await core.retagDocuments([held.id]);

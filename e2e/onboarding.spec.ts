@@ -10,6 +10,7 @@ import {
   continueSetup,
   createDataFolder,
   dismissChatSetup,
+  examplesMenu,
   expectReadyDocuments,
   interceptOpenDialog,
   launchApp,
@@ -248,9 +249,8 @@ test("removing the examples deletes the example Mind, its Documents and the copi
     .toBe("gone");
   await first.app.close();
 
-  // A first run happens once: the next launch doesn't make them again.
   const again = await launchApp(dataDir, { examples: true });
-  await expect(again.window.getByTestId("mind-none-open")).toBeVisible();
+  await expect(again.window.getByTestId("home")).toBeVisible();
   await expect(again.window.getByTestId("mind-list-item")).toHaveCount(0);
   await again.window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
@@ -515,7 +515,10 @@ test("✕ ends the first open at any step, and so does Remove the examples or a 
 
   const removing = await createDataFolder();
   const second = await launchApp(removing, { examples: true });
-  await pointAndClick(second.window, second.window.getByTestId("first-open-remove"));
+  await pointAndClick(
+    second.window,
+    (await examplesMenu(second.window)).getByTestId("examples-remove"),
+  );
   await expect(second.window.getByTestId("mind-list-item")).toHaveCount(0);
   await dismissChatSetup(second.window);
   await shellIsBack(second.window);
@@ -580,6 +583,57 @@ test("a double-click on the ready Question asks it once, and Enter on it moves t
   await removeDataFolder(keyboard);
 });
 
+test("on a fresh install, a first checked Citation from the User's own file takes eight steps", async () => {
+  const notes = join(sources, "Harbour notes.md");
+  await writeFile(
+    notes,
+    "# Harbour notes\n\nThe harbour master publishes the tide tables every Monday morning.\n",
+  );
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  try {
+    await setWindowSize(app, window, 1440, 900);
+    await acceptPlainTextKeys(window);
+    await expect(window.getByTestId("mind-pane")).toBeVisible();
+    const taken: string[] = [];
+    const step = async (name: string, action: () => Promise<unknown>) => {
+      taken.push(name);
+      await action();
+    };
+
+    await step("drop the file", () =>
+      window.getByTestId("add-documents-input").setInputFiles([notes]),
+    );
+    await expect(
+      window.locator('[data-testid="document-list-item"][data-status="ready"]').filter({
+        hasText: "Harbour notes",
+      }),
+    ).toHaveCount(1);
+    await step("⌘J", () => window.keyboard.press("ControlOrMeta+j"));
+    await expect(window.getByTestId("composer-input")).toBeFocused();
+    await step("type the Question", () =>
+      window.keyboard.type("When does the harbour master publish the tide tables?"),
+    );
+    await step("Enter", () => window.keyboard.press("Enter"));
+    const card = window.getByTestId("model-setup");
+    await step("Paste an API key", () => pointAndClick(window, card.getByTestId("setup-key")));
+    const form = card.getByTestId("provider-form");
+    await expect(form.getByLabel(/^API key/)).toBeFocused();
+    await step("paste the key", () => window.keyboard.insertText("sk-ant-a-key-from-the-company"));
+    await step("Use this key", () => pointAndClick(window, form.getByTestId("provider-use-key")));
+    await step("Continue", () => continueSetup(window));
+
+    const citation = assistantAnswers(window).last().getByTestId("citation").first();
+    await expect(citation).toHaveAttribute("data-check", "found", { timeout: 20_000 });
+    await expect(citation.getByTestId("citation-chip")).toHaveAttribute(
+      "aria-label",
+      /Harbour notes/,
+    );
+    expect(taken).toHaveLength(8);
+  } finally {
+    await app.close();
+  }
+});
+
 test("the steps can be hidden once all are done, and stay hidden", async () => {
   const first = await launchApp(dataDir, { examples: true });
   await useLocalChatModel(first.window);
@@ -591,6 +645,8 @@ test("the steps can be hidden once all are done, and stay hidden", async () => {
   await first.app.close();
 
   const again = await launchApp(dataDir, { examples: true });
+  await expect(again.window.getByTestId("home")).toBeVisible();
+  await again.window.getByTestId("mind-tab").click();
   await expect(again.window.getByTestId("example-banner")).toBeVisible();
   await expect(again.window.getByTestId("first-open-steps")).toHaveCount(0);
   await again.app.close();
@@ -795,61 +851,62 @@ test("the hint at the end of a Mind focuses the composer when its link is clicke
   expect(order.slice(at + 1, -1).every((block) => block === "added")).toBe(true);
 });
 
-/** The banner's links to the other examples, by the group each opens, in the order shown. */
-const moreLinks = (window: Page) =>
-  window.getByTestId("example-more").getByTestId("example-more-link");
-const groupsShown = (window: Page) =>
-  moreLinks(window).evaluateAll((links) => links.map((link) => link.getAttribute("data-group")));
-
-test("the banner offers the other examples in an order picked once per install; each opens in a new tab and is made once (#123)", async () => {
+test("the Examples row's ⋯ offers the other examples in an order picked once per install; each opens in a new tab and is made once (#123)", async () => {
   const first = await launchApp(dataDir, { examples: true });
   const { app, window } = first;
   await setWindowSize(app, window, 1100, 720);
-  const steps = window.getByTestId("first-open-steps");
-  await expect(steps).toBeVisible();
+  await expect(window.getByTestId("first-open-steps")).toBeVisible();
 
-  await expect(steps.getByTestId("example-more")).toContainText(
-    "Try an example closer to your work:",
-  );
-  const order = await groupsShown(window);
-  expect([...order].sort()).toEqual(["contracts", "meetings", "papers"]);
+  const groupsShown = async () =>
+    (await examplesMenu(window))
+      .getByTestId("example-more-link")
+      .evaluateAll((links) => links.map((link) => link.getAttribute("data-group")));
+  const choose = async (group: string) => {
+    const menu = await examplesMenu(window);
+    await pointAndClick(window, menu.locator(`[data-group="${group}"]`));
+    await expect(menu).toBeHidden();
+  };
   const tabs = window.getByTestId("tab-title");
   await expect(tabs).toHaveCount(0);
+  const order = await groupsShown();
+  expect([...order].sort()).toEqual(["contracts", "meetings", "papers"]);
+  await window.keyboard.press("Escape");
 
   // Contracts opens beside the first example, which stays in its own tab.
-  await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
+  await choose("contracts");
   await expect(tabs).toHaveCount(2);
   await expect(tabs.first()).toHaveText("Draft: credit committee paper");
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
-  // Its banner lists the others, the first example included.
-  const contracts = await groupsShown(window);
-  expect(contracts[0]).toBe("credit");
-  expect([...contracts].sort()).toEqual(["credit", "meetings", "papers"]);
+  expect(await groupsShown()).toEqual(order);
+  await window.keyboard.press("Escape");
 
   // From the first example again, Contracts shows the one made, not a second.
-  await tabs.first().click();
-  await expect(moreLinks(window).first()).toBeVisible();
-  await moreLinks(window).and(window.locator('[data-group="contracts"]')).click();
+  await pointAndClick(window, tabs.first());
+  await choose("contracts");
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
   await expect(tabs).toHaveCount(2);
   await app.close();
 
   // The same order after a restart.
   const again = await launchApp(dataDir, { examples: true });
-  const credit = again.window.getByTestId("tab-title").first();
+  const credit = again.window.getByTestId("mind-tab").getByTestId("tab-title").first();
   await expect(credit).toHaveText("Draft: credit committee paper");
-  await credit.click();
-  await expect(again.window.getByTestId("first-open-steps")).toBeVisible();
-  expect(await groupsShown(again.window)).toEqual(order);
+  const menu = await examplesMenu(again.window);
+  expect(
+    await menu
+      .getByTestId("example-more-link")
+      .evaluateAll((links) => links.map((link) => link.getAttribute("data-group"))),
+  ).toEqual(order);
   await again.app.close();
 });
 
 test("Remove the examples removes every example Mind made, and Undo brings them back (#123)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
-  await moreLinks(window).and(window.locator('[data-group="papers"]')).click();
+  const menu = await examplesMenu(window);
+  await pointAndClick(window, menu.locator('[data-group="papers"]'));
   await expect(window.getByTestId("mind-list-item")).toHaveCount(2);
 
-  await window.getByTestId("example-remove").click();
+  await pointAndClick(window, (await examplesMenu(window)).getByTestId("examples-remove"));
   await expect(window.getByTestId("mind-list-item")).toHaveCount(0);
   await dismissChatSetup(window);
   await leaveText(window);
@@ -874,7 +931,7 @@ const helpItem = (app: ElectronApplication) =>
     return found ? { label: found.label, visible: found.visible } : null;
   });
 
-test("the steps card removes the examples with Undo, and the commands show only in the right state (#123)", async () => {
+test("the Examples row's ⋯ removes the examples with Undo, and the commands show only in the right state (#123)", async () => {
   const { app, window } = await launchApp(dataDir, { examples: true });
   const steps = window.getByTestId("first-open-steps");
   await expect(steps).toBeVisible();
@@ -884,7 +941,7 @@ test("the steps card removes the examples with Undo, and the commands show only 
   await window.keyboard.press("Escape");
   await expect.poll(() => helpItem(app)).toMatchObject({ visible: false });
 
-  await steps.getByTestId("first-open-remove").click();
+  await pointAndClick(window, (await examplesMenu(window)).getByTestId("examples-remove"));
   await expect(window.getByTestId("mind-list-item")).toHaveCount(0);
   await expect(window.getByTestId("undo-line").getByTestId("undo-message")).toHaveText(
     "Removed the examples",

@@ -10,7 +10,8 @@
  * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
- * can't reach the model the first time it is tagged (nor on the retry that follows), and one that says
+ * can't reach the model the first time it is tagged or organized (nor on the retry that follows; one that
+ * says "stays unreachable" never can), and one that says
  * "rate-limited" meets its rate limit.
  */
 
@@ -206,6 +207,15 @@ export const createFakeChatModel: ChatModelFactory = (spec) =>
             });
           }
           if (slow && part.type === "stream-start") await wait(SLOW_STEP_MS);
+          // A slow cell's words stand a moment before its Answer ends, for a test to see them.
+          if (
+            slow &&
+            part.type === "finish" &&
+            part.finishReason.unified === "stop" &&
+            isCell(prompt)
+          ) {
+            await wait(SLOW_STEP_MS);
+          }
           if (part.type === "text-delta" || part.type === "tool-input-delta") {
             await wait(slow ? SLOW_WORD_MS : edit ? EDIT_WORD_MS : WORD_DELAY_MS);
           }

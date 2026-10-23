@@ -12,12 +12,13 @@ import { createTempDataFolder, startCore } from "../helpers/core";
 
 /**
  * Export uses Word until the User saves other options, and the deliverables leave Questions
- * out. A Word file tracks the User's edits and marks AI text and failed checks (#107).
+ * out. A Word file tracks the User's edits and comments on failed checks (#107); whether it
+ * marks AI text is the User's to say (#1380).
  */
 const DEFAULT_WORD = {
   includeQuestions: false,
   trackChanges: true,
-  markAiText: true,
+  markAiText: null,
   commentFailedChecks: true,
 } as const;
 
@@ -31,7 +32,7 @@ const DEFAULT_EXPORT = {
 
 const PDF_EXPORT = {
   format: "pdf",
-  docx: { ...DEFAULT_WORD, markAiText: false },
+  docx: { ...DEFAULT_WORD, markAiText: "leave" },
   pdf: { includeQuestions: true },
   html: { includeQuestions: false },
   "share-page": { includeQuestions: true, citationCards: false, checkedLine: true },
@@ -80,6 +81,7 @@ describe("Settings", () => {
         sidebarHidden: false,
         chatSetupDismissed: false,
         sandboxNoticeDismissed: false,
+        openedBefore: false,
         gettingStarted: {
           started: false,
           citationChecked: false,
@@ -98,6 +100,7 @@ describe("Settings", () => {
         meetingPanelHidden: true,
         meetingHelpKeys: {},
         motion: "system",
+        lastChatModel: null,
       },
       language: "en",
       scriptSandbox: "none",
@@ -184,6 +187,7 @@ describe("Settings", () => {
       sidebarHidden: false,
       chatSetupDismissed: false,
       sandboxNoticeDismissed: false,
+      openedBefore: false,
       gettingStarted: {
         started: false,
         citationChecked: false,
@@ -202,6 +206,7 @@ describe("Settings", () => {
       meetingPanelHidden: true,
       meetingHelpKeys: {},
       motion: "system",
+      lastChatModel: null,
     });
   });
 
@@ -217,6 +222,108 @@ describe("Settings", () => {
       ...DEFAULT_EXPORT,
       format: "pdf",
     });
+  });
+
+  test("whether a Word file marks AI text is not answered until the User answers, and each answer is kept", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    expect((await before.getSettings()).user.exportOptions.docx.markAiText).toBeNull();
+
+    for (const answer of ["mark", "leave"] as const) {
+      const saved = await before.updateSettings({
+        user: {
+          exportOptions: {
+            ...DEFAULT_EXPORT,
+            docx: { ...DEFAULT_WORD, markAiText: answer },
+          },
+        },
+      });
+      expect(saved.user.exportOptions.docx.markAiText).toBe(answer);
+    }
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
+    after.close();
+  });
+
+  test("where Word and PDF put the Citations is not answered until the User answers, and each answer is kept (#1600)", async () => {
+    const dataDir = await createTempDataFolder();
+    const before = startCore(dataDir);
+    expect((await before.getSettings()).user.exportOptions.citationPlace).toBeUndefined();
+
+    for (const answer of ["list", "footnotes"] as const) {
+      const saved = await before.updateSettings({
+        user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: answer } },
+      });
+      expect(saved.user.exportOptions.citationPlace).toBe(answer);
+    }
+    before.close();
+
+    const after = startCore(dataDir);
+    expect((await after.getSettings()).user.exportOptions.citationPlace).toBe("footnotes");
+    after.close();
+  });
+
+  test.each([
+    { saved: true, read: null, name: "on is not an answer, so the question is asked once" },
+    { saved: false, read: "leave", name: "off was a choice not to mark" },
+  ])(
+    "the switch for marking AI text, saved before it became a question: $name (#1380)",
+    async ({ saved, read }) => {
+      const dataDir = await createTempDataFolder();
+      startCore(dataDir).close();
+      const db = openDatabase(join(dataDir, DATABASE_FILE));
+      const at = new Date().toISOString();
+      db.run(
+        "INSERT INTO user_settings (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        [
+          crypto.randomUUID(),
+          "exportOptions",
+          JSON.stringify({
+            ...DEFAULT_EXPORT,
+            format: "pdf",
+            docx: { ...DEFAULT_WORD, markAiText: saved },
+          }),
+          at,
+          at,
+        ],
+      );
+      db.close();
+
+      const core = startCore(dataDir);
+      expect((await core.getSettings()).user.exportOptions).toEqual({
+        ...DEFAULT_EXPORT,
+        format: "pdf",
+        docx: { ...DEFAULT_WORD, markAiText: read },
+      });
+      core.close();
+    },
+  );
+
+  test("Word options saved before its choices (#107) read marking AI text as not answered", async () => {
+    const dataDir = await createTempDataFolder();
+    startCore(dataDir).close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    const at = new Date().toISOString();
+    db.run(
+      "INSERT INTO user_settings (id, key, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      [
+        crypto.randomUUID(),
+        "exportOptions",
+        JSON.stringify({ ...DEFAULT_EXPORT, docx: { includeQuestions: true } }),
+        at,
+        at,
+      ],
+    );
+    db.close();
+
+    const core = startCore(dataDir);
+    expect((await core.getSettings()).user.exportOptions.docx).toEqual({
+      ...DEFAULT_WORD,
+      includeQuestions: true,
+    });
+    core.close();
   });
 
   test("Get started's progress kept before the ready Question reads it as not asked (#123)", async () => {
@@ -257,6 +364,7 @@ describe("Settings", () => {
       sidebarHidden: true,
       chatSetupDismissed: true,
       sandboxNoticeDismissed: true,
+      openedBefore: true,
       gettingStarted: {
         started: true,
         citationChecked: true,
@@ -275,6 +383,7 @@ describe("Settings", () => {
       meetingPanelHidden: false,
       meetingHelpKeys: { say: "Ctrl+Alt+Q" },
       motion: "reduced" as const,
+      lastChatModel: null,
     };
     await before.updateSettings({
       user: {
@@ -361,6 +470,14 @@ describe("Settings", () => {
       patch: { user: { exportOptions: { format: "pdf", docx: { includeQuestions: false } } } },
     },
     {
+      name: "an answer about marking AI text that isn't one",
+      patch: {
+        user: {
+          exportOptions: { ...DEFAULT_EXPORT, docx: { ...DEFAULT_WORD, markAiText: "maybe" } },
+        },
+      },
+    },
+    {
       name: "export options whose Questions switch isn't true or false",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, pdf: { includeQuestions: "yes" } } } },
     },
@@ -376,6 +493,10 @@ describe("Settings", () => {
       },
     },
     {
+      name: "a place for Citations that isn't one",
+      patch: { user: { exportOptions: { ...DEFAULT_EXPORT, citationPlace: "margin" } } },
+    },
+    {
       name: "a way to show someone's changes that isn't one",
       patch: { user: { exportOptions: { ...DEFAULT_EXPORT, theirChanges: "hidden" } } },
     },
@@ -386,6 +507,10 @@ describe("Settings", () => {
     {
       name: "a default model without a model",
       patch: { user: { chatModel: { providerId: "x" } } },
+    },
+    {
+      name: "a last chosen model without a model",
+      patch: { device: { lastChatModel: { providerId: "x" } } },
     },
     {
       name: "a default model on a provider that doesn't exist",

@@ -16,7 +16,6 @@ import {
   type EditWithAiResult,
   type ProviderError,
 } from "../../core/api";
-import { mindModelOf } from "../../shared/mindModel";
 import { aiUseOfAccepted, proposalRequestOf } from "../../shared/proposals";
 import { useAnswers } from "./answers";
 import { type Applying, appliedMessage, finishApplying, startApplying } from "./appliedEdits";
@@ -37,6 +36,7 @@ import { failedEdit } from "./editProblems";
 import { errorMessage } from "./errors";
 import { translateNow } from "./i18n";
 import type { Words } from "./lineNames";
+import { modelInUseOf } from "./modelInUse";
 import { useAppStore } from "./store";
 
 /** The languages Translate… offers: each in its own name, and as the model is told it. */
@@ -94,8 +94,11 @@ interface EditsState {
   problems: Readonly<Record<string, EditProblem>>;
   /** By Mind: the selection the composer is saying what to change in, quoted. */
   editing: Readonly<Record<string, { quote: string }>>;
-  /** By Mind: what a screen reader is told about Proposals, with a count to say it again. */
-  spoken: Readonly<Record<string, { text: string; at: number }>>;
+  /**
+   * By Mind: what a screen reader is told about Proposals, with a count to say it again, and the
+   * Proposal it describes, if it does: that is said only while the cursor is in it.
+   */
+  spoken: Readonly<Record<string, { text: string; at: number; about?: string }>>;
   /** By Mind: the selection menu is open on the edit asked in it, which then reports itself there and not in the page. */
   menuShows: Readonly<Record<string, true>>;
 }
@@ -124,9 +127,9 @@ const t = translateNow;
 
 let spokenAt = 0;
 /** Tells a screen reader, through the Mind's live region (see `ProposalBars`). */
-export function speak(mindId: string, text: string): void {
+export function speak(mindId: string, text: string, about?: string): void {
   spokenAt += 1;
-  set("spoken", mindId, { text, at: spokenAt });
+  set("spoken", mindId, { text, at: spokenAt, ...(about !== undefined && { about }) });
 }
 
 export const dismissEditProblem = (mindId: string) => set("problems", mindId, null);
@@ -224,7 +227,7 @@ export async function requestEdit(
       text: selection.text,
       action,
       ...(instruction !== undefined && { instruction }),
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = failure(error);
@@ -358,7 +361,7 @@ export async function regenerateChange(
       requestId,
       mindId,
       proposalId: proposal.id,
-      model: mindModelOf(doc),
+      model: modelInUseOf(doc),
     });
   } catch (error) {
     result = failure(error);

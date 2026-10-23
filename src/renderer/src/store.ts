@@ -22,6 +22,7 @@ import type {
   Mind,
   PrivacySettings,
   RerankSettings,
+  RestoreRef,
   SearchScope,
   Settings,
   SettingsPatch,
@@ -39,6 +40,7 @@ import { filingFolder } from "../../shared/searchScope";
 import { tagLinks } from "../../shared/tagLinks";
 import {
   deleted,
+  documentsAdded,
   folderLinked,
   linkedFolderPaused,
   linkedFolderShown,
@@ -53,6 +55,7 @@ import { languageNow } from "./i18n";
 import {
   createLayoutSlice,
   currentMindIdOf,
+  focusedGroupOf,
   followLayout,
   groupsMerged,
   type LayoutSlice,
@@ -179,9 +182,16 @@ export interface AppState extends LayoutSlice {
   refreshLibrary(): Promise<void>;
   /**
    * Shows the Library (one tab per window), at a Folder's section if given:
-   * its tab where it is open, else a new tab in the focused group, or to the side.
+   * its tab where it is open, else a new tab in the focused group, to the side,
+   * or behind the one shown.
    */
-  openLibrary(filter?: string, options?: { side?: boolean }): void;
+  openLibrary(filter?: string, options?: { side?: boolean; behind?: boolean }): void;
+  /**
+   * Shows Home (one tab per window): its tab where it is open, else a new one
+   * in the focused group; with `first`, as at a launch, just before the tab
+   * that group shows.
+   */
+  openHome(options?: { side?: boolean; first?: boolean }): Promise<void>;
   /** Every Skill, in name order, on or off. Set once loaded, then follows the core's event. */
   skills: Skill[];
   /** The first-run example Mind and its Documents (onboarding). Null until loaded. */
@@ -281,9 +291,9 @@ export interface AppState extends LayoutSlice {
   /**
    * Shows a Mind: its tab where it is open, else a new tab in the focused
    * group after the shown one; with `newTab`, a new tab in the focused group
-   * even where it is open.
+   * even where it is open; with `behind`, a new tab that stays behind the one shown.
    */
-  openMind(id: string, options?: { newTab?: boolean }): void;
+  openMind(id: string, options?: { newTab?: boolean; behind?: boolean }): void;
   /** Closes a tab, offering to reopen it; if it was shown, the tab after it (or else before it) is. */
   closeTab(tabId: string): void;
   /** ⇧⌘T: reopens the tab closed last, where it was. */
@@ -487,6 +497,20 @@ function readList<T>(list: PushedList, request: Promise<T>, readAt: Map<PushedLi
 const pushedSince = (list: PushedList, readAt: Map<PushedList, number>) =>
   (lastPushed.get(list) ?? 0) > (readAt.get(list) ?? 0);
 
+const LOADED_KEY = "incarnamind.window.loaded";
+
+// A reload of the window (View › Reload) keeps the tab it showed; only a new window opens on Home.
+function windowLoadedBefore(): boolean {
+  try {
+    const before = sessionStorage.getItem(LOADED_KEY) !== null;
+    sessionStorage.setItem(LOADED_KEY, "1");
+    return before;
+  } catch (error) {
+    console.warn("Couldn't tell whether this window loaded before; it opens on Home.", error);
+    return false;
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => {
   let libraryRequest = 0;
   /** The interface's words, outside React: for the lines the store writes (Undo's). */
@@ -521,6 +545,23 @@ export const useAppStore = create<AppState>()((set, get) => {
     }
   };
   const push = (change: Undoable) => useUndo.getState().push(change);
+  const removeOwn = async (ids: readonly string[]): Promise<RestoreRef[]> => {
+    // One deleted since, or taken over by a Linked folder, is no longer this add's.
+    const own = new Set(
+      (await core.listDocuments({ linkedFolderId: null })).map((each) => each.id),
+    );
+    const taken: RestoreRef[] = [];
+    for (const id of ids) {
+      if (!own.has(id)) continue;
+      await core.deleteDocument(id);
+      taken.push({ kind: "document", id });
+    }
+    documentUpdates.flush();
+    set((state) => ({
+      documents: state.documents.filter((each) => !taken.some((ref) => ref.id === each.id)),
+    }));
+    return taken;
+  };
   const libraryBefore = async (path: string): Promise<LibraryBefore> => {
     const [documents, linked] = await Promise.all([core.listDocuments(), core.listLinkedFolders()]);
     return {
@@ -754,7 +795,9 @@ export const useAppStore = create<AppState>()((set, get) => {
     documentUpdates.flush();
     const known = new Set(get().documents.map((each) => each.id));
     const result =
-      paths.length > 0 ? await core.addDocuments([...paths]) : { documents: [], skipped: [] };
+      paths.length > 0
+        ? await core.addDocuments([...paths])
+        : { documents: [], skipped: [], added: [] };
     const linkable: LinkingFolder[] = folders.map((path) => ({ path, preview: null, error: null }));
     const skipped = [...notOnDisk];
     for (const { path } of result.skipped) {
@@ -782,6 +825,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       };
     });
     offerLinks(linkable);
+    if (result.added.length === 0) return;
+    push(documentsAdded(result.added.length, () => removeOwn(result.added)));
   };
 
   /** Dropped or picked files' paths, and the names of those that aren't on disk. */
@@ -837,12 +882,33 @@ export const useAppStore = create<AppState>()((set, get) => {
           : {}),
       });
     },
+    openHome: async (options) => {
+      const { layout } = get();
+      const group = layout ? focusedGroupOf(layout) : null;
+      const shown = group?.tabs.find((tab) => tab.id === group.activeTabId);
+      await get().changeLayout({
+        type: "open",
+        item: { kind: "home" },
+        where: options?.side
+          ? { in: "side" }
+          : options?.first && group
+            ? {
+                in: "group",
+                groupId: group.id,
+                // Just before the tab that was in front, so closing Home shows it again.
+                before:
+                  shown && !shown.pinned ? shown.id : group.tabs.find((tab) => !tab.pinned)?.id,
+              }
+            : { in: "place" },
+      });
+    },
     openLibrary: (filter = "all", options) => {
       set({ libraryFilter: filter });
       void get().changeLayout({
         type: "open",
         item: { kind: "library" },
         where: options?.side ? { in: "side" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
     skills: [],
@@ -896,6 +962,13 @@ export const useAppStore = create<AppState>()((set, get) => {
           readList("rerank", core.getRerankSettings(), readAt),
           readList("privacy", core.getPrivacySettings(), readAt),
         ]);
+        const reloaded = windowLoadedBefore();
+        // Minds made before this setting existed count as an earlier launch.
+        const launchedBefore = settings.device.openedBefore || minds.length > 0;
+        // Before the tabs are drawn, so the Mind left in front isn't drawn only to be covered.
+        if (!offered?.mindId && launchedBefore && !reloaded) {
+          await get().openHome({ first: true });
+        }
         // What the core's events brought before this is in the lists just read.
         documentUpdates.flush();
         const read = {
@@ -923,6 +996,9 @@ export const useAppStore = create<AppState>()((set, get) => {
           askedOwnAtLaunch: settings.device.gettingStarted.askedOwn,
           status: { kind: "ready" },
         });
+        if (!settings.device.openedBefore) {
+          void get().updateSettings({ device: { openedBefore: true } });
+        }
         await get().refreshLibrary();
         tickIndexed(connectors.length);
       } catch (error) {
@@ -1208,7 +1284,8 @@ export const useAppStore = create<AppState>()((set, get) => {
       void get().changeLayout({
         type: "open",
         item: { kind: "mind", mindId: id },
-        where: options?.newTab ? { in: "group" } : { in: "place" },
+        where: options?.newTab || options?.behind ? { in: "group" } : { in: "place" },
+        ...(options?.behind && { behind: true }),
       });
     },
 
@@ -1699,7 +1776,7 @@ export const allExamples = (state: Pick<AppState, "examples" | "otherExamples">)
 const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Examples[] =>
   allExamples(state).filter(isMade);
 
-const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
+export const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
   allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
 /** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */
@@ -1733,7 +1810,10 @@ core.on("minds.changed", (minds) => {
   }
 });
 
-followLayout((partial) => useAppStore.setState(partial));
+followLayout(
+  (partial) => useAppStore.setState(partial),
+  (error) => useNotices.getState().showError(error),
+);
 
 // Processing happens in the background: follow each Document's status as the core reports it.
 core.on("document.status", (changed) => {
