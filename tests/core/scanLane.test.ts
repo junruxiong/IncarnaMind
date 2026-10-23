@@ -163,6 +163,52 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 180_000 }
     },
   );
 
+  // protects=a scan waiting its turn keeps it when its file is added again, as the library's pass does with a Document it finds still queued; fails_when=the scan found after it is read first; no_claim=none beyond protects.
+  test("a waiting scan whose file is added again keeps its turn", async () => {
+    const dataDir = await createTempDataFolder();
+    const slow = slowRecognizer();
+    const core = startCore(dataDir, {
+      textRecognizer: slow.recognizer,
+      textRecognitionModelSource: NO_MODEL_FILES,
+      scansAtOnce: 1,
+    });
+    const order: string[] = [];
+    core.on("document.status", (document) => {
+      if (document.status === "ready" && !order.includes(document.name)) order.push(document.name);
+    });
+    try {
+      const added = await addFiles(core, [
+        ["Scan A.pdf", scanPdf()],
+        ["Scan B.pdf", scanPdf()],
+        ["Scan C.pdf", scanPdf()],
+        ["Board minutes.pdf", textPdf(3)],
+      ]);
+      // A text file is read once every scan before it has been found, so the scans after the first wait.
+      await waitForProcessing(core, [byName(added, "Board minutes.pdf").id], WAIT_MS);
+      await waitForDocuments(
+        core,
+        (each) => {
+          const scans = ["Scan A.pdf", "Scan B.pdf", "Scan C.pdf"].map((name) =>
+            byName(each, name),
+          );
+          expect(scans.map((scan) => scan.status)).toEqual(["extracting", "queued", "queued"]);
+        },
+        WAIT_MS,
+      );
+      await core.addDocuments([byName(added, "Scan B.pdf").path]);
+
+      slow.release();
+      await waitForProcessing(
+        core,
+        added.map((document) => document.id),
+        WAIT_MS,
+      );
+      expect(order).toEqual(["Board minutes", "Scan A", "Scan B", "Scan C"]);
+    } finally {
+      core.close();
+    }
+  });
+
   // protects=a waiting scan that is deleted leaves nothing behind and the lane goes on; fails_when=it is read anyway, or the next scan never starts; no_claim=none beyond protects.
   test("a waiting scan that is deleted is never read, and the next one is", async () => {
     const dataDir = await createTempDataFolder();

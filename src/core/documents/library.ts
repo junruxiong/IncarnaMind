@@ -216,6 +216,11 @@ export function suggestLayout(relatives: Iterable<string>): LinkedFolderLayout {
 export interface LibraryHooks {
   /** Processing is due (a new file, or a new version): queue it, unless its Linked folder is paused. */
   process(documentId: string): void;
+  /**
+   * A Document is found still queued: queue its processing as `process` does, unless its job is
+   * queued, under way or waiting its turn already, which queueing again would send to the back.
+   */
+  processIfIdle(documentId: string): void;
   /** Push a Document's current state. */
   announce(documentId: string): void;
   /** A new Document was stored and announced; its processing isn't queued yet. */
@@ -732,7 +737,7 @@ export function createLibrary(options: LibraryOptions) {
       }
       if (placeChanged) noteMoved(row, place, changes);
       if (row.file_device === null) await noteIdentity(row);
-      if (row.status === "queued") hooks.process(row.id);
+      if (row.status === "queued") hooks.processIfIdle(row.id);
       return true;
     }
     let hashed: Awaited<ReturnType<typeof hashFile>>;
@@ -776,7 +781,8 @@ export function createLibrary(options: LibraryOptions) {
     }
     if (placeChanged) noteMoved(row, place, changes);
     // A new version is processed; its text replaces the old one's in search once indexed.
-    if (newVersion || current.status === "queued") hooks.process(row.id);
+    if (newVersion) hooks.process(row.id);
+    else if (current.status === "queued") hooks.processIfIdle(row.id);
     return true;
   }
 
@@ -997,7 +1003,8 @@ export function createLibrary(options: LibraryOptions) {
     changes.announced.add(row.id);
     noteMoved(row, place, changes);
     if (name !== row.name) hooks.renamed(row.id);
-    if (seen.newVersion || current.status === "queued") hooks.process(row.id);
+    if (seen.newVersion) hooks.process(row.id);
+    else if (current.status === "queued") hooks.processIfIdle(row.id);
     // The old layout's copy in the data folder isn't needed once the original is linked.
     if (isLegacyCopy(row.path)) {
       await rm(row.path, { force: true }).catch((error: unknown) => hooks.reportError(error));
