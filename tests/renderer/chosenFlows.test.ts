@@ -14,13 +14,13 @@ const t =
 
 const FULL = {
   en: [
-    "your Questions, the Mind you’re in or name, matching passages with their Document names and pages, up to 50 Document names, and a live Meeting’s Transcript",
+    "your Questions, the Mind you’re in or one you name, matching passages with their Document names and pages, the names, Folders and Tags a command finds (up to 50 Documents), and a Meeting’s Transcript",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
   ],
   "zh-CN": [
-    "你的问题、你所在或点名的 Mind、相关段落及其文档名称和页码、最多 50 个文档的名称，以及正在录制的会议的实时转写稿",
+    "你的问题、你所在或在问题中提到的 Mind、相关段落及其文档名称和页码、命令找到的名称、文件夹和标签（最多 50 个文档），以及会议的转写稿",
     "你核对的每一句话",
     "写作建议时你停下的那一段",
     "你让助手修改的文字",

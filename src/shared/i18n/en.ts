@@ -1913,7 +1913,7 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
-    "your Questions, the Mind you’re in or name, matching passages with their Document names and pages, up to 50 Document names, and a live Meeting’s Transcript",
+    "your Questions, the Mind you’re in or one you name, matching passages with their Document names and pages, the names, Folders and Tags a command finds (up to 50 Documents), and a Meeting’s Transcript",
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
@@ -2162,9 +2162,11 @@ export const en = {
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks": "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
-  "consent.data.document-names": "The names of up to 50 of your Documents",
+  "consent.data.document-names":
+    "The names, Folders and Tags of the Documents and Minds a Question or a command finds (up to 50 Documents)",
   "consent.data.other-minds": "Part of another Mind, when a Question names it",
-  "consent.data.live-transcript": "The live Transcript while a Meeting records",
+  "consent.data.live-transcript":
+    "A Meeting’s Transcript: the live lines while it records, and all of it to fill in the notes after Stop",
   "consent.data.passages":
     "passages from your Documents that match the Question, with their Documents’ names and pages",
   "consent.data.tool-results": "Results of Connectors and Skill scripts an Answer uses",

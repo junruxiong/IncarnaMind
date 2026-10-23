@@ -1843,7 +1843,7 @@ export const zhCN = {
   "providers.form.save": "使用此服务",
   "providers.sendsLine": "会把你的问题和文档内容发送给 {provider}。",
   "providers.sends.chat":
-    "你的问题、你所在或点名的 Mind、相关段落及其文档名称和页码、最多 50 个文档的名称，以及正在录制的会议的实时转写稿",
+    "你的问题、你所在或在问题中提到的 Mind、相关段落及其文档名称和页码、命令找到的名称、文件夹和标签（最多 50 个文档），以及会议的转写稿",
   "providers.sends.checks": "你核对的每一句话",
   "providers.sends.suggestions": "写作建议时你停下的那一段",
   "providers.sends.edits": "你让助手修改的文字",
@@ -2079,9 +2079,10 @@ export const zhCN = {
   "consent.flow.chat": "对话",
   "consent.flow.chat.purpose": "回答你的问题",
   "consent.data.blocks": "当前 Mind 的正文、笔记和之前的回答，不含已排除的笔记",
-  "consent.data.document-names": "你的文档中最多 50 个的名称",
+  "consent.data.document-names":
+    "问题或命令找到的文档和 Mind：名称、文件夹和标签（最多 50 个文档）",
   "consent.data.other-minds": "问题中提到的另一个 Mind 的部分内容",
-  "consent.data.live-transcript": "会议录制时的实时转写稿",
+  "consent.data.live-transcript": "会议转写稿：录制时的实时部分，停止录制后整份用于填写笔记",
   "consent.data.passages": "文档中与问题相关的段落，连同所属文档的名称和页码",
   "consent.data.tool-results": "回答所用连接器和技能脚本返回的结果",
   "consent.flow.tagging": "自动打标签",
