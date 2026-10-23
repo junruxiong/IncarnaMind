@@ -363,7 +363,7 @@ function storedFocus(value: string | null): MindFocus | null {
 export function parseOnScreen(value: unknown): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || !value.every((id) => typeof id === "string" && id !== "")) {
-    throw new InvalidInputError("The Documents on screen must be a list of Document ids.");
+    throw new InvalidInputError({ key: "error.question.onScreen" });
   }
   return [...new Set(value as string[])];
 }
