@@ -65,6 +65,8 @@ interface ChecksState {
   smallModel: Readonly<Record<string, true>>;
   /** By tab, else by Mind: its check badge's card is open (#909). A Mind beside itself has a card in each. */
   cardOpen: Readonly<Record<string, true>>;
+  /** By tab, else by Mind: the id of the sentence check whose card the User keeps open. */
+  openClaim: Readonly<Record<string, string>>;
 }
 
 export const useChecks = create<ChecksState>()(() => ({
@@ -72,6 +74,7 @@ export const useChecks = create<ChecksState>()(() => ({
   problems: {},
   smallModel: {},
   cardOpen: {},
+  openClaim: {},
 }));
 
 function setFor<K extends keyof ChecksState>(
@@ -100,6 +103,13 @@ export const setCheckSmallModel = (mindId: string, small: boolean) =>
 /** `place`: the tab the card is in, else its Mind. */
 export const setCheckCardOpen = (place: string, open: boolean) =>
   setFor("cardOpen", place, open ? true : null);
+
+export const setOpenClaim = (place: string, id: string | null) => setFor("openClaim", place, id);
+
+/** Only if `id` is still the open one: a card that closes late must not close its successor. */
+export function closeOpenClaim(place: string, id: string): void {
+  if (useChecks.getState().openClaim[place] === id) setOpenClaim(place, null);
+}
 
 /** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
