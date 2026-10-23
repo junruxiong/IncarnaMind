@@ -1875,6 +1875,7 @@ export const zhCN = {
   "providers.form.needsServer": "请先启动 {provider}。",
   "providers.form.needsModel": "请先选择模型。",
   "providers.form.badKey": "这个密钥对 {provider} 无效。请到 {site} 检查。",
+  "providers.form.badKeyAt": "{region}：{host} 拒绝了这个密钥。请到 {site} 检查。",
 
   "providers.test.ok": "连接成功：服务已响应。",
   "providers.test.auth": "密钥被拒绝。请检查密钥是否正确且仍然有效。",

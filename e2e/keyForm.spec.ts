@@ -516,6 +516,68 @@ test("Kimi's form opens on the region of the interface's language: International
   }
 });
 
+test("a key refused on the chosen region says which host refused it, in English and Chinese, and only that host is asked (#1650)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    await app.evaluate(() => {
+      const asked: string[] = [];
+      (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot = asked;
+      const original = globalThis.fetch;
+      globalThis.fetch = (input, init) => {
+        const url = new URL(
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        );
+        if (!/^(api\.moonshot\.|dashscope)/.test(url.host)) return original(input, init);
+        if (url.host.startsWith("api.moonshot.")) asked.push(url.host);
+        return Promise.resolve(
+          Response.json({ error: { message: "Invalid Authentication" } }, { status: 401 }),
+        );
+      };
+    });
+    const askedMoonshot = () =>
+      app.evaluate(() => (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot);
+
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "kimi");
+    const refused = form.getByTestId("connection-test");
+    await form.getByLabel(/^API key/).fill(KEYS.bare);
+    await form.getByTestId("provider-use-key").click();
+    await expect(refused).toContainText(
+      "International: api.moonshot.ai refused this key. Check it on platform.kimi.ai.",
+    );
+    await language(window, "zh-CN");
+    await expect(refused).toContainText(
+      "国际：api.moonshot.ai 拒绝了这个密钥。请到 platform.kimi.ai 检查。",
+    );
+    await language(window, "en");
+    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
+
+    await app.evaluate(() => {
+      (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot.length = 0;
+    });
+    await form.getByRole("combobox", { name: /^Region/ }).selectOption("cn");
+    await form.getByLabel(/^API key/).fill(KEYS.bare);
+    await form.getByTestId("provider-use-key").click();
+    await expect(refused).toContainText(
+      "China: api.moonshot.cn refused this key. Check it on platform.kimi.com.",
+    );
+    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.cn"]));
+
+    // A region's own label may carry brackets: the line does not wrap it in more.
+    await settings.getByTestId("models-back").click();
+    const qwen = await addProviderForm(settings, "qwen");
+    await qwen.getByLabel(/^API key/).fill(KEYS.bare);
+    await qwen.getByTestId("provider-use-key").click();
+    await expect(qwen.getByTestId("connection-test")).toContainText(
+      "China (Beijing): dashscope.aliyuncs.com refused this key. Check it on bailian.console.aliyun.com.",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 for (const height of [560, 700]) {
   test(`in a window ${height}px high, the line that explains the grey button is in view, not under the card's foot`, async () => {
     const { app, window } = await launchApp(dataDir);
