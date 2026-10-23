@@ -1717,10 +1717,13 @@ export const MAX_CITED_PAGES = 2;
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
- *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ *   the first heading. `start`: the quote is before the first heading of a
+ *   Document that has headings, the only null heading that names a place.
+ *   `notes`: a Word file's footnotes and endnotes.
  *   `comment`: the quote is in a Word comment anchored in that section, by
  *   its author (null when the file names none) (#76). `paragraphs`: in a
- *   web page, the paragraphs of the section the quote covers, from 1 (#261).
+ *   web page, the paragraphs of the section the quote covers, from 1 (#261);
+ *   in a Word file with no headings, its paragraphs, from the start of the file.
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
  *   the end of the one it ends in, in ms from the Transcript's start (#136);
@@ -1735,6 +1738,7 @@ export type CitationLocation =
   | {
       kind: "section";
       heading: string | null;
+      start?: boolean;
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
@@ -6492,7 +6496,8 @@ export interface PageSetup {
  * - "text-recognition-model": downloads the built-in text recognition
  *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
- *   once, when a Meeting is first transcribed on this computer (#136).
+ *   once, when a Meeting is first transcribed on this computer (#136), and the
+ *   two models that tell its speakers apart (#138), when one is first recorded.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
