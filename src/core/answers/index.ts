@@ -64,7 +64,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
-import { filingFolder, hasSearchScope, searchScopeOf } from "../../shared/searchScope";
+import { filingFolder, hasSearchScope, NO_SCOPE, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -139,6 +139,7 @@ import {
 } from "../skills/scripts";
 import { scriptCallInput, skillTools } from "../skills/tools";
 import { asksForSources } from "../sources/intent";
+import { inFlow } from "../timing/flows";
 import {
   COMMAND_TOOLS,
   DOCUMENT_TOOLS,
@@ -227,6 +228,7 @@ import {
   meetingHelpInstructions,
   newestSaid,
   withFound,
+  withHelp,
 } from "./meetingHelp";
 import { paragraphAsked } from "./paragraphAsked";
 import {
@@ -403,8 +405,6 @@ const EMPTY_SCOPE_NOTE = `The User limited this Question to a Search scope (Fold
 
 const noDocumentsNote = (examples: boolean) =>
   `None of the User's own Documents can be searched yet${examples ? " (the examples IncarnaMind made aren't theirs)" : ""}, so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
-
-const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;
@@ -2148,17 +2148,22 @@ export function createAnswers(options: AnswersOptions) {
             emptyMindNote(withMindTools, focusedEmpty),
             meetingInstructions(listening),
             signInNeededInstructions(signInNeeded.map((connector) => connector.name)),
-            help
-              ? meetingHelpInstructions(help, {
-                  found: foundAhead,
-                  language: options.interfaceLanguage(),
-                  callLanguage,
-                })
-              : language,
+            help ? "" : language,
           ]
             .filter(Boolean)
             .join("\n\n"),
-        messages,
+        // A button's own instructions go with its Question: the instructions above stay the same
+        // for every button, so a call's presses share them in the provider's cache (#1634).
+        messages: help
+          ? withHelp(
+              messages,
+              meetingHelpInstructions(help, {
+                found: foundAhead,
+                language: options.interfaceLanguage(),
+                callLanguage,
+              }),
+            )
+          : messages,
         ...(mindRequest && { mind: mindRequest }),
         question: context.question,
         model: prepared.model,
@@ -2319,7 +2324,17 @@ export function createAnswers(options: AnswersOptions) {
       settleMinds();
       finish(outcome);
     };
-    run().catch((error: unknown) => {
+    // An Answer inside another flow (a comparison's cell, a check's sentence) is that flow's step.
+    const flow = help
+      ? "call-help"
+      : input.toolSet === "check"
+        ? "check"
+        : input.task
+          ? "task-answer"
+          : outside
+            ? "outside-agent"
+            : "question";
+    inFlow(flow, run).catch((error: unknown) => {
       options.reportError(error);
       settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });

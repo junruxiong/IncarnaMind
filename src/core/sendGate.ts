@@ -57,9 +57,13 @@ const carriesImages = (
   );
 
 export function createSendGate(consent: Consent, localOnly: () => boolean) {
+  const stopInLocalMode = (flowId: DataFlowId, service: ExternalService): void => {
+    if (localOnly() && !consent.onThisComputer(flowId, service.id)) throw new LocalModeError();
+  };
+
   /** Throws `LocalModeError`, `ConsentRevokedError` or `ConsentNeededError` when nothing may go to `service` on `flowId` now. */
   const check = (flowId: DataFlowId, service: ExternalService): void => {
-    if (localOnly() && !consent.onThisComputer(flowId, service.id)) throw new LocalModeError();
+    stopInLocalMode(flowId, service);
     if (consent.allows(flowId, service)) return;
     const flow = consent.dataFlow(flowId, service);
     throw consent.isBackground(flowId)
@@ -93,6 +97,28 @@ export function createSendGate(consent: Consent, localOnly: () => boolean) {
             if (flowId === "classification" && carriesImages(params.prompt)) {
               check("scan-images", service);
             }
+            return doStream();
+          },
+        },
+      });
+    },
+
+    /**
+     * `model` stopped in Local mode, and by nothing else: a key is tested before its provider
+     * is chosen, so no consent stands yet, and a test sends nothing of the User's (ADR-0022).
+     */
+    testModel(model: ChatLanguageModel, service: ExternalService | null): ChatLanguageModel {
+      if (!service) return model;
+      return wrapLanguageModel({
+        model,
+        middleware: {
+          specificationVersion: "v4",
+          wrapGenerate: ({ doGenerate }) => {
+            stopInLocalMode("chat", service);
+            return doGenerate();
+          },
+          wrapStream: ({ doStream }) => {
+            stopInLocalMode("chat", service);
             return doStream();
           },
         },

@@ -1,7 +1,6 @@
 import type { BlockOrigin } from "../../../core/api";
 import { MENU_COMMANDS } from "../../../shared/commands";
 import { signInAgain } from "../chatGptSignIn";
-import { setCheckCardOpen } from "../checks";
 import { useCitationStylePicker } from "../citationStylePicker";
 import { claudeSignInOffered } from "../claudeSignIn";
 import { startContradictionCheck } from "../contradictions";
@@ -11,9 +10,8 @@ import { blockAt, noteHolding } from "../editor/noteKeymap";
 import { openOrigin } from "../editor/originActions";
 import { useFindSources } from "../findSources";
 import { useHistory } from "../history";
-import { frontTabOfMind, groupsMerged } from "../layoutSlice";
 import { startSkillFromMind } from "../makeSkill";
-import { startCheckThisMind, startMindCheck } from "../mindCheck";
+import { showCheckCard, startCheckThisMind, startMindCheck } from "../mindCheck";
 import { useMindTools } from "../mindTools";
 import { useReferenceImport } from "../referenceImport";
 import { useAppStore } from "../store";
@@ -289,8 +287,7 @@ const appCommands: readonly Command[] = [
       const mindId = mindShown(ctx);
       if (!mindId) return;
       await useAppStore.getState().openMind(mindId);
-      const tab = frontTabOfMind(useAppStore.getState().layout, mindId, groupsMerged());
-      setCheckCardOpen(tab?.id ?? mindId, true);
+      showCheckCard(mindId);
     },
   },
   {

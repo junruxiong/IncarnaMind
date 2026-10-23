@@ -14,6 +14,7 @@ import {
 } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
+import type { EmbeddingModelSource } from "../src/core/adapters";
 import {
   type AssistantPlace,
   CHOSEN_PROVIDER_FLOWS,
@@ -153,6 +154,15 @@ export interface LaunchOptions {
   /** How many scans are read at once (#1502), whatever the computer. A test build honours it. */
   scansAtOnce?: number;
   /**
+   * The search model's files at a stand-in, and IncarnaMind's copies at others (#1578): a
+   * `{ source, copies }` the core's model downloads take instead. Needs a test build.
+   */
+  modelDownloads?: {
+    source: EmbeddingModelSource;
+    copies: Record<string, { url: string }>;
+    speech?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  };
+  /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.
    */
@@ -245,6 +255,7 @@ export async function launchApp(
     transcriber,
     scans,
     scansAtOnce,
+    modelDownloads,
     web,
     lookLimit,
     scriptedTasks = false,
@@ -283,6 +294,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_SCANS_AT_ONCE;
+  delete env.INCARNAMIND_TEST_MODEL_DOWNLOADS;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
@@ -317,6 +329,7 @@ export async function launchApp(
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (scansAtOnce) env.INCARNAMIND_TEST_SCANS_AT_ONCE = String(scansAtOnce);
+  if (modelDownloads) env.INCARNAMIND_TEST_MODEL_DOWNLOADS = JSON.stringify(modelDownloads);
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
@@ -1580,6 +1593,17 @@ export async function markSteps(window: Page, done: object): Promise<void> {
     });
   }, done);
 }
+
+/** One step of the Welcome card. */
+export const welcomeStep = (window: Page, key: "citation" | "question" | "files") =>
+  window.locator(`[data-testid="first-open-step"][data-step="${key}"]`);
+
+/** Which steps of the first open the core holds as done. */
+export const gettingStarted = (window: Page) =>
+  window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.getSettings()).device.gettingStarted;
+  });
 
 /** The id of the Document listed in the sidebar under `name`. */
 export async function documentIdOf(window: Page, name: string): Promise<string> {
