@@ -483,7 +483,7 @@ for (const dock of ["bottom", "float"] as const) {
   }
 }
 
-test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5.5 from the list without typing an id, and gets an Answer", async () => {
+test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5.5 from the list behind Change without typing an id, and gets an Answer", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await setWindowSize(app, window, 1100, 900);
@@ -496,6 +496,10 @@ test("a newcomer pastes a key from the card in two clicks, picks Claude Sonnet 5
     await expect(form.getByLabel(/^API key/)).toBeFocused();
     await window.keyboard.insertText("sk-ant-a-key-from-the-company");
 
+    await expect(form.getByTestId("provider-model-line")).toHaveText(
+      "Model: Claude Haiku 5.5 · Change",
+    );
+    await pointAndClick(window, form.getByTestId("provider-model-change"));
     const model = form.getByTestId("provider-model");
     await expect(model.locator("option").first()).toHaveText("Claude Haiku 5.5 · Recommended");
     const options = await model.locator("option").allTextContents();
@@ -541,6 +545,8 @@ test("the key step follows the company picked and Back returns keyboard focus to
     await chip("OpenAI").click();
     await expect(title).toHaveText("Paste your OpenAI key");
     const model = form.getByTestId("provider-model");
+    const change = form.getByTestId("provider-model-change");
+    await change.click();
     await model.selectOption({ label: "Another model…" });
     await expect(form.getByTestId("provider-model-text")).toHaveAttribute(
       "placeholder",
@@ -559,6 +565,7 @@ test("the key step follows the company picked and Back returns keyboard focus to
     await expect(title).toHaveText("粘贴 DeepSeek 密钥");
     await chip("Anthropic").click();
     await expect(title).toHaveText("粘贴 Anthropic 密钥");
+    await change.click();
     await model.selectOption({ label: "其他模型…" });
     await expect(form.getByTestId("provider-model-text")).toHaveAttribute(
       "placeholder",

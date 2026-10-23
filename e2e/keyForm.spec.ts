@@ -11,18 +11,20 @@ import {
   closeSettings,
   continueSetup,
   createDataFolder,
+  expectDotsBetweenParts,
   interceptOpenExternal,
   launchApp,
   newMind,
   openSettings,
+  pointAndClick,
   removeDataFolder,
   setWindowSize,
   urlsOpened,
 } from "./app";
 
 /*
- * The key form (#719): one row of providers, the key, a Model pick list and one "Use this key"
- * that tests the key as it saves, in view at 900px high or in a card that scrolls inside itself;
+ * The key form (#719): one row of providers, the key, the model as a line with Change (#1575) and
+ * one "Use this key" that tests the key as it saves, in view at 900px high or in a card that scrolls inside itself;
  * "Where do I find it?", closed, with what the catalog knows of getting a key (#920); and the
  * ChatGPT sign-in's way back.
  */
@@ -68,7 +70,8 @@ test("at 900px high the key form is in view, or scrolls inside its card, in Engl
       await card.getByTestId("setup-key").click();
       const form = card.getByTestId("provider-form");
       await expect(form.getByRole("radio", { checked: true })).toHaveCount(1);
-      await expect(form.getByTestId("provider-model")).toBeVisible();
+      await expect(form.getByTestId("provider-model-line")).toBeVisible();
+      await form.getByTestId("provider-model-change").click();
       await expect(form.getByTestId("provider-model").locator("option").first()).toContainText(
         value === "en" ? "Recommended" : "推荐",
       );
@@ -92,6 +95,174 @@ test("at 900px high the key form is in view, or scrolls inside its card, in Engl
     await app.close();
   }
 });
+
+/** The model a provider's key form saves when the User leaves it as it is. */
+const defaultModel = (catalogId: string) =>
+  CATALOG_PROVIDERS.find((each) => each.id === catalogId)?.roles.answers ?? "";
+
+const MODEL_LINE = {
+  // In English the form opens on Anthropic, in Chinese on DeepSeek.
+  en: {
+    catalogId: "anthropic",
+    line: "Model: Claude Haiku 5.5 · Change",
+    change: "Change the model",
+    recommended: "Claude Haiku 5.5 · Recommended",
+  },
+  "zh-CN": {
+    catalogId: "deepseek",
+    line: /^模型：DeepSeek \S.* · 更改$/,
+    change: "更改模型",
+    recommended: / · 推荐$/,
+  },
+} as const;
+
+for (const { width, height } of [
+  { width: 900, height: 560 },
+  { width: 1440, height: 900 },
+]) {
+  test(`at first run the key form asks only for the key: the model is one line with Change under it, Change opens the list in place by mouse or keyboard, and Esc puts the line back; in English and Chinese, ${width}px wide (#1575)`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, width, height);
+      await acceptPlainTextKeys(window);
+      for (const value of ["en", "zh-CN"] as const) {
+        const words = MODEL_LINE[value];
+        await language(window, value);
+        const card = await openKeyForm(window);
+        await pointAndClick(window, card.getByTestId("setup-key"));
+        const form = card.getByTestId("provider-form");
+        const key = form.locator('input[type="password"]');
+        const line = form.getByTestId("provider-model-line");
+        const change = form.getByTestId("provider-model-change");
+        const picker = form.getByTestId("provider-model");
+
+        await expect(line).toHaveText(words.line);
+        await expect(picker).toHaveCount(0);
+        await expect(change).toHaveAccessibleName(words.change);
+        // One line, under the key and inside the form, at any width.
+        expect(await expectDotsBetweenParts(line)).toBe(false);
+        const [keyBox, lineBox, formBox] = await Promise.all([
+          key.boundingBox(),
+          line.boundingBox(),
+          form.boundingBox(),
+        ]);
+        if (!keyBox || !lineBox || !formBox) throw new Error("The key form isn't laid out.");
+        expect(lineBox.y).toBeGreaterThanOrEqual(keyBox.y + keyBox.height);
+        expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(formBox.x + formBox.width + 0.5);
+        if (process.env.INCARNAMIND_SCREENSHOTS) {
+          await window.screenshot({
+            path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-form-model-line-${width}-${value}.png`,
+          });
+        }
+
+        // The keyboard reaches Change after the key's help, and Enter opens the list where the line was.
+        await form.getByTestId("provider-key-help-toggle").focus();
+        await window.keyboard.press("Tab");
+        await expect(change).toBeFocused();
+        await window.keyboard.press("Enter");
+        await expect(picker).toBeFocused();
+        await expect(picker).toHaveValue(defaultModel(words.catalogId));
+        await expect(line).toHaveCount(0);
+        // Esc closes the list, not the card: the line is back, with the focus on Change.
+        await window.keyboard.press("Escape");
+        await expect(line).toHaveText(words.line);
+        await expect(change).toBeFocused();
+        await expect(card.getByTestId("provider-form-title")).toBeVisible();
+
+        await pointAndClick(window, change);
+        await expect(picker).toBeFocused();
+        await expect(picker.locator("option").first()).toHaveText(words.recommended);
+        if (process.env.INCARNAMIND_SCREENSHOTS) {
+          await window.screenshot({
+            path: `${process.env.INCARNAMIND_SCREENSHOTS}/key-form-model-open-${width}-${value}.png`,
+          });
+        }
+        await pointAndClick(window, card.getByTestId("setup-back"));
+      }
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+for (const { value, next, catalogId } of [
+  { value: "en", next: "OpenAI", catalogId: "openai" },
+  { value: "zh-CN", next: "通义千问", catalogId: "qwen" },
+] as const) {
+  test(`choosing another provider after Change puts the model back as a line, for that provider's default (${value}, #1575)`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const card = await openKeyForm(window);
+      await pointAndClick(window, card.getByTestId("setup-key"));
+      const form = card.getByTestId("provider-form");
+      const line = form.getByTestId("provider-model-line");
+      const picker = form.getByTestId("provider-model");
+      const before = await line.innerText();
+
+      await pointAndClick(window, form.getByTestId("provider-model-change"));
+      await expect(picker).toBeFocused();
+      await expect(line).toHaveCount(0);
+
+      const chip = form.getByRole("radio", { name: next, exact: true });
+      await pointAndClick(window, chip.locator("xpath=ancestor::label"));
+      await expect(chip).toBeChecked();
+      await expect(line).toBeVisible();
+      await expect(line).not.toHaveText(before);
+      await expect(picker).toHaveCount(0);
+      // Change opens the list again, on the new provider's default.
+      await pointAndClick(window, form.getByTestId("provider-model-change"));
+      await expect(picker).toHaveValue(defaultModel(catalogId));
+
+      // A model typed under "Another model…" belongs to the provider it was typed for.
+      await picker.selectOption({ index: (await picker.locator("option").count()) - 1 });
+      const typed = form.getByTestId("provider-model-text");
+      await typed.fill("a-model-of-the-first-provider");
+      const third = form.getByRole("radio", {
+        name: value === "en" ? "Google" : "Kimi",
+        exact: true,
+      });
+      await pointAndClick(window, third.locator("xpath=ancestor::label"));
+      await expect(third).toBeChecked();
+      await expect(line).toBeVisible();
+      await expect(typed).toHaveCount(0);
+      await expect(picker).toHaveCount(0);
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+for (const value of ["en", "zh-CN"] as const) {
+  test(`saving a key without touching the model saves the provider's default, by mouse in English and by the keyboard in Chinese (${value}, #1575)`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    try {
+      await setWindowSize(app, window, 1100, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, value);
+      const { catalogId } = MODEL_LINE[value];
+      const card = await openKeyForm(window);
+      await pointAndClick(window, card.getByTestId("setup-key"));
+      const form = card.getByTestId("provider-form");
+      await expect(form.getByRole("radio", { checked: true })).toHaveValue(catalogId);
+      await expect(form.getByLabel(/^API /)).toBeFocused();
+      await window.keyboard.insertText(value === "en" ? KEYS.anthropic : KEYS.bare);
+      if (value === "en") await pointAndClick(window, form.getByTestId("provider-use-key"));
+      else await window.keyboard.press("Enter");
+      await expect(card.getByTestId("setup-ready-title")).toBeVisible();
+      const chatModel = await window.evaluate(
+        async () =>
+          (await (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind.getSettings())
+            .user.chatModel,
+      );
+      expect(chatModel?.modelId).toBe(defaultModel(catalogId));
+    } finally {
+      await app.close();
+    }
+  });
+}
 
 test("Where do I find it? opens with the keyboard, and holds the notes, the steps, the key line and the key page, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir);
@@ -182,9 +353,19 @@ test("in Settings the notes and the key line are under the key field, the steps 
       await expect(form.getByTestId("provider-docs-link")).toHaveText(link);
       await expect(form.getByTestId("provider-docs-link")).toHaveAttribute("href", /^https:\/\//);
     }
-    // The link is on the model's heading line, above its list: Tab goes from one to the other.
+    // The link ends the model's line, after Change; once Change opens the list, it heads the list:
+    // Tab goes from one to the other.
     const docs = form.getByTestId("provider-docs-link");
+    const change = form.getByTestId("provider-model-change");
+    const [docsOnLine, changeBox] = await Promise.all([docs.boundingBox(), change.boundingBox()]);
+    expect(docsOnLine?.x ?? 0).toBeGreaterThan((changeBox?.x ?? 0) + (changeBox?.width ?? 0));
+    await change.focus();
+    await window.keyboard.press("Tab");
+    await expect(docs).toBeFocused();
+    await window.keyboard.press("Shift+Tab");
+    await window.keyboard.press("Enter");
     const picker = form.getByTestId("provider-model");
+    await expect(picker).toBeFocused();
     const [docsBox, pickerBox] = await Promise.all([docs.boundingBox(), picker.boundingBox()]);
     expect(docsBox?.y ?? 0).toBeLessThan(pickerBox?.y ?? 0);
     await docs.focus();
