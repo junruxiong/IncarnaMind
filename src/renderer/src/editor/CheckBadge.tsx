@@ -19,6 +19,7 @@ import { useWatchAddedDocuments } from "./AddedDocumentsLine";
 import { type Badge, type BadgeInput, badgeOf } from "./badgeState";
 import { ContradictionAsk, ContradictionLine } from "./ContradictionLine";
 import { checkTitle, useCheckThisMindPlan } from "./changedSentences";
+import { useCardPlace } from "./checkPlace";
 import { shownClaims } from "./claimChecks";
 import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
@@ -271,8 +272,6 @@ function VerifyBadge({
     </BadgeFrame>
   );
 }
-
-const useCardPlace = (mindId: string) => useTabPlace()?.tabId ?? mindId;
 
 /**
  * The badge and its card. The card opens by itself when `ask` turns on: a

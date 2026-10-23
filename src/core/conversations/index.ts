@@ -223,7 +223,6 @@ function storedSteps(value: string | null): AnswerSteps | null {
     careful,
     unbackedClaims,
     example,
-    withoutMindTools,
     coverage,
     writtenFrom,
     stillReading,
@@ -258,7 +257,6 @@ function storedSteps(value: string | null): AnswerSteps | null {
     ...(careful === true && { careful }),
     ...(claimed.length > 0 && { unbackedClaims: claimed }),
     ...(example === true && { example }),
-    ...(withoutMindTools === true && { withoutMindTools }),
     ...(storedCoverage(coverage) ?? {}),
     ...(isRecord(writtenFrom) &&
       isCount(writtenFrom.documents) &&
@@ -854,6 +852,14 @@ export function createConversations(db: Database, now: () => string) {
         question: toQuestion(question),
         toolCalls: storedList<AnswerToolCall>(answer.tool_calls),
       };
+    },
+
+    /** The Search scope an Answer's Question was asked with; null for none, or once either is gone. */
+    askedScope(conversationId: string, answerId: string): SearchScope | null {
+      const answer = liveMessage(answerId);
+      if (answer?.kind !== "answer" || answer.conversation_id !== conversationId) return null;
+      const question = liveMessage(answer.question_id);
+      return question?.kind === "question" ? storedScope(question.scope) : null;
     },
 
     /** Takes the Search scope off a Question, so its Answers search every Document (#748). */

@@ -183,6 +183,7 @@ async function marksIn(core: Core, client: MindClient) {
       text: span.sentence.text,
       versions,
       folderId: span.check.scope.folderId,
+      scope: null,
     }),
   }));
 }

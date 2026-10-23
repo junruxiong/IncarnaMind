@@ -12,7 +12,9 @@ import {
   MARK_AI_TEXT_CHOICES,
   MAX_MONTHLY_CAP,
   type MarkAiTextChoice,
+  MODEL_SOURCE_CHOICES,
   MOTION_PREFERENCES,
+  type ModelSourceChoice,
   type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
@@ -184,6 +186,7 @@ const userScope: Scope<UserSettings> = {
 const GETTING_STARTED_STEPS = [
   "started",
   "citationChecked",
+  "mistakeSeen",
   "indexed",
   "askedOwn",
   "askedReady",
@@ -191,11 +194,14 @@ const GETTING_STARTED_STEPS = [
 ];
 
 // Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
+// Progress kept before the mistake had its own step has no `mistakeSeen`; `get` takes it from
+// `citationChecked`, so a first open already finished stays finished.
+const ADDED_LATER = ["askedReady", "mistakeSeen"];
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
   Object.keys(value).every((key) => GETTING_STARTED_STEPS.includes(key)) &&
   GETTING_STARTED_STEPS.every(
-    (key) => isBoolean(value[key]) || (key === "askedReady" && value[key] === undefined),
+    (key) => isBoolean(value[key]) || (ADDED_LATER.includes(key) && value[key] === undefined),
   );
 
 const isScriptTimeout = (value: unknown): value is number =>
@@ -217,6 +223,7 @@ const deviceScope: Scope<DeviceSettings> = {
     gettingStarted: {
       started: false,
       citationChecked: false,
+      mistakeSeen: false,
       indexed: false,
       askedOwn: false,
       askedReady: false,
@@ -227,6 +234,7 @@ const deviceScope: Scope<DeviceSettings> = {
     suggestionOffers: 0,
     meetingSystemAudio: true,
     transcriptionRoute: null,
+    modelSource: "auto",
     meetingNoticeAccepted: false,
     meetingPanel: true,
     meetingPanelHidden: true,
@@ -248,6 +256,8 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
+    modelSource: (value): value is ModelSourceChoice =>
+      MODEL_SOURCE_CHOICES.some((choice) => choice === value),
     meetingNoticeAccepted: isBoolean,
     meetingPanel: isBoolean,
     meetingPanelHidden: isBoolean,
@@ -348,7 +358,12 @@ export function createSettings(
       "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
-    device.gettingStarted = { ...deviceScope.defaults.gettingStarted, ...device.gettingStarted };
+    const progress: Partial<GettingStarted> = device.gettingStarted;
+    device.gettingStarted = {
+      ...deviceScope.defaults.gettingStarted,
+      ...progress,
+      mistakeSeen: progress.mistakeSeen ?? progress.citationChecked ?? false,
+    };
     const language = resolveLanguage(user.language, systemLanguages());
     const author = user.authorName ?? systemUserName().trim();
     return { user, device, language, scriptSandbox, meetingAudio, author };

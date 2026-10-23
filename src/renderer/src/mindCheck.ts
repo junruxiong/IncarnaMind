@@ -16,12 +16,14 @@ import { create } from "zustand";
 import type { CheckMindMode, MindCheckPlan, MindCheckRun } from "../../core/api";
 import { mindCheckOf, observeMindCheck } from "../../shared/mindCheck";
 import {
+  type CheckProblem,
   dismissCheckProblem,
   setCheckCardOpen,
   setCheckProblem,
   setCheckRunning,
   setCheckSmallModel,
   useChecks,
+  withCheckAll,
 } from "./checks";
 import { core } from "./core";
 import { type EstimateLine, estimateLine } from "./cost";
@@ -78,6 +80,9 @@ export function useMindCheckRun(doc: Y.Doc): MindCheckRun | null {
   return run;
 }
 
+const everywhere = (problem: CheckProblem, mindId: string, mode: CheckMindMode) =>
+  withCheckAll(problem, () => void startMindCheck(mindId, mode, { allDocuments: true }));
+
 /** Checks the Mind now, as `mode` says: against its Folder, or every Document. */
 export async function checkMind(
   mindId: string,
@@ -95,7 +100,7 @@ export async function checkMind(
     else if (result.kind === "failed") {
       setCheckProblem(mindId, { kind: "find-failed", error: result.error, mode, allDocuments });
     } else if (result.kind === "nothing") setCheckProblem(mindId, { kind: "no-claims" });
-    else if (result.kind !== "cancelled") setCheckProblem(mindId, result);
+    else if (result.kind !== "cancelled") setCheckProblem(mindId, everywhere(result, mindId, mode));
   } catch (error) {
     setCheckProblem(mindId, { kind: "failed", error });
   } finally {
@@ -116,7 +121,7 @@ async function findClaims(
     if (found.kind === "failed") {
       setCheckProblem(mindId, { kind: "find-failed", error: found.error, mode, allDocuments });
     } else if (found.kind === "nothing") setCheckProblem(mindId, { kind: "no-claims" });
-    else if (found.kind !== "cancelled") setCheckProblem(mindId, found);
+    else if (found.kind !== "cancelled") setCheckProblem(mindId, everywhere(found, mindId, mode));
   } catch (error) {
     setCheckProblem(mindId, { kind: "failed", error });
   } finally {
@@ -195,7 +200,10 @@ async function askOrCheck(
   }
   if (plan.kind !== "ready") {
     dismissMindCheck(mindId);
-    setCheckProblem(mindId, plan.kind === "nothing" ? { kind: "no-claims" } : plan);
+    setCheckProblem(
+      mindId,
+      plan.kind === "nothing" ? { kind: "no-claims" } : everywhere(plan, mindId, mode),
+    );
     return;
   }
   if (mode === "changed" && !plan.findsClaims && plan.sentences < ASK_FROM)
