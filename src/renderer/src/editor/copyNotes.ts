@@ -146,7 +146,8 @@ export function addFootnotes(
   const numbers = noteNumbers(citations, context);
   let listed = 0;
   spans.forEach((span, index) => {
-    const number = numbers[index] as number;
+    const number = numbers[index];
+    if (number === undefined) return;
     if (number <= listed) {
       span.replaceChildren(repeatMarker(document, number));
       return;
@@ -218,12 +219,14 @@ export function copiedText(copy: Fragment, schema: Schema, context: SourceContex
     { textSerializers },
   ).replace(/^\n+|\n+$/g, "");
   if (citations.length === 0) return body;
+  let highest = 0;
   const sources = citations
-    .flatMap((citation, index) =>
-      numbers[index] === Math.max(0, ...numbers.slice(0, index)) + 1
-        ? [`[${numbers[index]}] ${sourceText(citation, context).text}`]
-        : [],
-    )
+    .flatMap((citation, index) => {
+      const number = numbers[index];
+      if (number !== highest + 1) return [];
+      highest = number;
+      return [`[${number}] ${sourceText(citation, context).text}`];
+    })
     .join("\n");
   return `${body}\n\n${translate(context.language, "citedSource.title")}\n${sources}`;
 }

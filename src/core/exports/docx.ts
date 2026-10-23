@@ -108,10 +108,17 @@ const RELATIONSHIP = {
 
 const MAIN_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml";
 
-/** Stand in for a cross-reference's number until `DocxWriter.finish` knows it. */
-const NUMBER_OPEN = "⟦";
-const NUMBER_CLOSE = "⟧";
+/**
+ * Stand in for a cross-reference's number until `DocxWriter.finish` knows it. XML can't hold
+ * these two characters, so `escapeXml` takes them out of the User's text: nothing they wrote can
+ * look like a mark, and `finish` replaces nothing but its own.
+ */
+const NUMBER_OPEN = "\u0001";
+const NUMBER_CLOSE = "\u0002";
 const NUMBER_MARK = new RegExp(`${NUMBER_OPEN}(\\d+)${NUMBER_CLOSE}`, "g");
+/** A note's mark in the text, as `footnoteReference` writes it. */
+const NOTE_MARK =
+  /<w:r><w:rPr><w:rStyle w:val="[^"]*"\/><\/w:rPr><w:footnoteReference w:id="(\d+)"\/><\/w:r>/g;
 
 /** One level of a list, or of a quote, indents this much (half an inch). */
 const INDENT = 720;
@@ -331,7 +338,6 @@ export interface List {
 export class DocxWriter {
   readonly footnotes: string[] = [];
   private readonly styles: DocxStyles;
-  /** The first note written for each source and place, which a later Citation of it refers to. */
   private readonly notes = new Map<string, { id: number; text: string; reused: boolean }>();
 
   constructor(
@@ -740,7 +746,6 @@ export class DocxWriter {
     return xml;
   }
 
-  /** A Citation's footnote and its reference, or a reference to the number of the first one for its source and place. */
   private footnote(citation: Footnote, shared: boolean): string {
     const key = shared
       ? `numbered\n${citation.source}\n${citation.unverified}\n${citation.link ?? ""}`
@@ -771,19 +776,20 @@ export class DocxWriter {
    * show Word's "Error! Reference source not found."
    */
   finish(document: string): string {
-    const reused = [...this.notes.values()].filter((note) => note.reused);
-    if (reused.length === 0) return document;
-    let out = document;
-    for (const { id } of reused) {
-      const mark = new RegExp(
-        `<w:r><w:rPr><w:rStyle w:val="[^"]*"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`,
-      );
-      if (!mark.test(out))
+    const reused = new Set<number>();
+    for (const note of this.notes.values()) if (note.reused) reused.add(note.id);
+    if (reused.size === 0) return document;
+    const bookmarkedNotes = new Set<number>();
+    const out = document.replace(NOTE_MARK, (found, id: string) => {
+      const note = Number(id);
+      if (!reused.has(note) || bookmarkedNotes.has(note)) return found;
+      bookmarkedNotes.add(note);
+      return bookmarked(this.target.ids.take("annotation"), noteBookmark(note), found);
+    });
+    for (const id of reused) {
+      if (!bookmarkedNotes.has(id)) {
         throw new Error(`The footnote ${id} isn't in the document it is cited from.`);
-      const name = noteBookmark(id);
-      out = out.replace(mark, (found) =>
-        bookmarked(this.target.ids.take("annotation"), name, found),
-      );
+      }
     }
     const numbers = new Map<number, number>();
     for (const found of out.matchAll(/<w:footnoteReference\b[^>]*\bw:id="(\d+)"/g)) {

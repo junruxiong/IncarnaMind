@@ -12,13 +12,11 @@ import { writeMind } from "../helpers/minds";
 
 /*
  * One footnote for a source and place in a Word export, and a cross-reference to it from every
- * later Citation of it (#1552): through the core with a Document named in Chinese, and through the
- * writer for the cases that are hard to reach from a Mind.
+ * later Citation of it (#1552), through the core and through the writer.
  */
 
 const NOTEREF = /NOTEREF (_Ref\d+) \\f \\h /g;
 
-/** The bookmarks, the cross-references and the footnote marks a document part holds. */
 function crossReferences(document: string) {
   const bookmarks = [
     ...document.matchAll(
@@ -118,7 +116,8 @@ describe("a Word export of a Mind that cites a source again", () => {
     ]);
     // Until Word updates them, they show the numbers of the notes, as Word counts them.
     expect(found.results.map((each) => each.shows)).toEqual([1, 1, 1, 2, 1, 1, 2, 1]);
-    expect(document).not.toContain("⟦");
+    expect(document).not.toContain("\u0001");
+    expect(document).not.toContain("\u0002");
   });
 
   test("a Citation cited once leaves the document as it was: no bookmark, no field", async () => {
@@ -226,6 +225,32 @@ describe("the writer's notes", () => {
     ]);
     expect(Object.values(footnotes)).toEqual(["Tides, p. 2", "Mine", "Waves, p. 1"]);
     expect(crossReferences(document).results.map((each) => each.shows)).toEqual([1, 3, 1]);
+  });
+
+  // protects=what the User wrote stays as they wrote it when a reference shows its number; fails_when=text that looks like the writer's stand-in for a number is replaced by a number, or a control character of theirs is taken for one; no_claim=none beyond protects.
+  test("the User's own brackets and control characters are never taken for the writer's marks", () => {
+    const { document } = render([
+      paragraph(words("see ⟦1⟧ and ⟦7⟧ in the proof, \u00011\u0002 too"), cited("Tides, p. 2")),
+      paragraph(cited("Tides, p. 2"), words(" and ⟦1⟧ again")),
+    ]);
+    expect(document).toContain("see ⟦1⟧ and ⟦7⟧ in the proof, 1 too");
+    expect(document).toContain(" and ⟦1⟧ again");
+    expect(crossReferences(document).results.map((each) => each.shows)).toEqual([1]);
+  });
+
+  // protects=a Mind with thousands of reused notes exports in a time that grows with its size, and every reference shows its own note's number; fails_when=the export takes a scan of the document for each reused note (6,000 took 12.7 s that way, and under 1 s in one pass); no_claim=a speed on any machine: the limit has more than ten times the room of one pass.
+  test("6,000 sources each cited twice export in one pass over the document", () => {
+    const sources = Array.from({ length: 6_000 }, (_, index) => `Source ${index + 1}, p. 1`);
+    const started = Date.now();
+    const { document, footnotes } = render(
+      sources.map((source) => paragraph(cited(source), cited(source))),
+    );
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(Object.keys(footnotes)).toHaveLength(6_000);
+    const found = crossReferences(document);
+    expect(found.bookmarks.map((each) => each.note)).toEqual(sources.map((_, index) => index + 1));
+    expect(new Set(found.bookmarks.map((each) => each.id)).size).toBe(6_000);
+    expect(found.results.map((each) => each.shows)).toEqual(sources.map((_, index) => index + 1));
   });
 
   test("a Citation whose check is not the same, or whose address is not, has a note of its own", () => {

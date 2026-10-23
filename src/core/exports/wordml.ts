@@ -150,7 +150,8 @@ export function bookmarked(id: number, name: string, xml: string): string {
 /**
  * Word's own cross-reference to a footnote (Insert › Cross-reference › Footnote number, formatted):
  * the number of the footnote that the bookmark `name` encloses the mark of, in the footnote
- * reference style, which Word keeps up to date. `shown` is the number until it is updated.
+ * reference style, which Word keeps up to date. `shown` is the number until it is updated, as
+ * XML text already: digits, or the writer's own mark for them.
  */
 export function noteNumber(name: string, shown: string, style = FOOTNOTE_STYLES.reference): string {
   const mark = (type: string) => `<w:r><w:fldChar w:fldCharType="${type}"/></w:r>`;
@@ -158,7 +159,7 @@ export function noteNumber(name: string, shown: string, style = FOOTNOTE_STYLES.
     mark("begin") +
     `<w:r><w:instrText xml:space="preserve"> NOTEREF ${escapeXml(name)} \\f \\h </w:instrText></w:r>` +
     mark("separate") +
-    `<w:r><w:rPr><w:rStyle w:val="${escapeXml(style)}"/></w:rPr><w:t>${escapeXml(shown)}</w:t></w:r>` +
+    `<w:r><w:rPr><w:rStyle w:val="${escapeXml(style)}"/></w:rPr><w:t>${shown}</w:t></w:r>` +
     mark("end")
   );
 }

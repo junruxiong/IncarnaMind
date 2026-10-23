@@ -211,7 +211,7 @@ function edit(doc: Y.Doc): string | null {
     const again = new Y.XmlElement("paragraph");
     const repeat = new Y.XmlElement("citation");
     for (const [key, value] of Object.entries(citation.getAttributes())) {
-      repeat.setAttribute(key, value as string);
+      if (value !== undefined) repeat.setAttribute(key, value);
     }
     again.insert(0, [new Y.XmlText(`${ADDED} `), repeat]);
     blocks.insert(after, [paragraph, again]);
