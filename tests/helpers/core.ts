@@ -129,7 +129,7 @@ export function startCore(dataDir: string, overrides: TestAdapters = {}): Core {
     embeddingModelSource: NO_MODEL_FILES,
     crossEncoder: createFakeCrossEncoder(),
     rerankingModelSource: NO_MODEL_FILES,
-    modelDownloads: { fetch: LOCAL_FETCH },
+    modelDownloads: { fetch: LOCAL_FETCH, copies: {} },
     // Find sources never reaches the real services from a test: a test that searches gives its stand-in.
     sourceProviders: {
       openalex: NOWHERE,

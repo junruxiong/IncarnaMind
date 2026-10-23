@@ -81,7 +81,9 @@ export function useDownloadSources(
           value={choices.includes(picked) ? picked : "auto"}
           onChange={(event) => {
             const choice = choices.find((each) => each === event.target.value) ?? "auto";
-            void updateSettings({ device: { modelSource: choice } }).then(retry);
+            void updateSettings({ device: { modelSource: choice } }).then(() => {
+              if (useAppStore.getState().settings?.device.modelSource === choice) retry();
+            });
           }}
           className="rounded-sm border border-rule-strong bg-sheet px-1 py-0.5 text-ink"
         >
