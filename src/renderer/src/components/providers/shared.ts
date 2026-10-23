@@ -16,6 +16,9 @@ import type { MessageKey, MessageParams } from "../../../../shared/i18n";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
 
+/** Where an undo line of a change made in Settings › Models shows: the sidebar's is behind it. */
+export const MODELS_UNDO_PLACE = "settings:models";
+
 /** What a failed connection test means, in words. The ChatGPT plan's own kinds live under `chatgpt.`. */
 export function testErrorKey(kind: ProviderErrorKind): MessageKey {
   switch (kind) {

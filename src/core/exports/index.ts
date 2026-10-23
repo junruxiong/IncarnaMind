@@ -21,11 +21,12 @@ import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
 import { readableQuoteText } from "../../shared/readableQuote";
 import type { ScopeKind } from "../../shared/searchScope";
-import type { SourceDocument } from "../../shared/sources";
+import { type SourceDocument, sourcesOf } from "../../shared/sources";
 import type { UnitText } from "../../shared/units";
 import { wordFileOf, wordImportProgressOf } from "../../shared/wordFiles";
 import type { Logger, Pictures, Printer } from "../adapters";
 import {
+  CITATION_PLACES,
   type CitationAttributes,
   type CitationFormatRequest,
   EXPORT_FORMATS,
@@ -59,7 +60,7 @@ import {
 } from "../mindText";
 import { withChangesAccepted } from "../shownChanges";
 import { type CitationCard, citationCard } from "./citationCards";
-import { addSources, styleCitations } from "./citations";
+import { addSources, listCitations, styleCitations } from "./citations";
 import { piecesOf, renderDocx } from "./docx";
 import { bodyFamily, renderHtml } from "./html";
 import { exportLabels } from "./labels";
@@ -170,6 +171,7 @@ interface Prepared {
   textLanguage: Language;
   documents: readonly SourceDocument[];
   bibliography: boolean;
+  listed: boolean;
   font: string | null;
   lineSpacing: number | null;
   /** Each Citation's footnote with the attributes it was made from, for the source pack. */
@@ -197,10 +199,14 @@ export function createExports(deps: ExportsDependencies) {
       attributesOf.set(note, attributes as Partial<CitationAttributes>);
       return note;
     };
+    const listed =
+      (format === "docx" || format === "pdf") &&
+      style.form === "numbered" &&
+      options.citationPlace === "list";
     // Footnotes go right after the word, and so do Numbered's Citations and a shared page's
-    // markers; a style decides for its own (./citations).
+    // markers; a style decides for its own (./citations), and a list's `[1]` follows a space.
     const trimBeforeCitation =
-      style.form === "numbered" || (format === "share-page" && options.citationCards);
+      (style.form === "numbered" && !listed) || (format === "share-page" && options.citationCards);
 
     const live = new Set(documents.map((document) => document.id));
     const readOptions: ReadOptions = {
@@ -256,6 +262,11 @@ export function createExports(deps: ExportsDependencies) {
     const preview: MindExportPreview = {
       fileName: `${format === "source-pack" ? translate(language, "export.pack.fileName", { name }) : name}.${EXTENSIONS[format]}`,
       citations: footnotes.length,
+      citedDocuments: sourcesOf(
+        footnotes.map((each) => attributesOf.get(each) ?? {}),
+        { language, documents },
+      ).length,
+      numbered: style.form === "numbered",
       unverifiedCitations: footnotes.filter((each) => each.unverified).length,
       questions,
       fromWord: word !== null,
@@ -279,6 +290,7 @@ export function createExports(deps: ExportsDependencies) {
       textLanguage,
       documents,
       bibliography: deps.bibliography(mind.id),
+      listed,
       font: deps.font(mind.id),
       lineSpacing: deps.lineSpacing(mind.id),
       attributesOf,
@@ -523,8 +535,14 @@ export function createExports(deps: ExportsDependencies) {
         };
       }
       const labels = exportLabels(language);
-      const blocks =
-        style.form !== "numbered"
+      const blocks = prepared.listed
+        ? listCitations(
+            prepared.blocks,
+            { language, documents },
+            translate(language, "bibliography.title"),
+            labels.unverified,
+          )
+        : style.form !== "numbered"
           ? await styleCitations(prepared.blocks, style, thin.format, labels.needsDetails)
           : prepared.bibliography
             ? addSources(
@@ -615,6 +633,7 @@ export function createExports(deps: ExportsDependencies) {
         labels: exportLabels(language),
         style,
         bibliography: prepared.bibliography,
+        listed: prepared.listed,
         bibliographyHeading: translate(language, "bibliography.title"),
         sources: { language, documents },
         formatCitations: thin.format,
@@ -744,7 +763,7 @@ async function withPictures(
 
 function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (!isRecord(input)) throw new InvalidInputError("Export options must be an object.");
-  const { format, includeQuestions, accept, theirChanges } = input;
+  const { format, includeQuestions, accept, theirChanges, citationPlace } = input;
   const choice = (
     name: "trackChanges" | "markAiText" | "commentFailedChecks" | "citationCards" | "checkedLine",
     absent = false,
@@ -766,6 +785,10 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
   if (theirChanges !== undefined && theirChanges !== "shown" && theirChanges !== "accepted") {
     throw new InvalidInputError({ key: "error.export.theirChanges" });
   }
+  const place = CITATION_PLACES.find((each) => each === citationPlace);
+  if (citationPlace !== undefined && place === undefined) {
+    throw new InvalidInputError({ key: "error.export.citationPlace" });
+  }
   if (
     accept !== undefined &&
     !(Array.isArray(accept) && accept.every((key) => typeof key === "string"))
@@ -783,6 +806,7 @@ function parseExportOptions(input: unknown): Required<ExportMindOptions> {
     citationCards: choice("citationCards", true),
     checkedLine: choice("checkedLine"),
     theirChanges: theirChanges ?? "shown",
+    citationPlace: place ?? "footnotes",
   };
 }
 
