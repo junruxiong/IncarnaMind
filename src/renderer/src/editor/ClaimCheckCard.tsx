@@ -30,7 +30,15 @@ import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useScopeName } from "../scopeDocuments";
 import { useAppStore } from "../store";
-import { cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
+import {
+  cutSentence,
+  cutUnsupported,
+  keepAsView,
+  offersFixes,
+  offersNotFound,
+  searchedLess,
+  uncoveredOf,
+} from "../unsupportedFixes";
 import { alreadyCitedBy, citationsOf } from "./alreadyCited";
 import { ClaimOutline } from "./ClaimOutline";
 import { useCardPlace } from "./checkPlace";
@@ -205,6 +213,7 @@ export function ClaimMark({
               verified={verificationOf(doc)?.documentId ?? null}
               cited={citationsOf(editor.state, claim)}
               fixes={offersFixes(editor, claim)}
+              notFound={offersNotFound(editor, claim)}
               addable={plus}
               already={already}
               added={added}
@@ -243,6 +252,10 @@ export function ClaimMark({
               }}
               onCut={() => {
                 void cutUnsupported(editor, mindId, doc, claim);
+                done();
+              }}
+              onCutSentence={() => {
+                cutSentence(editor, claim);
                 done();
               }}
               onKeep={() => {
@@ -326,7 +339,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * cited" with the Citation's own words and number when the sentence has one on
  * those words; for a contradiction, what the Document says; for a figure
  * worked out, its working and inputs; for nothing found, where it looked, with
- * Search all Documents, or, for a court decision no Document holds, that it
+ * Search all Documents, Cut it (the whole sentence, never in a Verify Mind) and
+ * Keep as my view, or, for a court decision no Document holds, that it
  * can't be checked here, with Remove the mark only; for a sentence with a
  * Citation, the part the Citation doesn't cover, with its quote, and Cut the
  * unsupported part, Search all Documents and Keep as my view (#1111); for one
@@ -340,6 +354,7 @@ function ClaimCard({
   verified,
   cited,
   fixes,
+  notFound,
   addable,
   already,
   added,
@@ -352,6 +367,7 @@ function ClaimCard({
   onTurnOnWebSearch,
   onRemove,
   onCut,
+  onCutSentence,
   onKeep,
 }: {
   claim: ShownClaim;
@@ -359,6 +375,7 @@ function ClaimCard({
   verified: string | null;
   cited: readonly NumberedCitation[];
   fixes: boolean;
+  notFound: boolean;
   addable: boolean;
   already: NumberedCitation | null;
   added: number;
@@ -371,6 +388,7 @@ function ClaimCard({
   onTurnOnWebSearch(): void;
   onRemove(): void;
   onCut(): void;
+  onCutSentence(): void;
   onKeep(): void;
 }) {
   const t = useT();
@@ -682,7 +700,7 @@ function ClaimCard({
             {t("claim.cutUnsupported")}
           </button>
         )}
-        {state === "unsupported" && looked !== null && !decisionMissing && (
+        {state === "unsupported" && searchedLess(claim) && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"
@@ -692,7 +710,17 @@ function ClaimCard({
             {t("claim.searchAll")}
           </button>
         )}
-        {fixes && (
+        {notFound && verified === null && (
+          <button
+            type="button"
+            data-testid="claim-cut-sentence"
+            className="citation-card-action"
+            onClick={onCutSentence}
+          >
+            {t("claim.cutSentence")}
+          </button>
+        )}
+        {(fixes || notFound) && (
           <button
             type="button"
             data-testid="claim-keep"

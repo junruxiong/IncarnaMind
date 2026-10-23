@@ -634,6 +634,16 @@ export async function runFromPalette(window: Page, label: string): Promise<void>
   await item.click();
 }
 
+/** Runs a command from ⌘K by its id, once ⌘K lists it under its label, as the User types and clicks it. */
+export async function runCommand(window: Page, id: string, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette").locator(`[data-key="command:${id}"]`);
+  await expect(item).toContainText(label);
+  await pointAndClick(window, item);
+}
+
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */
 export const sidebarFolder = (window: Page, name: string) =>
   window
