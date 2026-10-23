@@ -266,6 +266,21 @@ test("Accept and Reject on the selected card act at once with Undo, from the mou
   await expect(supply.getByTestId("review-reject")).toHaveText("Reject");
   await screenshot(window, "review-card-selected");
 
+  // A change the author filter hides is never decided: ⌘↵ on Luis's cards leaves Dana's waiting.
+  await pointAndClick(window, pane.getByTestId("review-author-menu"));
+  await pointAndClick(
+    window,
+    window.getByTestId("review-author").filter({ hasText: "Luis Ortega" }),
+  );
+  await expect(cards).toHaveCount(2);
+  await pane.locator("[data-review-id]").first().focus();
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await pointAndClick(window, pane.getByTestId("review-author-menu"));
+  await pointAndClick(window, window.getByTestId("review-author-everyone"));
+  await expect(supply).toHaveAttribute("data-state", "waiting");
+  await expect(supply).toHaveAttribute("data-selected", "true");
+  await expect(pane.locator('[data-testid="review-change"][data-state="waiting"]')).toHaveCount(7);
+
   // Accept acts at once: the words are the Mind's, the card says so, and the next change is selected.
   await pointAndClick(window, supply.getByTestId("review-accept"));
   await expect(supply).toHaveAttribute("data-state", "accepted");

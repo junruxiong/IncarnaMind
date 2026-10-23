@@ -52,21 +52,31 @@ export function pickInMind(editor: Editor, picked: readonly PickedRange[]): void
   editor.view.dispatch(editor.state.tr.setMeta(reviewPickKey, picked));
 }
 
+/** What the foot of the page keeps covered: the count and the check badge fade the text there. */
+const FOOT_PX = 48;
+
 /**
- * Scrolls the Mind so a place shows, a third of the way down, unless it
- * already does: at once, as the cursor's own scrolling is.
+ * Scrolls the Mind so a range shows whole, a third of the way down, or, when
+ * it is taller than the view, from its start; unless it already shows. At
+ * once, as the cursor's own scrolling is.
  */
-export function scrollMindTo(editor: Editor, pos: number): void {
+export function scrollMindTo(editor: Editor, from: number, to = from): void {
   if (editor.isDestroyed) return;
   const scroller = editor.view.dom.closest<HTMLElement>(".mind-scroller");
   if (!scroller) return;
-  const at = Math.min(Math.max(pos, 0), editor.state.doc.content.size);
-  const coords = editor.view.coordsAtPos(at);
+  const size = editor.state.doc.content.size;
+  const start = editor.view.coordsAtPos(Math.min(Math.max(from, 0), size));
+  const end = editor.view.coordsAtPos(Math.min(Math.max(to, from, 0), size));
   const box = scroller.getBoundingClientRect();
   // The bar of changes stays at the Mind's top as it scrolls: a change under it doesn't show.
   const covered =
     editor.view.dom.closest(".mind-editor-frame")?.querySelector(".proposals-bar")?.clientHeight ??
     0;
-  if (coords.top >= box.top + covered && coords.bottom <= box.bottom - 48) return;
-  scroller.scrollTop += coords.top - box.top - box.height / 3;
+  const top = box.top + covered;
+  const bottom = box.bottom - FOOT_PX;
+  if (start.top >= top && end.bottom <= bottom) return;
+  const room = bottom - top;
+  const height = end.bottom - start.top;
+  const above = height < room ? (room - height) / 3 : 0;
+  scroller.scrollTop += start.top - top - above;
 }

@@ -52,13 +52,14 @@ export function selectCard(
   const item = itemsOf(editor).find((each) => each.id === id);
   if (!item) return;
   pickInMind(editor, pickedRanges(editor, item));
-  if (scroll) scrollMindTo(editor, item.from);
+  if (scroll) scrollMindTo(editor, item.from, item.to);
 }
 
 export function selectedChange(editor: Editor, mindId: string): ChangeItem | null {
   const pane = useReviewPanes.getState().panes[mindId];
   if (!pane?.selected) return null;
-  const item = itemsOf(editor).find((each) => each.id === pane.selected);
+  // A card the filters hide is never decided, though it stays selected for when it shows again.
+  const item = shownIn(itemsOf(editor), pane).find((each) => each.id === pane.selected);
   return item && waiting(item) ? item : null;
 }
 
