@@ -1,5 +1,6 @@
 import type { CatalogProvider } from "../../../../core/providers/catalog";
 import { useLanguage, useT } from "../../i18n";
+import { MetaLine } from "../MetaLine";
 import { hintClass } from "../ui";
 
 const linkClass = `${hintClass} mt-0 underline`;
@@ -12,11 +13,14 @@ const linkClass = `${hintClass} mt-0 underline`;
 export function KeyHelp({
   catalog,
   keyUrl,
+  everyRegion,
   provider,
   firstRun,
 }: {
   catalog: CatalogProvider;
   keyUrl: string | undefined;
+  /** The key will find its region: each region's key page, in place of `keyUrl`. */
+  everyRegion: boolean;
   /** Its name, as the interface says it. */
   provider: string;
   firstRun: boolean;
@@ -47,7 +51,26 @@ export function KeyHelp({
       </div>
     ) : null;
   const steps = catalog.keyGuide ?? [];
-  if (!keyUrl && steps.length === 0 && (!firstRun || (notes.length === 0 && !line))) {
+  const keyPage =
+    everyRegion && regionKeyPages(catalog).length > 1 ? (
+      <div data-testid="provider-key-pages" className={`${hintClass} mt-0`}>
+        {t("providers.form.keyPages", { provider })}
+        <RegionKeyPages catalog={catalog} />
+      </div>
+    ) : (
+      keyUrl && (
+        <a
+          href={keyUrl}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="provider-key-link"
+          className={linkClass}
+        >
+          {t("providers.form.keyPage", { provider })} ↗
+        </a>
+      )
+    );
+  if (!keyPage && steps.length === 0 && (!firstRun || (notes.length === 0 && !line))) {
     return aboveHelp;
   }
   return (
@@ -76,19 +99,54 @@ export function KeyHelp({
             </ol>
           )}
           {firstRun && line}
-          {keyUrl && (
-            <a
-              href={keyUrl}
-              target="_blank"
-              rel="noreferrer"
-              data-testid="provider-key-link"
-              className={linkClass}
-            >
-              {t("providers.form.keyPage", { provider })} ↗
-            </a>
-          )}
+          {keyPage}
         </div>
       </details>
     </>
+  );
+}
+
+const regionKeyPages = (catalog: CatalogProvider) =>
+  catalog.endpoints.filter((each) => each.keyUrl !== undefined);
+
+/** Each region's key page, by the region's name: a provider whose regions each make their own keys. */
+function RegionKeyPages({ catalog }: { catalog: CatalogProvider }) {
+  const words = useLanguage() === "zh-CN" ? "zh" : "en";
+  return (
+    <MetaLine
+      as="div"
+      parts={regionKeyPages(catalog).map((each) => (
+        <a
+          key={each.id}
+          href={each.keyUrl}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="provider-key-link"
+          className="underline"
+        >
+          {each.label[words]} ↗
+        </a>
+      ))}
+    />
+  );
+}
+
+/**
+ * Under the region choice, which shows once no region took the key: a key works only in the
+ * region it was made in, and where each region makes its keys.
+ */
+export function RegionKeyNote({
+  catalog,
+  provider,
+}: {
+  catalog: CatalogProvider;
+  provider: string;
+}) {
+  const t = useT();
+  return (
+    <div data-testid="provider-region-note" className={hintClass}>
+      {t("providers.form.regionNote", { provider })}
+      <RegionKeyPages catalog={catalog} />
+    </div>
   );
 }

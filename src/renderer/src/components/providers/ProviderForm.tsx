@@ -47,7 +47,7 @@ import {
   primaryButtonClass,
   successTextClass,
 } from "../ui";
-import { KeyHelp } from "./KeyHelp";
+import { KeyHelp, RegionKeyNote } from "./KeyHelp";
 import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
@@ -160,10 +160,15 @@ export function ProviderForm({
     refused !== null && !catalogMenu(refused.catalogId, refused.endpoint).includes(refused.modelId),
   );
   const [moreOpen, setMoreOpen] = useState(false);
-  /** The region of a provider that has several; its first otherwise. */
+  /** The region of a provider that has several, where its key is tried first; its first otherwise. */
   const [endpointId, setEndpointId] = useState(
     refused?.endpoint ?? initialEndpoint ?? defaultRegion(first, language),
   );
+  /**
+   * A new key finds its region, tried at each in turn (#1572). Only once none takes it is the
+   * region asked, and one the User chooses there is the only one tried.
+   */
+  const [region, setRegion] = useState<"by-key" | "asked" | "chosen">("by-key");
   const key = useProviderKey();
   const { apiKey } = key;
   const [fieldValue, setFieldValue] = useState(() => fieldDefault(first));
@@ -225,6 +230,7 @@ export function ProviderForm({
   const server = useLocalServer(local ? kind : null);
   const words = language === "zh-CN" ? "zh" : "en";
   const endpoint = catalog ? endpointOf(catalog, endpointId) : undefined;
+  const regional = (catalog?.endpoints.length ?? 0) > 1;
   const field = endpoint?.field;
   const fieldUsed = (fieldValue || field?.choices?.[0]?.value || "").trim();
   const fieldAddress =
@@ -303,6 +309,7 @@ export function ProviderForm({
     setSwitchedFrom(from);
     if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
     setEndpointId(defaultRegion(next, language));
+    setRegion("by-key");
     setFieldValue(fieldDefault(next));
     setModelId((current) =>
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
@@ -358,15 +365,18 @@ export function ProviderForm({
     setBusy("saving");
     setError(null);
     setTest(null);
+    const byKey = regional && region !== "chosen" && request.apiKey !== undefined;
     try {
-      const result = await core.testChatConnection(request);
+      const result = await core.testChatConnection(
+        byKey ? { ...request, anyRegion: true } : request,
+      );
       if (!result.ok) {
         setTest(result);
+        if (byKey && result.error.kind === "auth") setRegion("asked");
         return;
       }
-      const provider = await core.saveChatProvider(
-        keepDefault ? { ...request, keepDefault } : request,
-      );
+      const found = result.endpoint ? { ...request, endpoint: result.endpoint } : request;
+      const provider = await core.saveChatProvider(keepDefault ? { ...found, keepDefault } : found);
       key.clear();
       onSaved(provider);
     } catch (failure) {
@@ -468,34 +478,38 @@ export function ProviderForm({
 
       {kind && (
         <>
-          {catalog && catalog.endpoints.length > 1 && (
-            <label className={fieldLabelClass}>
-              {t("providers.form.region")}
-              <select
-                value={endpoint?.id ?? ""}
-                onChange={(event) => {
-                  // A key belongs to its region: it is never sent to another.
-                  key.clear();
-                  setEndpointId(event.target.value);
-                  if (!otherModel) {
-                    setModelId((current) =>
-                      catalogMenu(kind, event.target.value).includes(current)
-                        ? current
-                        : suggestedModel(kind),
-                    );
-                  }
-                  setTest(null);
-                  setError(null);
-                }}
-                className={inputClass}
-              >
-                {catalog.endpoints.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label[words]}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {catalog && regional && region !== "by-key" && (
+            <div>
+              <label className={fieldLabelClass}>
+                {t("providers.form.region")}
+                <select
+                  value={endpoint?.id ?? ""}
+                  onChange={(event) => {
+                    // No region took the key: the one chosen is tried alone, with a key made there.
+                    key.clear();
+                    setRegion("chosen");
+                    setEndpointId(event.target.value);
+                    if (!otherModel) {
+                      setModelId((current) =>
+                        catalogMenu(kind, event.target.value).includes(current)
+                          ? current
+                          : suggestedModel(kind),
+                      );
+                    }
+                    setTest(null);
+                    setError(null);
+                  }}
+                  className={inputClass}
+                >
+                  {catalog.endpoints.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label[words]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <RegionKeyNote catalog={catalog} provider={shortName(kind)} />
+            </div>
           )}
 
           {field && (
@@ -608,6 +622,7 @@ export function ProviderForm({
               key={`${kind}:${endpoint?.id}`}
               catalog={catalog}
               keyUrl={endpoint?.keyUrl ?? catalog.keyUrl}
+              everyRegion={region === "by-key"}
               provider={shortName(kind)}
               firstRun={standalone}
             />

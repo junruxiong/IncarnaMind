@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactNode, Ref } from "react";
 import { ExclamationIcon } from "../viewer/icons";
 import { MetaLine } from "./MetaLine";
 
@@ -25,9 +25,16 @@ export interface ProblemAction {
   disabled?: boolean;
 }
 
-export function LineAction({ action }: { action: ProblemAction }) {
+export function LineAction({
+  action,
+  ref,
+}: {
+  action: ProblemAction;
+  ref?: Ref<HTMLButtonElement>;
+}) {
   return (
     <button
+      ref={ref}
       type="button"
       data-testid={action.testId}
       disabled={action.disabled}

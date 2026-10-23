@@ -108,7 +108,7 @@ export function providerLabel(provider: ChatProvider, t: Translate, language: La
 export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
   provider.service?.name ?? providerLabel(provider, t, language);
 
-/** A Kimi key belongs to the region it was made in: the interface's language says which. */
+/** Kimi's region by the interface's language: where a new key is tried first. */
 export const defaultRegion = (catalogId: string, language: Language): string =>
   catalogId === "kimi" ? (language === "zh-CN" ? "cn" : "intl") : "";
 

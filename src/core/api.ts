@@ -3973,6 +3973,12 @@ export interface TestChatConnectionInput {
   /** The key to test. Leave it out to test the key stored for the same provider. */
   apiKey?: string;
   modelId: string;
+  /**
+   * With a new `apiKey`, for a provider whose regions each make their own keys (Kimi, Qwen, GLM,
+   * SiliconFlow): when `endpoint` refuses the key, each other region is tried in turn, and the
+   * result names the one that took it. A region that fails for another reason ends the search.
+   */
+  anyRegion?: boolean;
 }
 
 /** Why a request to a model provider failed, so the UI can say what to fix. */
@@ -4360,6 +4366,10 @@ export type RunEstimate =
   | { billing: "plan" | "free" };
 
 export type ConnectionTestResult = { ok: true } | { ok: false; error: ProviderError };
+
+export type ChatConnectionTestResult =
+  /** `endpoint`: the region that took the key, when the test looked for one (`anyRegion`). */
+  { ok: true; endpoint?: string } | { ok: false; error: ProviderError };
 
 /** A model on a saved chat provider. */
 export interface ChatModelChoice {
@@ -9092,7 +9102,7 @@ export interface CoreApi {
   /** Removes a provider and its key. If it held the default model, there is none afterwards. */
   deleteChatProvider(id: string): Promise<void>;
   /** Makes one small real request. A cloud provider's data flow needs consent first. */
-  testChatConnection(input: TestChatConnectionInput): Promise<ConnectionTestResult>;
+  testChatConnection(input: TestChatConnectionInput): Promise<ChatConnectionTestResult>;
   /**
    * Asks a saved provider for its model list, then sends one word to its quick-tasks
    * model. Neither goes in Local mode; both need the chat flow allowed, which asks the User.

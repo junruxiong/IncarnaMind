@@ -34,6 +34,8 @@ A service receives only the flows it is used for. The names in the first column 
 
 Choosing the chat model's provider (in first-run setup, in Settings → Models, or by signing in with your ChatGPT plan, your Claude account, or GitHub for your Copilot plan) allows Chat, Edit with AI, Find support and Verify, Writing suggestions, Automatic Tags and Document organization at once, so none of them asks again. Choosing a service again is a new choice and replaces an earlier "Don't allow". A flow asks again only when it starts sending something its line didn't name, and a provider you chose before this rule asks once, at the first send, for a flow it never asked about.
 
+Use this key checks the key first: it sends the key and a one-line prompt of IncarnaMind's own, nothing of yours, to the provider. Kimi, Qwen, GLM and SiliconFlow make keys per region, so a key one of their regions refuses is tried at the same provider's other region, and only the region that takes it is saved and gets what the flows above send.
+
 ### What these flows have in common
 
 - **Document names go out.** Every Question sends up to 50 Document names, and the Passages it sends carry their Documents' names and pages; Organize, Library grouping and Automatic Tags send each Document's name. Folder and Tag names and descriptions go with those two flows too.

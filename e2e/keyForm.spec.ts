@@ -496,8 +496,8 @@ for (const { value, first, other, anyway, notAnthropic, notGoogle } of [
   });
 }
 
-test("Kimi's form opens on the region of the interface's language: International in English, China in Chinese", async () => {
-  const { app, window } = await launchApp(dataDir);
+test("Kimi's form asks no region, and tries a key first in the region of the interface's language: International in English, China in Chinese (#1572)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await setWindowSize(app, window, 1100, 900);
     await acceptPlainTextKeys(window);
@@ -508,7 +508,17 @@ test("Kimi's form opens on the region of the interface's language: International
     ] as const) {
       await language(window, value);
       const form = await addProviderForm(settings, "kimi");
-      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveValue(region);
+      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveCount(0);
+      // A key both regions take stays where it was tried first.
+      await form.locator('input[type="password"]').fill("sk-taken-by-both-regions");
+      await form.getByTestId("provider-use-key").click();
+      await expect(settings.getByTestId("provider-page")).toBeVisible();
+      const regions = await window.evaluate(async () => {
+        const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+        const providers = await core.listChatProviders();
+        return providers.filter((each) => each.catalogId === "kimi").map((each) => each.endpoint);
+      });
+      expect(regions).toContain(region);
       await settings.getByTestId("models-back").click();
     }
   } finally {
@@ -655,12 +665,12 @@ test("in Settings, a key that is not the page's service goes nowhere on Add a pr
   }
 });
 
-test("Kimi is listed under International and under China, and each opens its form on that region (#1348)", async () => {
-  const { app, window } = await launchApp(dataDir);
+test("Kimi is listed under International and under China, and each tile's form tries a key first on that region (#1348, #1572)", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
   try {
     await setWindowSize(app, window, 1100, 900);
+    await acceptPlainTextKeys(window);
     const settings = await openSettings(window, "models");
-    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
     const open = async (group: string) => {
       await settings.getByTestId("models-add-provider").click();
       await settings.getByTestId("provider-directory-search").fill("kimi");
@@ -668,7 +678,14 @@ test("Kimi is listed under International and under China, and each opens its for
         `[data-testid="provider-directory-group"][data-group="${group}"]`,
       );
       await tiles.locator('[data-catalog-id="kimi"]').click();
-      return region(settings.getByTestId("provider-add").getByTestId("provider-form"));
+    };
+    const regionLine = settings.getByTestId("provider-page-region-line");
+    // A key both regions take stays on the region its form tried first.
+    const saveKey = async () => {
+      const form = settings.getByTestId("provider-add").getByTestId("provider-form");
+      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveCount(0);
+      await form.locator('input[type="password"]').fill("sk-taken-by-both-regions");
+      await form.getByTestId("provider-use-key").click();
     };
 
     await settings.getByTestId("models-add-provider").click();
@@ -680,9 +697,13 @@ test("Kimi is listed under International and under China, and each opens its for
     );
     await settings.getByTestId("models-back").click();
 
-    await expect(await open("international")).toHaveValue("intl");
+    await open("international");
+    await saveKey();
+    await expect(regionLine).toContainText("Using the International endpoint");
     await settings.getByTestId("models-back").click();
-    await expect(await open("china")).toHaveValue("cn");
+    await open("china");
+    await saveKey();
+    await expect(regionLine).toContainText("Using the China endpoint");
     await settings.getByTestId("models-back").click();
 
     await language(window, "zh-CN");
@@ -690,10 +711,12 @@ test("Kimi is listed under International and under China, and each opens its for
     await settings.getByTestId("provider-directory-search").fill("kimi");
     await expect(settings.getByTestId("provider-directory-group")).toHaveCount(2);
     await settings.getByTestId("models-back").click();
-    await expect(await open("international")).toHaveValue("intl");
+    await open("international");
+    await expect(regionLine).toContainText("使用国际的 API 地址");
     await settings.getByTestId("models-back").click();
     // Popular, in Chinese, is Kimi's own region.
-    await expect(await open("popular")).toHaveValue("cn");
+    await open("popular");
+    await expect(regionLine).toContainText("使用中国的 API 地址");
   } finally {
     await app.close();
   }
@@ -728,7 +751,7 @@ test("with Kimi saved on China, only the China tile says Added and opens it, and
     await expect(tile("international")).not.toContainText("Added");
     await tile("international").click();
     const form = settings.getByTestId("provider-add").getByTestId("provider-form");
-    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveCount(0);
     await expect(form.getByLabel(/^API key/)).toHaveValue("");
     await settings.getByTestId("models-back").click();
 

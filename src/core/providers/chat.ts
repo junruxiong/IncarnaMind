@@ -8,13 +8,13 @@ import { generateText } from "ai";
 import { modelInUse } from "../../shared/mindModel";
 import {
   CHOSEN_PROVIDER_FLOWS,
+  type ChatConnectionTestResult,
   type ChatModelChoice,
   type ChatModelGroup,
   type ChatProvider,
   type ChatProviderKind,
   type ChatReadiness,
   type CitationSupport,
-  type ConnectionTestResult,
   type DataFlowId,
   type ExternalService,
   type ModelAbout,
@@ -269,6 +269,38 @@ function parseEndpoint(
     throw new InvalidInputError(`${provider.name.en} has no endpoint "${given}".`);
   }
   return endpointOf(provider, given)?.id ?? null;
+}
+
+/** A hosted provider's regions, the given one first; none for a server the User gives or an address built from a value. */
+function regionsFrom({ kind, catalogId, endpoint }: ParsedServer): string[] {
+  const provider = catalogProviderOf(kind, catalogId);
+  const regions = (provider?.endpoints ?? []).filter((each) => !each.field).map((each) => each.id);
+  return endpoint !== null && regions.includes(endpoint)
+    ? [endpoint, ...regions.filter((each) => each !== endpoint)]
+    : [];
+}
+
+/** The region refused the key itself: not a character no key has, which every region refuses alike. */
+const refusesKey = (result: ChatConnectionTestResult) =>
+  !result.ok && result.error.kind === "auth" && result.error.wording === undefined;
+
+/**
+ * Tries a new key at each region in turn while the region refuses it: the first that takes it is
+ * named, a failure of another kind ends the search, and when every region refuses, the first
+ * region's refusal stands.
+ */
+async function regionTakingKey(
+  first: string,
+  others: readonly string[],
+  testAt: (endpoint: string) => Promise<ChatConnectionTestResult>,
+): Promise<ChatConnectionTestResult> {
+  const refused = await testAt(first);
+  if (!refusesKey(refused)) return refused.ok ? { ok: true, endpoint: first } : refused;
+  for (const endpoint of others) {
+    const result = await testAt(endpoint);
+    if (!refusesKey(result)) return result.ok ? { ok: true, endpoint } : result;
+  }
+  return refused;
 }
 
 /** What Ollama says of a model, as the server's word on it: whether it calls Tools, and how it cites. */
@@ -1137,10 +1169,21 @@ export function createChat(options: {
      * Sends one tiny prompt with the given settings, which need not be saved.
      * Without a key in the input, the key stored for the same provider is used.
      * It sends the key and a fixed prompt, nothing of the User's, so it needs no consent.
+     * With `anyRegion`, a new key the region refuses goes on to the provider's other regions:
+     * the same company's, which the key form names (#1572).
      */
-    async test(input: unknown): Promise<ConnectionTestResult> {
+    async test(input: unknown): Promise<ChatConnectionTestResult> {
       if (!isRecord(input)) throw new InvalidInputError("testChatConnection expects an object.");
       const server = parseServer(input);
+      const [region, ...others] =
+        input.anyRegion === true && typeof parseApiKey(input.apiKey, server) === "string"
+          ? regionsFrom(server)
+          : [];
+      if (region !== undefined && others.length > 0) {
+        return regionTakingKey(region, others, (endpoint) =>
+          chat.test({ ...input, endpoint, anyRegion: false }),
+        );
+      }
       const modelId = parseModelId(input.modelId);
       let apiKey = parseApiKey(input.apiKey, server) ?? null;
       if (apiKey === null && acceptsApiKey(server.kind, server.catalogId)) {

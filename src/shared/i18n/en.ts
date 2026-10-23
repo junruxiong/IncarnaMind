@@ -1900,6 +1900,9 @@ export const en = {
   "providers.form.details": "Details",
   "providers.form.pricing": "Pricing",
   "providers.form.keyPage": "Open {provider}’s key page",
+  "providers.form.keyPages": "{provider}’s key pages, by region:",
+  "providers.form.regionNote":
+    "A {provider} key works only in the region it was made in. Each region’s key page:",
   "providers.form.modelsAndPrices": "Models and prices",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
@@ -2014,6 +2017,8 @@ export const en = {
   "providers.settings.cloud": "cloud, on ollama.com",
   "providers.settings.cancel": "Cancel",
   "providers.settings.remove": "Remove",
+  "providers.settings.region": "Using the {region} endpoint",
+  "providers.settings.changeRegion": "Change",
 
   "chatgpt.title": "ChatGPT plan",
   "chatgpt.description": "No key needed. Counts toward your plan’s limits.",

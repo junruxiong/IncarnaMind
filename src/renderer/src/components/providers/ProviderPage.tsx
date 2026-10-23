@@ -44,6 +44,7 @@ import { LocalModeUnavailable } from "./LocalModeUnavailable";
 import { OtherModels } from "./OtherModels";
 import { KeyRefusedLine, ProviderSendsLine, TestResult } from "./ProviderForm";
 import { logoIdOf, ProviderLogo } from "./ProviderLogo";
+import { RegionLine } from "./RegionLine";
 import { keyProviderName, useProviderKey } from "./shared";
 
 type Translate = (key: MessageKey, params?: MessageParams) => string;
@@ -233,22 +234,8 @@ export function ProviderPage({
           >
             {name}
           </h4>
-          {regions.length > 0 && (
-            <label className="flex items-center gap-2 text-[13px] leading-5 text-ink-secondary">
-              {t("providers.form.region")}
-              <select
-                data-testid="provider-page-region"
-                value={endpoint?.id ?? ""}
-                onChange={(event) => onRegion(event.target.value)}
-                className={`${fieldClass} h-7 w-auto py-0`}
-              >
-                {regions.map((each) => (
-                  <option key={each.id} value={each.id}>
-                    {each.label[words]}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {regions.length > 0 && endpoint && (
+            <RegionLine regions={regions} current={endpoint} onRegion={onRegion} />
           )}
           {address && (
             <span

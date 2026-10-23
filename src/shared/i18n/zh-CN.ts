@@ -1831,6 +1831,8 @@ export const zhCN = {
   "providers.form.details": "详情",
   "providers.form.pricing": "价格",
   "providers.form.keyPage": "打开{provider}的密钥页面",
+  "providers.form.keyPages": "{provider}各地域的密钥页面：",
+  "providers.form.regionNote": "{provider}的密钥只能在创建它的地域使用。各地域的密钥页面：",
   "providers.form.modelsAndPrices": "模型和价格",
   "providers.form.baseUrl": "API 地址",
   "providers.form.baseUrlHint": "例如 https://api.deepseek.com/v1 或 http://localhost:1234/v1",
@@ -1937,6 +1939,8 @@ export const zhCN = {
   "providers.settings.cloud": "云端，在 ollama.com 运行",
   "providers.settings.cancel": "取消",
   "providers.settings.remove": "移除",
+  "providers.settings.region": "使用{region}的 API 地址",
+  "providers.settings.changeRegion": "更改",
 
   "chatgpt.title": "ChatGPT 订阅",
   "chatgpt.description": "无需密钥，计入你订阅的额度。",

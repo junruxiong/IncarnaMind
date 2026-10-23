@@ -220,12 +220,18 @@ export function replyParts(prompt: Prompt, tools: readonly OfferedTool[]): Strea
   return parts;
 }
 
+/** The host a key ending "-for-<host>" was made at, as a region makes its own keys. */
+const madeAt = (key: string | null) => /-for-([a-z0-9.-]+)$/.exec(key ?? "")?.[1];
+
 /** What a provider says of a wrong key, or of a model that can't use Tools or structured output. */
 export function refusal(
   spec: ChatModelSpec,
   options: { tools?: unknown[]; responseFormat?: { type: string } },
 ) {
-  if (spec.apiKey?.includes("refused")) {
+  const home = madeAt(spec.apiKey);
+  const elsewhere =
+    home !== undefined && spec.baseUrl !== null && new URL(spec.baseUrl).host !== home;
+  if (spec.apiKey?.includes("refused") || elsewhere) {
     return new APICallError({
       message: "invalid x-api-key",
       url: "https://fake.invalid/chat",

@@ -7,7 +7,8 @@
  * "-not-found" fails as one its provider doesn't know when it answers; one ending "-claims-not-found"
  * does when it finds or checks claims; one ending "-claims-offline" can't reach its provider the
  * first time it finds claims. A key with "refused" in it is refused,
- * as a provider refuses a wrong key (HTTP 401). A model whose id ends "-no-tools" refuses
+ * as a provider refuses a wrong key (HTTP 401), and one ending "-for-<host>" everywhere but at
+ * that host, as a region refuses a key another region made. A model whose id ends "-no-tools" refuses
  * Tools and structured output, as a small server model does, so its Answers have no Citations.
  * A Document whose text says "slowly" takes a moment to tag or organize; one whose text says "unreachable"
  * can't reach the model the first time it is tagged or organized (nor on the retry that follows; one that

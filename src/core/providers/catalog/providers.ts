@@ -449,8 +449,8 @@ const PROVIDERS = [
     keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open Qwen's key page. A key works only in its own region.",
-        zh: "先在上方选择账号所在的地域，再打开通义千问的密钥页面。密钥只在创建它的地域有效。",
+        en: "Open Qwen's key page for the region your account is in. A key works only in its own region.",
+        zh: "打开账号所在地域的通义千问密钥页面。密钥只在创建它的地域有效。",
       },
       {
         en: "Sign in to Model Studio and turn it on if it asks.",
@@ -479,8 +479,8 @@ const PROVIDERS = [
     },
     notes: [
       {
-        en: "A key works only in the region it was made in. Choose the region first.",
-        zh: "密钥只能用于创建它的地域。请先选择地域。",
+        en: "A key works only in the region it was made in.",
+        zh: "密钥只能用于创建它的地域。",
       },
     ],
     checked: "2026-10-18",
@@ -618,8 +618,8 @@ const PROVIDERS = [
     keyUrl: "https://cloud.siliconflow.cn/account/ak",
     keyGuide: [
       {
-        en: "Pick the region of your account above, then open SiliconFlow's key page.",
-        zh: "先在上方选择账号所在的地域，再打开硅基流动的密钥页面。",
+        en: "Open SiliconFlow's key page for the region your account is in.",
+        zh: "打开账号所在地域的硅基流动密钥页面。",
       },
       {
         en: "Sign in to SiliconFlow. In mainland China it asks you to verify your identity first.",
