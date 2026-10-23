@@ -93,7 +93,7 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     ]);
     expect(mindCalls(answer)[0]?.status).toBe("done");
     expect(answer.text).toBe("Shortened the summary in “Q3 review”: dropped two fillers.");
-    expect(lastResult(model)).toMatch(/^Proposed 2 changes in “Q3 review” \(from 11 to 9 words\)/);
+    expect(lastResult(model)).toMatch(/^Changed 2 places in “Q3 review” \(from 11 to 9 words\)/);
   });
 
   // protects=a Question is answered and changes nothing, though the Minds' Tools are offered; fails_when=the Mind or its Checkpoints change; no_claim=that a real model never edits on a Question.

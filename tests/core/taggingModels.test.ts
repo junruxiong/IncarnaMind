@@ -35,9 +35,11 @@ interface SmallCall {
 /**
  * Every provider's models, scripted: a rewrite gives a query, a translation
  * a Chinese one, tagging no Tags, Organize no Folder; an Answer (streamed)
- * a plain one, as JSON for structured output.
+ * a plain one, as JSON for structured output. With `thinks`, a model thinks
+ * through a small call's whole output unless asked not to, as Kimi K2.6 does;
+ * with `refusesTools`, it takes no Tools.
  */
-function scriptedProviders() {
+function scriptedProviders({ thinks = false, refusesTools = false } = {}) {
   const specs: ChatModelSpec[] = [];
   const calls: SmallCall[] = [];
   const answers: string[] = [];
@@ -45,6 +47,9 @@ function scriptedProviders() {
     specs.push(spec);
     return scriptedModel(
       (call) => {
+        if (refusesTools && call.tools.length > 0) {
+          return { error: { status: 400, message: "this model does not support tools" } };
+        }
         answers.push(spec.modelId);
         return call.json
           ? { text: JSON.stringify({ answer: "Cities stay warm at night.", citations: [] }) }
@@ -65,6 +70,13 @@ function scriptedProviders() {
                   ? "translate"
                   : "other";
           calls.push({ kind: spec.kind, modelId: spec.modelId, thinking: spec.thinking, purpose });
+          if (
+            thinks &&
+            spec.thinking !== "off" &&
+            (purpose === "rewrite" || purpose === "translate")
+          ) {
+            return { text: "", cutOff: true };
+          }
           const text = {
             organize: JSON.stringify({ groupId: "__unsorted__", tags: [] }),
             tags: JSON.stringify({ tags: [] }),
@@ -80,8 +92,11 @@ function scriptedProviders() {
   return { createChatModel, specs, calls, answers };
 }
 
-async function start(adapters: Partial<CoreAdapters> = {}) {
-  const models = scriptedProviders();
+async function start(
+  adapters: Partial<CoreAdapters> = {},
+  scripted: Parameters<typeof scriptedProviders>[0] = {},
+) {
+  const models = scriptedProviders(scripted);
   const dataDir = await createTempDataFolder();
   const core = startCore(dataDir, { createChatModel: models.createChatModel, ...adapters });
   return { core, dataDir, ...models };
@@ -362,6 +377,47 @@ describe("Which model each quick call uses", () => {
     expect(ended.payload.usage.inputTokens).toBe(15);
   });
 
+  test("a quick-tasks model that is the Answers model still skips thinking, so the rewrite and its translation come back", async () => {
+    const { core, calls, specs } = await start({}, { thinks: true, refusesTools: true });
+    // The catalog gives Kimi K2.6 both jobs.
+    const provider = await core.saveChatProvider({
+      kind: "kimi",
+      apiKey: "key",
+      modelId: "kimi-k2.6",
+    });
+    if (provider.service) await core.allowDataFlow("chat", provider.service.id);
+    await addText(
+      core,
+      "城市热岛.md",
+      "城市热岛效应在夜间最强。公园可以降低周边的气温。".repeat(10),
+    );
+    const mind = await core.createMind({ title: "Heat" });
+    const client = await connectToMind(core, mind.id);
+    const asked = question("How do they change at night?");
+    writeMind(client, [
+      note("Urban heat islands are cities warmer than the land around them."),
+      asked,
+    ]);
+    await client.settled();
+    const searched: unknown[] = [];
+    core.on("answer.toolCallStarted", ({ call }) => searched.push(call.input.query));
+
+    const result = await core.askQuestion({ mindId: mind.id, questionId: asked.attrs.id });
+    if (!result.asked) throw new Error("Not asked.");
+    const ended = await answerEnded(core, result.answerId);
+
+    if (ended.event !== "finished") throw new Error("The Answer failed.");
+    const small = calls.filter(
+      (each) => each.purpose === "rewrite" || each.purpose === "translate",
+    );
+    expect(small).toEqual([
+      { kind: "kimi", modelId: "kimi-k2.6", thinking: "off", purpose: "rewrite" },
+      { kind: "kimi", modelId: "kimi-k2.6", thinking: "off", purpose: "translate" },
+    ]);
+    expect(searched).toEqual(["urban heat islands at night", "城市热岛 夜间"]);
+    expect(specs.some((spec) => spec.thinking === "answer")).toBe(true);
+  });
+
   test("Tag suggestions go to the provider's tagging model, and Organize too once the User lets it", async () => {
     const { core, calls } = await start();
     await core.saveChatProvider({ kind: "openai", apiKey: "sk-test", modelId: "gpt-6.1-sol" });
@@ -484,6 +540,40 @@ describe("The Answer engine's small calls", () => {
       }),
     );
     expect(declined).toEqual(["answers: rewrite", "answers: translate"]);
+  });
+
+  test("an empty reply is logged with its model and why it stopped, and the Question is searched as asked", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const searched: string[] = [];
+    const thinker = scriptedModel(() => ({ text: "" }), {
+      modelId: "thinker",
+      generate: () => ({ text: "", cutOff: true }),
+    });
+    await run(
+      request({
+        quickModel: async () => thinker,
+        documents: {
+          documentCount: 1,
+          documentLanguages: [{ language: "Chinese", documents: 1 }],
+          searchDocuments: async (query) => {
+            searched.push(query);
+            return { text: "No Passages found.", passageCount: 0 };
+          },
+          cite: () => "Recorded.",
+        },
+      }),
+    );
+    expect(searched).toEqual(["Why?"]);
+    const logged = errors.mock.calls.map((each) => String(each[0]));
+    errors.mockRestore();
+    expect(logged).toEqual([
+      expect.stringMatching(
+        /search rewrite came back empty from \S+ thinker \(finish reason: length\)/,
+      ),
+      expect.stringMatching(
+        /translation came back empty from \S+ thinker \(finish reason: length\)/,
+      ),
+    ]);
   });
 });
 
