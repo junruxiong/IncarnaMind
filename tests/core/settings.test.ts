@@ -85,6 +85,7 @@ describe("Settings", () => {
         gettingStarted: {
           started: false,
           citationChecked: false,
+          mistakeSeen: false,
           indexed: false,
           askedOwn: false,
           askedReady: false,
@@ -192,6 +193,7 @@ describe("Settings", () => {
       gettingStarted: {
         started: false,
         citationChecked: false,
+        mistakeSeen: false,
         indexed: false,
         askedOwn: false,
         askedReady: false,
@@ -333,7 +335,8 @@ describe("Settings", () => {
     const before = startCore(dataDir);
     const kept = {
       started: true,
-      citationChecked: true,
+      citationChecked: false,
+      mistakeSeen: false,
       indexed: false,
       askedOwn: true,
       hidden: false,
@@ -348,6 +351,49 @@ describe("Settings", () => {
       ...kept,
       askedReady: false,
     });
+  });
+
+  test("Get started's progress kept before the mistake had its own step takes it from the Citation step, and an absent flag is not a false one", async () => {
+    const older = {
+      started: true,
+      indexed: true,
+      askedOwn: true,
+      askedReady: false,
+      hidden: false,
+    };
+    for (const { citationChecked, mistakeSeen } of [
+      { citationChecked: true, mistakeSeen: true },
+      { citationChecked: false, mistakeSeen: false },
+    ]) {
+      const dataDir = await createTempDataFolder();
+      const before = startCore(dataDir);
+      await before.updateSettings({
+        device: { gettingStarted: { ...older, citationChecked } as unknown as GettingStarted },
+      });
+      before.close();
+
+      const after = startCore(dataDir);
+      expect((await after.getSettings()).device.gettingStarted).toEqual({
+        ...older,
+        citationChecked,
+        mistakeSeen,
+      });
+      after.close();
+    }
+  });
+
+  test("a mistake not seen stays unseen when a Citation was checked, once the flag is saved", async () => {
+    const dataDir = await createTempDataFolder();
+    const core = startCore(dataDir);
+    const { gettingStarted } = (await core.getSettings()).device;
+    await core.updateSettings({
+      device: { gettingStarted: { ...gettingStarted, started: true, citationChecked: true } },
+    });
+    expect((await core.getSettings()).device.gettingStarted).toMatchObject({
+      citationChecked: true,
+      mistakeSeen: false,
+    });
+    core.close();
   });
 
   test("a width must be a number", async () => {
@@ -370,6 +416,7 @@ describe("Settings", () => {
       gettingStarted: {
         started: true,
         citationChecked: true,
+        mistakeSeen: true,
         indexed: false,
         askedOwn: false,
         askedReady: true,

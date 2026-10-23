@@ -38,6 +38,7 @@ import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
+import { isQuietFocus } from "./mistakeMark";
 import { Popover } from "./Popover";
 import { CitationChip, OpenCitation, UnsupportedCited } from "./UnsupportedCited";
 
@@ -130,7 +131,7 @@ export function ClaimMark({
 
   const guided = useAppStore((app) => {
     const progress = app.settings?.device.gettingStarted;
-    return state === "contradicted" && !progress?.citationChecked && firstOpenOf(progress);
+    return state === "contradicted" && !progress?.mistakeSeen && firstOpenOf(progress);
   });
 
   /** After an action the card goes, and the focus stays in the Mind. */
@@ -160,13 +161,16 @@ export function ClaimMark({
         onMouseDown={(event) => event.preventDefault()}
         onPointerEnter={() => hold("pointer", true)}
         onPointerLeave={() => hold("pointer", false)}
-        onFocus={() => hold("focus", true)}
+        onFocus={(event) => {
+          if (!isQuietFocus(event.currentTarget)) hold("focus", true);
+        }}
         onBlur={() => hold("focus", false)}
         onClick={() => {
           setOpenClaim(place, id);
           // Step 1 of the first open's steps, "See a mistake it caught".
-          const { examples, updateGettingStarted } = useAppStore.getState();
-          if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
+          if (state === "contradicted") {
+            useAppStore.getState().updateGettingStarted({ mistakeSeen: true });
+          }
         }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && reveal) onRevealed();

@@ -12,6 +12,7 @@ import {
   dismissChatSetup,
   examplesMenu,
   expectReadyDocuments,
+  gettingStarted,
   interceptOpenDialog,
   launchApp,
   leaveFirstOpen,
@@ -24,6 +25,7 @@ import {
   setLanguage,
   setWindowSize,
   showSourceLocations,
+  welcomeStep as step,
   useLocalChatModel,
 } from "./app";
 
@@ -65,15 +67,6 @@ async function pointAndClick(
   expect(hit).toBe(!through);
   await window.mouse.click(x, y);
 }
-
-const step = (window: Page, key: "citation" | "question" | "files") =>
-  window.locator(`[data-testid="first-open-step"][data-step="${key}"]`);
-
-const gettingStarted = (window: Page) =>
-  window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    return (await bridge.getSettings()).device.gettingStarted;
-  });
 
 /** Words a newcomer shouldn't meet on the first screens: the left column of #763's glossary. */
 const JARGON = [
@@ -342,6 +335,9 @@ test("an empty Mind of one's own shows the three steps, the example's steps tick
   await expect(checks.nth(0)).toHaveAttribute("data-check", "found", { timeout: 20_000 });
   await expect(step(window, "files")).toHaveAttribute("data-state", "done");
   await pointAndClick(window, checks.nth(0));
+  await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+  await window.keyboard.press("Escape");
+  await pointAndClick(window, window.getByTestId("mind-pane").getByTestId("claim-mark"));
   const steps = window.getByTestId("first-open-steps");
   await expect(steps).toContainText("You’re set up.");
   await expect(steps.locator('[data-testid="first-open-step"][data-state="done"]')).toHaveText([
@@ -371,11 +367,15 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
 
   await pointAndClick(window, checks.nth(0));
   await window.keyboard.press("Escape");
+  await expect(step(window, "citation")).toHaveAttribute("data-state", "open");
+  await pointAndClick(window, pane.getByTestId("claim-mark"));
+  await window.keyboard.press("Escape");
   await expect(step(window, "citation")).toHaveAttribute("data-state", "done");
   await markSteps(window, { askedOwn: true });
   const files = step(window, "files");
   await expect(files).toHaveAttribute("data-state", "open");
-  await expect(files.getByRole("button")).toHaveText(["Add files…", "Link a folder…"]);
+  const offered = files.locator('button:not([data-testid="first-open-step-do"])');
+  await expect(offered).toHaveText(["Add files…", "Link a folder…"]);
   await expect(window.getByTestId("mind-editor").locator("h1")).toHaveText(
     "Draft: credit committee paper",
   );
@@ -383,10 +383,10 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
 
   await setLanguage(window, "zh-CN");
   await setWindowSize(app, window, 900, 760);
-  await expect(files.getByRole("button")).toHaveText(["添加文件…", "添加同步文件夹…"]);
+  await expect(offered).toHaveText(["添加文件…", "添加同步文件夹…"]);
   await expectPlainWords(firstScreen);
   const card = await pane.getByTestId("first-open-steps").boundingBox();
-  const buttons = await files.getByRole("button").last().boundingBox();
+  const buttons = await offered.last().boundingBox();
   expect((buttons?.x ?? 0) + (buttons?.width ?? 0)).toBeLessThanOrEqual(
     (card?.x ?? 0) + (card?.width ?? 0),
   );
@@ -404,7 +404,7 @@ test("the steps card's last step offers Add files… and Link a folder… at onc
   );
   await setLanguage(window, "zh-CN");
   await interceptOpenDialog(app, notes);
-  await pointAndClick(window, files.getByRole("button").first());
+  await pointAndClick(window, offered.first());
   // Done with no model: one more step, in place of "You're set up." (#1027).
   const steps = pane.getByTestId("first-open-steps");
   await expect(steps).toContainText("选择 AI 模型，就能就你自己的文件提问。", {
@@ -422,7 +422,7 @@ test('"Ask a question" is ticked by an Answer that arrives, not by one that fail
   const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
   await useLocalChatModel(window);
-  await markSteps(window, { citationChecked: true });
+  await markSteps(window, { mistakeSeen: true });
   const asked = step(window, "question");
   await expect(asked).toHaveAttribute("data-state", "open");
 
@@ -461,7 +461,7 @@ test("in Chinese, the ready Question is the Chinese example's, answered with no 
     .getByTestId("citation-chip");
   await expect(checks).toHaveCount(2);
   await expect(checks.nth(1)).toHaveAttribute("data-check", "found", { timeout: 30_000 });
-  await markSteps(window, { citationChecked: true });
+  await markSteps(window, { mistakeSeen: true });
 
   const ready = step(window, "question").getByTestId("first-open-ready");
   await expect(ready).toHaveText("提问：“贷款协议对杠杆率上限是怎么规定的？”");
@@ -486,7 +486,7 @@ test("Add files… with only a file it can't take says why in step 3, which stay
   const picture = join(sources, "Picture.png");
   await writeFile(picture, "not a document");
   const { app, window } = await launchApp(dataDir, { examples: true });
-  await markSteps(window, { citationChecked: true, askedReady: true });
+  await markSteps(window, { mistakeSeen: true, askedReady: true });
   const files = step(window, "files");
   await expect(files).toHaveAttribute("data-state", "open");
   await interceptOpenDialog(app, picture);
@@ -506,7 +506,7 @@ test("a damaged PDF as the only file of one's own leaves step 3 open, says which
   const { app, window } = await launchApp(dataDir, { examples: true });
   await setWindowSize(app, window, 1440, 900);
   await useLocalChatModel(window);
-  await markSteps(window, { citationChecked: true, askedReady: true });
+  await markSteps(window, { mistakeSeen: true, askedReady: true });
   const steps = window.getByTestId("first-open-steps");
   const files = step(window, "files");
   await expect(files).toHaveAttribute("data-state", "open");
@@ -596,7 +596,7 @@ test("a double-click on the ready Question asks it once, and Enter on it moves t
   await expect(pane.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted", {
     timeout: 20_000,
   });
-  await markSteps(first.window, { citationChecked: true });
+  await markSteps(first.window, { mistakeSeen: true });
   await step(first.window, "question").getByTestId("first-open-ready").dblclick();
   await expect(assistantAnswers(first.window).last()).toHaveAttribute("data-status", "done");
   await expect
@@ -620,7 +620,7 @@ test("a double-click on the ready Question asks it once, and Enter on it moves t
     "contradicted",
     { timeout: 20_000 },
   );
-  await markSteps(second.window, { citationChecked: true });
+  await markSteps(second.window, { mistakeSeen: true });
   await step(second.window, "question").getByTestId("first-open-ready").focus();
   await second.window.keyboard.press("Enter");
   await expect(step(second.window, "files").getByTestId("first-open-add-files")).toBeFocused();
@@ -682,7 +682,7 @@ test("on a fresh install, a first checked Citation from the User's own file take
 test("the steps can be hidden once all are done, and stay hidden", async () => {
   const first = await launchApp(dataDir, { examples: true });
   await useLocalChatModel(first.window);
-  await markSteps(first.window, { citationChecked: true, askedOwn: true, indexed: true });
+  await markSteps(first.window, { mistakeSeen: true, askedOwn: true, indexed: true });
   const steps = first.window.getByTestId("first-open-steps");
   await expect(steps).toContainText("You’re set up.");
   await pointAndClick(first.window, steps.getByTestId("first-open-hide"));
@@ -706,7 +706,7 @@ test("finishing the steps with no model asks for one in the card, never says You
   await expect(pane.getByTestId("claim-mark")).toHaveAttribute("data-check", "contradicted", {
     timeout: 20_000,
   });
-  await markSteps(window, { citationChecked: true, askedReady: true });
+  await markSteps(window, { mistakeSeen: true, askedReady: true });
   await window.getByTestId("add-documents-input").setInputFiles([notes]);
 
   const steps = pane.getByTestId("first-open-steps");
@@ -740,7 +740,7 @@ test("by keyboard alone: Choose a model takes the focus into the setup, and a sa
   const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
   await setWindowSize(app, window, 1440, 900);
   await acceptPlainTextKeys(window);
-  await markSteps(window, { citationChecked: true, askedReady: true, indexed: true });
+  await markSteps(window, { mistakeSeen: true, askedReady: true, indexed: true });
   const choose = window.getByTestId("first-open-steps").getByTestId("first-open-choose-model");
   await choose.focus();
   await window.keyboard.press("Enter");
