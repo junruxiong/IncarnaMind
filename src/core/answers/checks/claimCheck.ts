@@ -70,6 +70,7 @@ import {
   confirmPrompt,
   EVIDENCE_INSTRUCTIONS,
   evidencePrompt,
+  NEAREST_INSTRUCTIONS,
   partInstructions,
   type ReadVerdict,
   readEvidence,
@@ -679,7 +680,7 @@ async function nearestDifferent(
   session.check();
   const citation = session.finalCitation(NEAREST_MARKER);
   if (citation?.check !== "found") return null;
-  const judged = await compare(request, citation, session, signal, STRICT_INSTRUCTIONS);
+  const judged = await compare(request, citation, session, signal, NEAREST_INSTRUCTIONS);
   if ("failed" in judged) {
     if (!signal.aborted)
       console.error(`A nearest line couldn't be judged: ${judged.failed.message}`);
