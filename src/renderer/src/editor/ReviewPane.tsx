@@ -42,7 +42,7 @@ import {
   useReviewPanes,
 } from "../reviewPane";
 import { pendingIn } from "./proposalReview";
-import { decideSelected, itemsOf, selectCard, washSelected } from "./reviewActions";
+import { decideSelected, itemsOf, selectCard, selectedChange, washSelected } from "./reviewActions";
 import {
   type ChangeItem,
   type CommentItem,
@@ -206,6 +206,8 @@ export function ReviewPane({
   };
 
   const decide = (outcome: "accept" | "reject") => {
+    // On a comment or a card already decided there is nothing to do, and the focus stays.
+    if (!selectedChange(editor, mindId)) return;
     focusCard(list, closeButton, decideSelected(editor, mindId, outcome));
   };
 

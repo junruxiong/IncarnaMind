@@ -338,14 +338,19 @@ test("Accept and Reject on the selected card act at once with Undo, from the mou
   await screenshot(window, "review-card-selected-zh");
   for (let left = 5; left > 0; left--) {
     await expect(pane.locator('[data-testid="review-change"]')).toHaveCount(left);
+    // The card selected next takes the focus a frame later: the key goes to it then.
+    await expect(pane.locator("[data-selected] [data-review-id]")).toBeFocused();
     await window.keyboard.press("ControlOrMeta+Enter");
   }
   // Dana's comments stay, and the first takes the focus.
   await expect(pane.locator('[data-testid="review-change"]')).toHaveCount(0);
   await expect(pane.getByTestId("review-comment")).toHaveCount(2);
-  await expect(
-    pane.getByTestId("review-comment").first().locator("[data-review-id]"),
-  ).toBeFocused();
+  const comment = pane.getByTestId("review-comment").first().locator("[data-review-id]");
+  await expect(comment).toBeFocused();
+  // On a comment ⌘↵ has nothing to accept: the focus stays where it is.
+  await window.keyboard.press("ControlOrMeta+Enter");
+  await expect(comment).toBeFocused();
+  await expect(pane.getByTestId("review-comment")).toHaveCount(2);
   await window.keyboard.press("Escape");
   await expect(pane).toHaveCount(0);
   await expect(window.getByTestId("their-changes-line")).toHaveCount(0);
