@@ -10,6 +10,7 @@ import { setUpWithDocuments, unaskedModel } from "../helpers/citations";
 import { createTempDataFolder, manualClock, queryDatabase, startCore } from "../helpers/core";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
+import { transcribingCore, until } from "../helpers/transcription";
 
 type StreamResult = Awaited<ReturnType<MockLanguageModelV4["doStream"]>>;
 type StreamPart = StreamResult["stream"] extends ReadableStream<infer Part> ? Part : never;
@@ -188,6 +189,23 @@ describe("How long each AI request took, by flow (#1624)", () => {
       }),
     ]);
     expect(reranked[0]?.units).toBeGreaterThan(0);
+  });
+
+  // protects=transcribing a Meeting on this computer is timed, each stretch with its seconds of audio and the model that read it; fails_when=it isn't recorded, or records no audio; no_claim=the real engine's speed, which eval/speed and eval/transcription measure.
+  test("a Meeting transcribed on this computer is timed, with the seconds of audio", async () => {
+    const dataDir = await createTempDataFolder();
+    const { core, record } = await transcribingCore(dataDir);
+    const meeting = await core.createMeeting();
+    await core.startMeeting({ meetingId: meeting.id, systemAudio: false });
+    record(12 * 1000, ["microphone"]);
+    await until(core, meeting.id, (transcript) => transcript.lines >= 2);
+    core.close();
+    const transcribed = timingsIn(dataDir).filter((row) => row.flow === "transcribe");
+    expect(transcribed.length).toBeGreaterThan(0);
+    for (const row of transcribed) {
+      expect(row).toMatchObject({ kind: "local", provider_kind: "local", outcome: "finished" });
+      expect(row.units).toBeGreaterThan(0);
+    }
   });
 
   // protects=the records stay on this computer for 30 days: older ones go at the next start; fails_when=they are kept forever, or newer ones go; no_claim=what reads them.

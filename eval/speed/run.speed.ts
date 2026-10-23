@@ -12,11 +12,12 @@
  * INCARNAMIND_EVAL_SPEED_RUNS: how many times each flow runs per model and language (default: 3).
  * INCARNAMIND_EVAL_SPEED_STOP_USD: stops before the next run once this much is spent (default: 12).
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
 import { type Core, chatProviderKinds, type SaveChatProviderInput } from "../../src/core";
+import { createOnnxTextRecognizer } from "../../src/core/documents/scan/onnx";
 import { queryDatabase } from "../../tests/helpers/core";
 import { reports } from "../everyday/asking";
 import { readConfig } from "../lib/config";
@@ -58,6 +59,30 @@ function modelsAsked(): SaveChatProviderInput[] {
       ...(endpoint && { endpoint }),
     };
   });
+}
+
+// The scan set's pictures, read as Documents, for the local text recognition step's times.
+async function readScans(cacheDir: string, log: ReturnType<typeof createLog>) {
+  const folder = join(ROOT, "tests", "fixtures", "scans");
+  const pictures = (await readdir(folder)).filter((name) => name.endsWith(".jpg"));
+  const library = await openLibrary({
+    name: "speed-scans",
+    embedder: createWorkerEmbedder(),
+    modelCache: join(cacheDir, "models"),
+    textRecognizer: createOnnxTextRecognizer(),
+    documents: pictures.map((name) => ({ key: name, path: join(folder, name) })),
+    embeddings: false,
+    keep: false,
+    log,
+  });
+  try {
+    return queryDatabase<TimingRecord>(
+      library.dataDir,
+      "SELECT * FROM ai_timings WHERE kind = 'local' ORDER BY started_at, rowid",
+    );
+  } finally {
+    await library.close();
+  }
 }
 
 const NOT_MEASURED = [
@@ -141,6 +166,7 @@ test("the speed of every AI flow, on each model and language", async () => {
   } finally {
     await library.close();
   }
+  const scanned = await readScans(config.cacheDir, log);
   const cpu = cpus()[0]?.model ?? "unknown CPU";
   const loadLine = `one-minute load ${Math.min(...loads).toFixed(1)} to ${Math.max(...loads).toFixed(1)}, median ${(percentile(loads, 0.5) ?? 0).toFixed(1)}`;
   const report = [
@@ -169,6 +195,14 @@ test("the speed of every AI flow, on each model and language", async () => {
         error: null,
         records: indexing,
       },
+    ]),
+    "",
+    "## Reading scans on this computer",
+    "",
+    `The scan set's ${scanned.length} pictures (tests/fixtures/scans), added as Documents and read with the built-in text recognition model, as the app reads them.`,
+    "",
+    requestTable([
+      { flow: "scans", model: "local", language: "en", signs: null, error: null, records: scanned },
     ]),
     "",
     "## Not measured here",
