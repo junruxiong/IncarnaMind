@@ -1089,6 +1089,59 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
     ]);
   });
 
+  // protects=a call the Run starts with that fails reads to the model as a failed call of its own, and the Run goes on (#1635); fails_when=the failure ends the Run, or reaches the model as a success; no_claim=what the model then does.
+  test("a call a Run starts with that fails reads as the model's own failed call", async () => {
+    const failing: RunTool = {
+      ...testTool("search_documents"),
+      async call() {
+        throw new Error("The search broke.");
+      },
+    };
+    const model = stepsModel([], "High water is at six.");
+
+    const run = await collect(
+      create(),
+      request(model, { tools: [failing], primed: [{ id: "primed_1", ...SEARCH }], maxSteps: 3 }),
+    );
+
+    expect(run.events.find((event) => event.type === "tool-result")).toEqual({
+      type: "tool-result",
+      id: "primed_1",
+      ok: false,
+    });
+    expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain("The search broke.");
+    expect(run.text).toBe("High water is at six.");
+  });
+
+  // protects=a Stop while the calls a Run starts with run ends the Run there, with no model call and no "finished" (#1635); fails_when=the model is asked anyway, or the Run says it finished; no_claim=what the caller marks, which the checks' tests cover.
+  test("stopped during the calls it starts with, a Run asks the model nothing", async () => {
+    const controller = new AbortController();
+    const slow = testTool("search_documents", { delayMs: 10_000 });
+    const stopping: RunTool = {
+      ...slow,
+      call(input, context) {
+        const searching = slow.call(input, context);
+        controller.abort();
+        return searching;
+      },
+    };
+    const model = stepsModel([], "High water is at six.");
+
+    const run = await collect(
+      create(),
+      request(model, {
+        tools: [stopping],
+        primed: [{ id: "primed_1", ...SEARCH }],
+        maxSteps: 3,
+        signal: controller.signal,
+      }),
+    );
+
+    expect(slow.calls.map((call) => call.aborted)).toEqual([true]);
+    expect(model.doStreamCalls).toHaveLength(0);
+    expect(run.finished).toBeNull();
+  });
+
   // protects=the model can't tell a call the Run started with from one it made: its first request after them is, byte for byte on Anthropic's wire, the request it would get after making the same call itself, but for the call's id (#1635); fails_when=the primed call or its result reads differently, in place, shape or text; no_claim=other providers' wire formats, which the AI SDK builds from the same messages.
   test("the first request after the calls a Run starts with is the one after the model's own", async () => {
     const own = anthropicServer([searchReply("toolu_own")]);

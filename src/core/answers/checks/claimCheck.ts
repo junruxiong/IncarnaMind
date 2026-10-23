@@ -40,6 +40,7 @@ import type {
   UnsupportedReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
+import { detectLanguage } from "../../documents/textLanguage";
 import type { Language } from "../../language";
 import {
   calculates,
@@ -156,6 +157,11 @@ export function recordJudged(
       occurredAt: at,
     },
   ]);
+}
+
+function sentenceLanguage(claim: string): Language | null {
+  const detected = detectLanguage(claim, 1);
+  return detected === "English" ? "en" : detected === "Chinese" ? "zh-CN" : null;
 }
 
 const SEARCH_FIRST =
@@ -307,11 +313,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         opinions.documentIds.has(evidence.documentId ?? ""),
     });
 
-    // Only where it was measured to keep the verdicts: after a search of the sentence's own words
-    // Claude Haiku 5.5 took "Staff" for "the Employee" more often (#1635). Documents in another
-    // language than the sentence are searched in theirs, which only the model can do.
+    // Only on the models and languages measured to keep the verdicts (#1635): after a search of the
+    // sentence's own words, Claude Haiku 5.5 took "Staff" for "the Employee" more often. A Claude
+    // account's requests weren't measured. Documents in another language are searched in theirs,
+    // which only the model can do.
+    const language = sentenceLanguage(request.claim);
     const searchesFirst =
-      searchesCheckFirst(model.capabilities, answerLanguage(request.claim)) &&
+      language !== null &&
+      model.provider.kind !== "claude-account" &&
+      searchesCheckFirst(model.capabilities, language) &&
       !searchLanguage(request.claim, deps.documents.searchableLanguages(scope.documentIds));
     let reply = "";
     let failed: ProviderError | null = null;

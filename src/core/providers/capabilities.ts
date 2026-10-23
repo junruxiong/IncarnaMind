@@ -75,7 +75,6 @@ export function startingSupport({ facts }: ModelCapabilities): CitationSupport |
 /** Whether an Answer offers the model the `calculate` Tool and its steer: only when a source says so. */
 export const calculates = ({ facts }: ModelCapabilities): boolean => facts.calculates === true;
 
-/** Whether a check of a sentence in `language` starts with the search of the sentence: only when a source says so. */
 export const searchesCheckFirst = ({ facts }: ModelCapabilities, language: Language): boolean =>
   facts.checkSearchFirst?.includes(language) ?? false;
 

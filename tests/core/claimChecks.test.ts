@@ -187,37 +187,56 @@ describe("A check that starts with the search of its sentence (#1635)", () => {
     },
   };
 
-  // protects=a check starts with the search of its sentence only on a model and in a language where that was measured to keep the verdicts, and the model then searches no more for it; fails_when=every check starts with it, none does, or the model is asked to search again; no_claim=the verdicts, which the repeated-checks evaluation measures.
+  const FR = "Les grandes marées arrivent avec la nouvelle lune et la pleine lune.";
+  const MAREES = {
+    name: "Marées.md",
+    contents: "# Marées\n\nLes grandes marées arrivent avec la nouvelle lune et la pleine lune.",
+  };
+  const SENTENCES = {
+    en: { claim: SUPPORTED, plans: PLANS },
+    zh: { claim: ZH, plans: ZH_PLANS },
+    fr: {
+      claim: FR,
+      plans: { [FR]: { verdict: "supported", quote: "Les grandes marées arrivent" } } as Record<
+        string,
+        Plan
+      >,
+    },
+  };
+  const DOCUMENTS = { en: TIDES, zh: CHAO, fr: MAREES };
+
+  // protects=a check starts with the search of its sentence only on a model, and in a sentence's detected language, where that was measured to keep the verdicts, with Documents in that language, and the model then searches no more for it; fails_when=an unlisted model or language starts with it, a listed one doesn't, or the model is asked to search again; no_claim=the verdicts, which the repeated-checks evaluation measures.
   test.each([
-    ["claude-sonnet-5-5", "Chinese", true],
-    ["claude-sonnet-5-5", "English", false],
-    ["claude-haiku-5-5", "Chinese", false],
-  ] as const)("on %s, in %s, it does: %s", async (modelId, language, starts) => {
-    const calls: ModelCall[] = [];
-    const chinese = language === "Chinese";
-    const { core } = await setUpWithDocuments(checkingModelOf(chinese ? ZH_PLANS : PLANS, calls), [
-      chinese ? CHAO : TIDES,
-    ]);
-    const provider = await core.saveChatProvider({
-      kind: "anthropic",
-      modelId,
-      apiKey: "sk-ant-test",
-    });
-    if (provider.service) await core.allowDataFlow("checks", provider.service.id);
+    ["anthropic", "claude-sonnet-5-5", "zh", "zh", true],
+    ["anthropic", "claude-sonnet-5-5", "en", "en", false],
+    ["anthropic", "claude-sonnet-5-5", "zh", "en", false],
+    ["anthropic", "claude-haiku-5-5", "zh", "zh", false],
+    ["anthropic", "claude-opus-5-5", "en", "en", false],
+    ["kimi", "kimi-k2.6", "en", "en", true],
+    ["kimi", "kimi-k2.6", "zh", "zh", false],
+    ["kimi", "kimi-k2.6", "fr", "fr", false],
+  ] as const)(
+    "%s %s, a sentence in %s, Documents in %s: starts with its search, %s",
+    async (kind, modelId, sentence, documents, starts) => {
+      const calls: ModelCall[] = [];
+      const { claim, plans } = SENTENCES[sentence];
+      const { core } = await setUpWithDocuments(checkingModelOf(plans, calls), [
+        DOCUMENTS[documents],
+      ]);
+      const provider = await core.saveChatProvider({ kind, modelId, apiKey: "sk-test" });
+      if (provider.service) await core.allowDataFlow("checks", provider.service.id);
 
-    const result = await core.checkClaim({
-      claim: chinese ? ZH : SUPPORTED,
-      model: { providerId: provider.id, modelId },
-    });
+      await core.checkClaim({ claim, model: { providerId: provider.id, modelId } });
 
-    expect(result.verdict).toBe("supported");
-    const checks = calls.filter(isCheckRun);
-    expect(checks[0]?.results.map((each) => each.id)).toEqual(starts ? ["primed_1"] : []);
-    const searches = checks.flatMap((call) =>
-      call.results.filter((each) => each.tool === "search_documents"),
-    );
-    expect(new Set(searches.map((each) => each.id)).size).toBe(1);
-  });
+      const checks = calls.filter(isCheckRun);
+      expect(checks.length).toBeGreaterThan(0);
+      expect(checks[0]?.results.map((each) => each.id)).toEqual(starts ? ["primed_1"] : []);
+      const searches = checks.flatMap((call) =>
+        call.results.filter((each) => each.tool === "search_documents"),
+      );
+      expect(new Set(searches.map((each) => each.id)).size).toBe(1);
+    },
+  );
 });
 
 describe("Find support", () => {

@@ -374,7 +374,6 @@ export interface AnswerRequest {
   streamsInput?(tool: Tool): boolean;
   /** Which Tools the Run is offered. Absent: "answer", every Tool. */
   toolSet?: ToolSet;
-  /** Calls a model with Tools starts with, as its own first step (see `RunRequest.primed`). */
   primed?: readonly { tool: string; input: Record<string, unknown> }[];
   /** What a search says of the Answer's language after its Passages (see `DocumentToolsHooks`). */
   languageNote?(): string | null;
