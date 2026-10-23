@@ -201,25 +201,24 @@ function edit(doc: Y.Doc): string | null {
   };
   doc.transact(() => {
     blocks.toArray().some((each, index) => each instanceof Y.XmlElement && visit(each, index));
+    const citationOf = () => {
+      const element = new Y.XmlElement("citation");
+      for (const [key, value] of Object.entries({
+        passageId: "round-trip",
+        documentId: "round-trip",
+        documentName: "Round-trip check source",
+        quote: "A quote.",
+        check: "found",
+      })) {
+        element.setAttribute(key, value);
+      }
+      return element;
+    };
     const paragraph = new Y.XmlElement("paragraph");
-    const citation = new Y.XmlElement("citation");
-    for (const [key, value] of Object.entries({
-      passageId: "round-trip",
-      documentId: "round-trip",
-      documentName: "Round-trip check source",
-      quote: "A quote.",
-      check: "found",
-    })) {
-      citation.setAttribute(key, value);
-    }
-    paragraph.insert(0, [new Y.XmlText(`${ADDED} `), citation]);
+    paragraph.insert(0, [new Y.XmlText(`${ADDED} `), citationOf()]);
     // The same source and place again: a cross-reference to the first one's note.
     const again = new Y.XmlElement("paragraph");
-    const repeat = new Y.XmlElement("citation");
-    for (const [key, value] of Object.entries(citation.getAttributes())) {
-      if (value !== undefined) repeat.setAttribute(key, value);
-    }
-    again.insert(0, [new Y.XmlText(`${ADDED} `), repeat]);
+    again.insert(0, [new Y.XmlText(`${ADDED} `), citationOf()]);
     blocks.insert(after, [paragraph, again]);
   });
   return changed;
@@ -525,6 +524,16 @@ export async function checkListExport(bytes: Uint8Array): Promise<ExportCheck> {
       .join("");
     if (!shown.includes(`${ADDED} [1]`)) {
       return { ok: false, detail: "the Citation isn't [1] in the text", exported: result.data };
+    }
+    if (
+      shown.split(`${ADDED} [1]`).length !== 3 ||
+      shown.slice(shown.lastIndexOf("References")).includes("[2]")
+    ) {
+      return {
+        ok: false,
+        detail: "the same Citation again isn't [1] too, with its source listed once",
+        exported: result.data,
+      };
     }
     if (!shown.includes("References") || !shown.endsWith("Round-trip check source")) {
       return { ok: false, detail: "the list isn't at the end", exported: result.data };
