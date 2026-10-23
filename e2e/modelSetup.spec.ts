@@ -182,8 +182,7 @@ for (const language of ["en", "zh-CN"] as const) {
           await expect(item).toBeInViewport({ ratio: 0.99 });
         }
         const signIn = row.getByTestId("claude-plan-sign-in");
-        // Scrolling only as far as needed can leave an edge a fraction of a pixel out.
-        await signIn.evaluate((button) => button.scrollIntoView({ block: "center" }));
+        await signIn.scrollIntoViewIfNeeded();
         await expect(signIn).toBeInViewport({ ratio: 1 });
         await details.press("Space");
         await expect(details).toHaveAttribute("aria-expanded", "false");
