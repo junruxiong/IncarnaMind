@@ -62,9 +62,11 @@ import {
   isFolder,
   isGone,
   isInside,
+  isLegacyCopy,
   kindOf,
   nameFromPath,
   parentOf,
+  pathIn,
   relativePath,
   type StatIdentity,
   statFile,
@@ -146,9 +148,6 @@ interface Place {
 
 /** At most this many of a Linked folder's files are looked for in a folder offered as its new place. */
 const LOCATE_SAMPLE = 100;
-
-/** The file at `relative` ("/" between names) inside `folder`, on this computer. */
-const pathIn = (folder: string, relative: string) => join(folder, ...relative.split("/"));
 
 interface LinkedFolderRow {
   id: string;
@@ -310,8 +309,6 @@ const insideRange = (prefix: string) => {
 
 export function createLibrary(options: LibraryOptions) {
   const { db, now, folders, hooks } = options;
-  const legacyFolder = join(options.dataDir, "documents");
-  const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
   /** The data folder as given, then with links resolved, as the files added from it are. */
   const dataFolders = [...new Set([options.dataDir, realpathSync(options.dataDir)])];
   const realDataFolder = dataFolders.at(-1) ?? options.dataDir;
@@ -577,7 +574,7 @@ export function createLibrary(options: LibraryOptions) {
       `SELECT path FROM documents
        WHERE deleted_at IS NULL AND linked_folder_id IS NULL AND file_status <> 'unavailable'`,
     )) {
-      if (!isLegacyCopy(path) && !ownerOf(path, linked)) wanted.add(dirname(path));
+      if (!isLegacyCopy(options.dataDir, path) && !ownerOf(path, linked)) wanted.add(dirname(path));
     }
     for (const [folder, watcher] of singleWatchers) {
       if (wanted.has(folder)) continue;
@@ -831,8 +828,8 @@ export function createLibrary(options: LibraryOptions) {
       [contentHash, path],
     );
     for (const row of candidates) {
-      if (single && isLegacyCopy(row.path)) continue;
-      if (row.file_status === "missing" || isLegacyCopy(row.path)) return row;
+      if (single && isLegacyCopy(options.dataDir, row.path)) continue;
+      if (row.file_status === "missing" || isLegacyCopy(options.dataDir, row.path)) return row;
       // Gone, though no event has said so yet: moved before its old path was looked at.
       if (row.file_status === "available" && !(await statFile(row.path).catch(() => true))) {
         return row;
@@ -862,7 +859,9 @@ export function createLibrary(options: LibraryOptions) {
   ): Promise<FileRow | undefined> {
     if (!identity) return undefined;
     const fits = (row: FileRow) =>
-      row.kind === file.kind && !isLegacyCopy(row.path) && (!single || !row.linked_folder_id);
+      row.kind === file.kind &&
+      !isLegacyCopy(options.dataDir, row.path) &&
+      (!single || !row.linked_folder_id);
     let candidates = (await sameFileGone(file.path, identity, removed)).filter(fits);
     const named = candidates.length === 0 ? goneWithName(file, removed).filter(fits) : [];
     if (named.length > 0) candidates = savedAgain(file, identity, named, twins);
@@ -999,7 +998,7 @@ export function createLibrary(options: LibraryOptions) {
     if (name !== row.name) hooks.renamed(row.id);
     if (seen.newVersion || current.status === "queued") hooks.process(row.id);
     // The old layout's copy in the data folder isn't needed once the original is linked.
-    if (isLegacyCopy(row.path)) {
+    if (isLegacyCopy(options.dataDir, row.path)) {
       await rm(row.path, { force: true }).catch((error: unknown) => hooks.reportError(error));
     }
     return true;
