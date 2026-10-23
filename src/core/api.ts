@@ -6279,6 +6279,12 @@ export type DataKind = (typeof dataKinds)[number];
  *   voices included, to the cloud transcription service the User chose in
  *   Settings › Meetings or on the first-meeting sheet (#141). Choosing it
  *   allows it; none in local mode.
+ * - "scan-images": when Organize or the Library's automatic grouping meets a
+ *   PDF with no text after reading and OCR (a scan), up to 3 of its page
+ *   images, to the service of the model that reads them (the chosen model's,
+ *   else the image model's). Not allowed by choosing the provider (#1613):
+ *   the User allows it here, in Settings › Privacy, and without it the scan
+ *   stays unsorted. A model on this computer needs no consent.
  */
 export const dataFlowIds = [
   "chat",
@@ -6297,6 +6303,7 @@ export const dataFlowIds = [
   "web-search",
   "connector-registry",
   "transcription",
+  "scan-images",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
