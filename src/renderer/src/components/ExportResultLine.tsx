@@ -30,8 +30,8 @@ import {
 } from "../outputFiles";
 import { saveFailureReason } from "../problems";
 import { useAppStore } from "../store";
+import { ExportAsks } from "./ExportAsks";
 import { CloseLineIcon, ExportLineIcon } from "./lineIcons";
-import { MarkAiTextLine } from "./MarkAiText";
 import { type ProblemAction, ProblemLine } from "./ProblemLine";
 import { WordExportReview } from "./WordExportReview";
 
@@ -54,8 +54,8 @@ const isPlainSaved = (result: SavedResult, t: ReturnType<typeof useT>): boolean 
  * Open · Show in Finder", with a second line when quotes weren't found ("1 quote not found,
  * marked unverified · Show"), or the problem and its one fix. A plain "Saved" goes by itself
  * after a while, and not back when the Mind is opened again after that; a problem stays until
- * it is dismissed, or the next export replaces it. Before a Word export the User hasn't said
- * how to mark AI text for, it holds that question instead, and Esc or ✕ leaves nothing exported.
+ * it is dismissed, or the next export replaces it. Before a Word or PDF export the User hasn't
+ * answered for, it holds the question instead, and Esc or ✕ leaves nothing exported.
  */
 export function ExportResultLine({ mindId }: { mindId: string }) {
   const t = useT();
@@ -292,8 +292,8 @@ function ResultBody({
           </ProblemLine>
         ) : result.state === "review" ? (
           <WordExportReview result={result} />
-        ) : result.state === "ask-mark" ? (
-          <MarkAiTextLine mindId={result.mindId} />
+        ) : result.state === "ask" ? (
+          <ExportAsks result={result} />
         ) : (
           <ProblemLine testId="export-problem" action={fix()} className="py-1">
             {t("export.failed.save", {

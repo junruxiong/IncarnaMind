@@ -402,9 +402,10 @@ export const MIND_PROPOSAL_REQUESTS_FIELD = "proposalRequests";
 export const MIND_REVISIONS_FIELD = "revisions";
 
 /**
- * What the User's words in the assistant asked for, as `routeRequest` read
- * them: text changed ("make it longer") or written ("write a summary page").
- * Absent: neither, or a revision of the assistant's own waiting changes.
+ * What a change the assistant made in a Mind was (#880, #1559): text changed
+ * ("make it longer") or written ("write a summary page"); such a change applies
+ * at once, with Undo. Absent: one that waits for the User, such as a revision
+ * of the assistant's own changes still waiting.
  */
 export type RequestedChange = "edit" | "write";
 
@@ -1022,6 +1023,7 @@ export type MindProblem =
         | "stopped"
         | "no-table"
         | "uncited"
+        // Only in Answers written before #1559.
         | "new-mind";
       mindId: string;
     }
@@ -1059,6 +1061,8 @@ export interface MindChange {
   mindId: string;
   /** The call made the Mind. */
   created: boolean;
+  /** It wrote into a Mind that held nothing yet: the empty Mind in front (#1559). Absent: it held text, or the call made it. */
+  filled?: true;
   /** The request its Proposals belong to (`ProposalRef.request`). */
   request: string;
   /** How many Proposals it made there. */
@@ -1709,10 +1713,13 @@ export const MAX_CITED_PAGES = 2;
  * - "rows": the rows the quote covers in a sheet (a CSV's has no name), or
  *   the cited block's when it wasn't found.
  * - "section": the heading of the section the quote sits under; null before
- *   the first heading. `notes`: a Word file's footnotes and endnotes.
+ *   the first heading. `start`: the quote is before the first heading of a
+ *   Document that has headings, the only null heading that names a place.
+ *   `notes`: a Word file's footnotes and endnotes.
  *   `comment`: the quote is in a Word comment anchored in that section, by
  *   its author (null when the file names none) (#76). `paragraphs`: in a
- *   web page, the paragraphs of the section the quote covers, from 1 (#261).
+ *   web page, the paragraphs of the section the quote covers, from 1 (#261);
+ *   in a Word file with no headings, its paragraphs, from the start of the file.
  * - "lines": the lines the quote covers, or the cited block's.
  * - "time": in a Transcript, from the start of the cue the quote starts in to
  *   the end of the one it ends in, in ms from the Transcript's start (#136);
@@ -1727,6 +1734,7 @@ export type CitationLocation =
   | {
       kind: "section";
       heading: string | null;
+      start?: boolean;
       notes?: boolean;
       comment?: { author: string | null };
       paragraphs?: { from: number; to: number };
@@ -4780,6 +4788,11 @@ export interface UnsupportedReason {
   covered: string | null;
   /** A short phrase for what they don't ("memory and robustness"); null when none. */
   uncovered: string | null;
+  /**
+   * The Passage the check quoted for what is covered, as a Citation whose quote the
+   * Citation check found; absent when it quoted none.
+   */
+  quoted?: CitationAttributes;
 }
 
 /** A Document version a check read, which it no longer holds for once the Document changes. */
@@ -5301,11 +5314,6 @@ export interface AnswerSteps {
   unbackedClaims?: ClaimedChange[];
   /** Written in advance for the example (`askReadyQuestion`): no model wrote it, and nothing was searched. */
   example?: true;
-  /**
-   * Its model can't call Tools, and the User's words asked to write into a
-   * Mind or change one (`routeRequest`): nothing was written. Absent: neither.
-   */
-  withoutMindTools?: true;
   /** It covered only some of the Documents in scope, and offers the rest. Absent: all of them. */
   coverage?: AnswerCoverage;
   /**
@@ -6521,7 +6529,8 @@ export interface PageSetup {
  * - "text-recognition-model": downloads the built-in text recognition
  *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
- *   once, when a Meeting is first transcribed on this computer (#136).
+ *   once, when a Meeting is first transcribed on this computer (#136), and the
+ *   two models that tell its speakers apart (#138), when one is first recorded.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -7447,6 +7456,8 @@ export interface ExportPreferences {
   "share-page": SharePagePreferences;
   /** How a PDF, an HTML file or Markdown shows someone's changes still waiting (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
+  /** Where Word and PDF put a Numbered Mind's Citations. Absent until the User has chosen; footnotes meanwhile. */
+  citationPlace?: CitationPlace;
 }
 
 export interface SharePagePreferences {
@@ -7461,6 +7472,11 @@ export interface SharePagePreferences {
  * as if every one were accepted. A Word file keeps them as tracked changes.
  */
 export type TheirChangesShown = "shown" | "accepted";
+
+/** Where a Word or PDF export puts the Citations of a Mind in the Numbered style: a footnote each, or a list at the end. */
+export const CITATION_PLACES = ["footnotes", "list"] as const;
+
+export type CitationPlace = (typeof CITATION_PLACES)[number];
 
 /** What a Word file does with the text IncarnaMind wrote: marks it with a comment, or leaves it out. */
 export const MARK_AI_TEXT_CHOICES = ["mark", "leave"] as const;
@@ -7504,6 +7520,12 @@ export interface ExportMindOptions {
   /** PDF, HTML and Markdown: how someone's changes still waiting are shown (#734). Absent: shown. */
   theirChanges?: TheirChangesShown;
   /**
+   * Word and PDF, for a Mind in the Numbered style (another style decides for itself): a footnote
+   * for each Citation, or a list of the Documents cited at the end, with `[1]` markers in the text.
+   * Absent: footnotes.
+   */
+  citationPlace?: CitationPlace;
+  /**
    * Word only: a Citation whose check failed (its quote wasn't found, or its
    * claim is unsupported or contradicted), and a sentence checked
    * Contradicted, Unsupported or Needs re-check, gets a comment by
@@ -7529,6 +7551,10 @@ export interface MindExportPreview {
    * when several cite the same page.
    */
   citations: number;
+  /** The Documents those Citations cite, each counted once. */
+  citedDocuments: number;
+  /** Whether the Mind's citation style is Numbered, the one whose Citations go where the User chooses. */
+  numbered: boolean;
   /**
    * Of those, the ones not shown as "Quote found": the quote wasn't found on
    * the cited pages, or it can't be checked (the pages have no text, or the
@@ -7595,7 +7621,7 @@ export type SavedMindExport =
   /** Saved, with what it holds, so the result line can say how many quotes weren't found. */
   | ({ status: "saved"; file: SavedFile; word: WordExportReport | null } & Omit<
       MindExportPreview,
-      "fileName" | "fromWord" | "theirChanges"
+      "fileName" | "fromWord" | "theirChanges" | "citedDocuments" | "numbered"
     > &
       Pick<MindExport, "sentenceChecks" | "trackedChanges" | "needsDetails">)
   /**
@@ -8068,9 +8094,11 @@ export type TranscriptState =
  * - "download": the speech-to-text model couldn't be downloaded.
  * - "engine": it couldn't start, or stopped again and again.
  * - "save": the WebVTT file couldn't be saved, or no Output location was chosen.
+ * - "speakers": saved, but the speaker pass (#138) couldn't run: its lines keep the labels of
+ *   where they came from. Trying again runs the pass again while the audio is kept.
  */
 export interface TranscriptProblem {
-  kind: "download" | "engine" | "save";
+  kind: "download" | "engine" | "save" | "speakers";
   message: string;
 }
 
@@ -8104,6 +8132,8 @@ export interface MeetingTranscript {
   savedPath: string | null;
   /** Its save took the default Output location, none being chosen yet (`SavedFile.defaulted`). */
   savedDefaulted: boolean;
+  /** Saved, its speakers are being told apart after the call (#138): their labels may still change. */
+  separating: boolean;
   problem: TranscriptProblem | null;
 }
 
