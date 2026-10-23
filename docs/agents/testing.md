@@ -14,7 +14,7 @@ CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_r
 
 `main` must stay green. A pull request merges through GitHub's merge queue once all three pass: the queue builds it together with `main` and the pull requests ahead of it, runs the checks again, and merges only if they pass. Nobody brings a branch up to date by hand. If `main` goes red, fixing it comes before new work.
 
-Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in four shards (`Smoke shard N/4 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`.
+Every night, and by hand from the Actions tab, the Electron smoke test (macOS) in `.github/workflows/nightly.yml` runs the same suite on macOS, in six shards (`Smoke shard N/6 (macOS)`), with the specs only macOS has, such as the traffic lights in the title bar. A failing night is fixed before new work, like a red `main`. The night tries a failed spec once more; one that passes then is a flake, not a pass: the shard lists it in its summary and as a warning, and keeps its traces as `smoke-test-results-macos-N`. A spec listed on two nights in a week is fixed like a failure, from the traces. Pull requests never retry.
 
 ## Before you open a pull request
 
