@@ -157,6 +157,12 @@ export function currentMindIdOf(layout: WindowLayout | null): string | null {
   return mind?.kind === "mind" ? mind.mindId : null;
 }
 
+function tabsOnScreenOf(layout: WindowLayout, merged: boolean): (LayoutTab | null)[] {
+  const focused = focusedGroupOf(layout);
+  const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];
+  return shown.map((group) => activeTabOf(group));
+}
+
 /**
  * The Mind tab the assistant reads and asks in: the focused group's shown
  * tab when it is a Mind, else the first group on screen that shows a Mind
@@ -164,9 +170,15 @@ export function currentMindIdOf(layout: WindowLayout | null): string | null {
  */
 export function assistantTabOf(layout: WindowLayout | null, merged: boolean): LayoutTab | null {
   if (!layout) return null;
-  const focused = focusedGroupOf(layout);
-  const shown = [focused, ...visibleGroupsOf(layout, merged).filter((group) => group !== focused)];
-  return shown.map((group) => activeTabOf(group)).find((tab) => tab?.item.kind === "mind") ?? null;
+  return tabsOnScreenOf(layout, merged).find((tab) => tab?.item.kind === "mind") ?? null;
+}
+
+/** The Documents shown on screen, by id, the focused group's first: what "this document" means (#1334). */
+export function documentsOnScreenOf(layout: WindowLayout | null, merged: boolean): string[] {
+  if (!layout) return [];
+  return tabsOnScreenOf(layout, merged).flatMap((tab) =>
+    tab?.item.kind === "document" ? [tab.item.documentId] : [],
+  );
 }
 
 export function frontTabOfMind(

@@ -7041,6 +7041,50 @@
   .assistant-answer-add:hover > .assistant-answer-action {
     background: var(--color-hover);
   }
+  /* Named, Add to note comes first and its Mind's title gives way, cut with "…", before Copy does. */
+  .assistant-answer-actions[data-named] {
+    flex-wrap: nowrap;
+
+    & > .assistant-answer-add {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    & .assistant-answer-add-main {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+  }
+  .assistant-answer-add-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /*
+   * Under the Answer's own box, in the margin kept for it, so the Answer's size doesn't change and
+   * nothing moves when the tip comes. A later Question takes it back.
+   */
+  .assistant-answer:has(> .assistant-answer-tip-room):not(:has(~ .assistant-question)) {
+    margin-bottom: 28px;
+  }
+  /* A narrow assistant keeps room for the named Add to note: Copy and New Mind drop their words and keep their icons and names. */
+  @container assistant (max-width: 320px) {
+    .assistant-answer .assistant-answer-action--collapses {
+      justify-content: center;
+      width: 24px;
+      padding: 0;
+    }
+    .assistant-answer-action--collapses > .assistant-answer-action-label {
+      display: none;
+    }
+  }
+  .assistant-answer-tip-room {
+    position: absolute;
+    inset: calc(100% + 4px) 0 auto;
+    min-height: 24px;
+  }
+  .assistant-answer:has(~ .assistant-question) > .assistant-answer-tip-room {
+    display: none;
+  }
   .assistant-answer-actions > .assistant-answer-status {
     padding: 0 6px;
     color: var(--color-ink-meta);

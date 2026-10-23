@@ -43,6 +43,15 @@ export interface EverydayCase {
   summary?: true;
   /** What the model's first reply is, in place of its own, so the app must ask again (./reasks). */
   firstReply?: string;
+  /** The Documents open on screen, by name, the focused group's first, as the composer sends them (#1334). */
+  onScreen?: readonly string[];
+  /**
+   * Asked first in a conversation of its own, its Answer put into the Mind with Add to note and
+   * selected: the request is then asked in a new conversation, with that selection (#1334).
+   */
+  selectNote?: string;
+  /** When the assistant asks the User which (ask_user), they choose the option that names this; without it, the Answer stops at its question. */
+  answerAsk?: string;
 }
 
 /** The share of its runs a request must pass: two in three, one in three for a hard one. */
@@ -141,6 +150,202 @@ const SUPPLY_AGREEMENT_ZH = {
   ],
 };
 const OWNER = ["write a summary page", "make the summary section longer", "no citations?"];
+
+const CONTRACT = "Employment contract";
+const CONTRACT_ZH = "劳动合同";
+const NDA = "Mutual NDA";
+const NDA_ZH = "保密协议";
+// A short piece written into the empty Mind it is asked from (#1334).
+const SHORT_HERE = { ...WRITE, into: "asked-from", atMostLines: 5 } as const;
+const ASKS_WHICH = { ...NOTHING, asks: "must" } as const;
+const CALL_NOTES = {
+  title: "Call notes",
+  blocks: ["Notes for Friday's call with Harbour Logistics."],
+};
+const CALL_NOTES_ZH = { title: "通话笔记", blocks: ["周五和海港物流通话前的笔记。"] };
+const HANDOVER = {
+  title: "Handover",
+  blocks: [
+    "From April the new warehouse supervisor takes over the night shift rota, the weekly stock checks and the Friday report to the operations manager, who will go through the first month of reports with them before they run on their own.",
+  ],
+};
+const HANDOVER_ZH = {
+  title: "交接",
+  blocks: [
+    "从四月起，新的仓库主管接手夜班排班、每周盘点和每周五给运营经理的报告，运营经理会和他一起看第一个月的报告，之后再由他独立负责。",
+  ],
+};
+
+/**
+ * What "this" means (#1334) and adding the last Answer to notes (#1734), over the contracts, the
+ * agreements and the minutes: the requests of the re-walk on #1334, with the Documents on screen
+ * the composer now sends.
+ */
+const THIS_DOCUMENT: readonly EverydayCase[] = [
+  {
+    id: "this-contract-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [CONTRACT_ZH],
+    request: "请为这份劳动合同写一个简短的摘要。",
+    expected: { ...SHORT_HERE, documents: [CONTRACT_ZH] },
+  },
+  {
+    id: "this-contract-zh-nothing-open",
+    language: "zh-CN",
+    library: "dated",
+    mind: EMPTY,
+    request: "请为这份劳动合同写一个简短的摘要。",
+    expected: { ...SHORT_HERE, documents: [CONTRACT_ZH], asks: "may" },
+  },
+  {
+    id: "this-contract-en",
+    language: "en",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [CONTRACT],
+    request: "Write a short summary of this employment contract.",
+    expected: { ...SHORT_HERE, documents: [CONTRACT] },
+  },
+  {
+    id: "this-agreement-en",
+    language: "en",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [NDA],
+    request: "Write a short summary of this agreement.",
+    expected: { ...SHORT_HERE, documents: [NDA] },
+  },
+  {
+    id: "this-document-en",
+    language: "en",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [NDA],
+    request: "Write a short summary of this document.",
+    expected: { ...SHORT_HERE, documents: [NDA] },
+  },
+  {
+    id: "this-document-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [NDA_ZH],
+    request: "请为这份文件写一个简短的摘要。",
+    expected: { ...SHORT_HERE, documents: [NDA_ZH] },
+  },
+  {
+    id: "two-open-en",
+    language: "en",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [CONTRACT, NDA],
+    request: "Write a short summary of this document.",
+    expected: ASKS_WHICH,
+  },
+  {
+    id: "two-open-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [CONTRACT_ZH, NDA_ZH],
+    request: "请为这份文件写一个简短的摘要。",
+    expected: ASKS_WHICH,
+  },
+  {
+    id: "two-open-answered-en",
+    language: "en",
+    library: "dated",
+    mind: EMPTY,
+    onScreen: [CONTRACT, NDA],
+    answerAsk: "NDA",
+    request: "Write a short summary of this document.",
+    expected: { ...SHORT_HERE, documents: [NDA], asks: "may" },
+  },
+  {
+    id: "selection-nda-en",
+    language: "en",
+    library: "dated",
+    mind: { title: "Vendor notes", blocks: [] },
+    selectNote: "What does the mutual NDA say about confidentiality?",
+    request: "Summarise this document.",
+    expected: { ...EITHER, documents: [NDA] },
+  },
+  {
+    id: "selection-nda-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: { title: "供应商笔记", blocks: [] },
+    selectNote: "保密协议对保密义务是怎么规定的？",
+    request: "总结一下这份文件。",
+    expected: { ...EITHER, documents: [NDA_ZH] },
+  },
+  {
+    id: "add-to-notes-en",
+    language: "en",
+    library: "dated",
+    mind: CALL_NOTES,
+    before: ["How much notice does the employment contract require?"],
+    request: "Add this to my notes.",
+    expected: { ...EDIT, into: "asked-from", addsAnswer: true },
+  },
+  {
+    id: "add-to-notes-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: CALL_NOTES_ZH,
+    before: ["劳动合同的解除通知期是多久？"],
+    request: "把这个加到我的笔记里。",
+    expected: { ...EDIT, into: "asked-from", addsAnswer: true },
+  },
+  {
+    id: "notes-on-documents-en",
+    language: "en",
+    library: "dated",
+    mind: CALL_NOTES,
+    before: ["How much notice does the employment contract require?"],
+    request: "Write notes on these documents.",
+    expected: { ...WRITE, addsAnswer: false },
+  },
+  {
+    id: "notes-on-documents-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: CALL_NOTES_ZH,
+    before: ["劳动合同的解除通知期是多久？"],
+    request: "为这些文档写笔记。",
+    expected: { ...WRITE, addsAnswer: false },
+  },
+  {
+    id: "shorter-this-en",
+    language: "en",
+    library: "dated",
+    mind: HANDOVER,
+    selectAll: true,
+    onScreen: [CONTRACT],
+    request: "Make this shorter.",
+    expected: { ...EDIT, only: 0, into: "asked-from", documents: [] },
+  },
+  {
+    id: "shorter-this-zh",
+    language: "zh-CN",
+    library: "dated",
+    mind: HANDOVER_ZH,
+    selectAll: true,
+    onScreen: [CONTRACT_ZH],
+    request: "把这段改短一点。",
+    expected: { ...EDIT, only: 0, into: "asked-from", documents: [] },
+  },
+  {
+    id: "this-contract-question-en",
+    language: "en",
+    library: "dated",
+    mind: null,
+    request: "How much notice does this contract require?",
+    expected: { ...ANSWER, asks: "may" },
+  },
+];
 
 export const CASES: readonly EverydayCase[] = [
   // The owner's own conversation, 2026-10-15.
@@ -1293,4 +1498,5 @@ export const CASES: readonly EverydayCase[] = [
       "What were China's foreign exchange reserves at the end of September 2026, and how much did they change since the end of January?",
     expected: { ...ANSWER, figure: /1\.17\d* billion|1,17\d(?:\.\d+)? million/ },
   },
+  ...THIS_DOCUMENT,
 ];

@@ -3973,6 +3973,7 @@ export const en = {
     "Confirm the risk warning before always running a Skill’s scripts.",
   "error.approval.commandOnce": "A command is allowed one call at a time, never always.",
   "error.question.answer": "That isn’t an answer this question takes.",
+  "error.question.onScreen": "IncarnaMind couldn’t tell which Documents are open. Ask again.",
   "error.mindStyle.invalid": "That isn’t a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
     "Usage data stays off: “Keep everything on this computer” is on.",
@@ -5036,6 +5037,9 @@ export const en = {
   "answer.newMind.label": "Put this Answer in a new Mind, or in the empty Mind in front",
   "answer.add.to": "Add to “{mind}” ({shortcut})",
   "answer.add.choose": "Choose a Mind to add it to",
+  "answer.add.named": "Add to “{mind}”",
+  "tip.addAnswer": "Add it, and its Citations come too.",
+  "tip.close": "Close tip",
   "mindChanges.minds": "{count} Minds changed",
   "mindChanges.changed": "Changed {count} paragraphs in “{mind}”",
   "mindChanges.changed.one": "Changed 1 paragraph in “{mind}”",
