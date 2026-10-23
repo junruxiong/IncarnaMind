@@ -618,6 +618,104 @@ describe("A figure the numbers give is calculated (#1444)", () => {
   });
 });
 
+describe('What "this" means and adding the last Answer (#1334, #1734)', () => {
+  const DATED = [
+    { id: "contract", name: "Employment contract" },
+    { id: "nda", name: "Mutual NDA" },
+  ];
+  const added = (input: Record<string, unknown>): AnswerToolCall => ({
+    ...created,
+    tool: "add_to_mind",
+    input,
+    mindChange: { mindId: "m0", created: false, request: "r2", proposals: 2 },
+  });
+  const kinds = (fields: Partial<RequestOutcome>, expected: RequestOutcome["expected"]) =>
+    requestFailures(outcome({ scoped: DATED, citedInMinds: [], ...fields, expected })).map(
+      (failure) => failure.kind,
+    );
+  const earlier = { text: "One month's written notice [^1].", question: "How much notice?" };
+
+  // protects=a short piece about the one Document on screen passes, and one that cites or names the other, or runs past five lines, fails; fails_when=either slips through; no_claim=none beyond protects.
+  test("only the Document meant, and short", () => {
+    const call = added({ content: "# NDA\n\nFive years of confidentiality [^1]." });
+    const expected = {
+      write: true,
+      cite: true,
+      coverAll: false,
+      documents: ["Mutual NDA"],
+      atMostLines: 5,
+    };
+    const given = givenToMindsOf([call], null);
+    expect(
+      kinds(
+        {
+          answer: { text: "Done.", citations: [], toolCalls: [call], steps: null },
+          citedInMinds: ["nda"],
+          givenToMinds: given,
+        },
+        expected,
+      ),
+    ).toEqual([]);
+    const long = added({ content: ["# NDA", "a", "b", "c", "d", "e"].join("\n\n") });
+    expect(
+      kinds(
+        {
+          answer: { text: "Done.", citations: [], toolCalls: [long], steps: null },
+          citedInMinds: ["nda", "contract"],
+          writtenInMinds: ["The Employment contract is separate."],
+          givenToMinds: givenToMindsOf([long], null),
+        },
+        expected,
+      ),
+    ).toEqual(["other-documents", "too-long"]);
+  });
+
+  // protects=with two on screen, an Answer that asked which and stopped there passes, one that didn't ask fails, and asking unasked fails; fails_when=any of them is read the other way; no_claim=none beyond protects.
+  test("asks which, or doesn't", () => {
+    const asking: AnswerToolCall = {
+      ...created,
+      tool: "ask_user",
+      input: {},
+      mindChange: undefined,
+    };
+    const must = { write: false, cite: false, coverAll: false, asks: "must" } as const;
+    const answer = (toolCalls: AnswerToolCall[]) => ({
+      text: "",
+      citations: [],
+      toolCalls,
+      steps: null,
+    });
+    expect(kinds({ answer: answer([asking]), stoppedAtAsk: true }, must)).toEqual([]);
+    expect(kinds({ answer: answer([]) }, must)).toEqual(["no-ask"]);
+    expect(
+      kinds(
+        { answer: answer([asking]), stoppedAtAsk: true },
+        { write: true, cite: true, coverAll: false },
+      ),
+    ).toEqual(["asked"]);
+  });
+
+  // protects="add this to my notes" passes only as a copy of the last Answer, and "write notes on these" fails as only a copy; fails_when=new notes pass as the Answer, or a copy as new notes; no_claim=none beyond protects.
+  test("adds the last Answer, or writes new notes", () => {
+    const copy = added({ answer: true });
+    const fresh = added({ content: "## Notes\n\nThe NDA lasts five years [^1]." });
+    const adds = { write: true, cite: false, coverAll: false, addsAnswer: true } as const;
+    const writes = { write: true, cite: false, coverAll: false, addsAnswer: false } as const;
+    const run = (calls: AnswerToolCall[], expected: RequestOutcome["expected"]) =>
+      kinds(
+        {
+          answer: { text: "Added it.", citations: [], toolCalls: calls, steps: null },
+          givenToMinds: givenToMindsOf(calls, earlier),
+        },
+        expected,
+      );
+    expect(run([copy], adds)).toEqual([]);
+    expect(run([fresh], adds)).toEqual(["not-the-answer"]);
+    expect(run([copy], writes)).toEqual(["only-a-copy"]);
+    expect(run([fresh], writes)).toEqual([]);
+  });
+});
+
 describe("Pass rates", () => {
   // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
   test("per request against its floor, and per language", () => {

@@ -14,6 +14,7 @@ import { watchMindsMadeBy } from "./assistantMinds";
 import { composerKey, useComposer } from "./composer";
 import { core } from "./core";
 import { translateNow } from "./i18n";
+import { documentsOnScreenOf, groupsMerged } from "./layoutSlice";
 import { useModelSetup, waitForModel } from "./modelSetup";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
@@ -155,6 +156,8 @@ export async function askReadyQuestion(): Promise<void> {
   }
 }
 
+const documentsOnScreen = () => documentsOnScreenOf(useAppStore.getState().layout, groupsMerged());
+
 /**
  * Asks a Question from the composer in the assistant's conversation (a
  * new one for a new chat): it shows at once, and its Answer streams in there.
@@ -175,6 +178,7 @@ export async function askInAssistant(
     const result = await core.askInConversation({
       ...input,
       conversationId: useConversations.getState().openId,
+      onScreen: documentsOnScreen(),
     });
     if (
       !result.asked &&
@@ -266,6 +270,7 @@ export async function regenerateAnswer(
         conversationId,
         answerId,
         ...(clearScope && { clearScope }),
+        onScreen: documentsOnScreen(),
       }),
     );
   } catch (error) {
