@@ -27,7 +27,7 @@ import { AnswerActions } from "./AnswerActions";
 import { AnswerSteps, useStepsScopeOf } from "./AnswerSteps";
 import { AnswerText } from "./AnswerText";
 import { AskedLines } from "./AskCall";
-import { NotWrittenLine, WaitingChangesLine } from "./ChangeProblemLines";
+import { UnbackedClaimLine, WaitingChangesLine } from "./ChangeProblemLines";
 import { CommandsCard } from "./CommandsCard";
 import { CoverageLine, WrittenFromLine } from "./CoverageLines";
 import { MindChangesCard, NoMindLine, wantedAMind } from "./MindChangesCard";
@@ -144,7 +144,7 @@ export function AssistantAnswer({
         <NoMindLine question={question} />
       )}
       {!streaming && <WaitingChangesLine answer={answer} />}
-      {!streaming && <NotWrittenLine answer={answer} onRetry={regenerate} />}
+      {!streaming && <UnbackedClaimLine answer={answer} onRetry={regenerate} />}
       {!streaming && scopeEmpty && (
         <ProblemLine
           role="status"

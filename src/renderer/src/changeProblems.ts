@@ -1,14 +1,13 @@
 /**
  * What an Answer in the assistant says under its reply about the changes it
  * couldn't make: changes waiting in a Mind that kept it from changing
- * the text, why nothing was written when its reply claimed a change, and why
- * a call changed nothing. Only data and words.
+ * the text, what wasn't done of a change its reply still claims, and why a
+ * call changed nothing. Only data and words.
  */
 import type { AnswerSteps, AnswerToolCall, ConversationAnswer, MindProblem } from "../../core/api";
 import { changedMinds } from "./changedMinds";
 import type { Translate } from "./objects";
 
-/** A text field of what a Tool call was asked, or "". */
 const field = (call: AnswerToolCall, name: string): string => {
   const value: unknown = call.input?.[name];
   return typeof value === "string" ? value : "";
@@ -37,29 +36,29 @@ export function waitingProblemOf(
 }
 
 /**
- * Why nothing was written, for an Answer whose reply claimed a change none of its calls made
- * (#1559): what the first write call that changed nothing says, else that none ran. Null when
- * there is no such claim, or the Answer changed a Mind after all, which its card says.
+ * The line under a reply that still claims a change none of its calls made, once asked again
+ * (#1559). With no Mind changed, "Nothing was written: {reason}", the reason being what the
+ * first write call that changed nothing says, else that none ran; with one changed, whose card
+ * says how, that not all the reply says was done. Null for no such claim.
  */
-export function notWrittenReason(
+export function unbackedClaimLine(
   t: Translate,
   answer: {
     steps: Pick<AnswerSteps, "unbackedClaims"> | null;
     toolCalls: ConversationAnswer["toolCalls"];
   },
 ): string | null {
-  if ((answer.steps?.unbackedClaims ?? []).length === 0 || changedMinds(answer).length > 0) {
-    return null;
-  }
+  if ((answer.steps?.unbackedClaims ?? []).length === 0) return null;
+  if (changedMinds(answer).length > 0) return t("answer.notAllDone");
   const failed = answer.toolCalls.find(
     (call) => call.source === "minds" && call.status === "failed" && call.tool !== "read_mind",
   );
-  if (!failed) return t("answer.notWritten.noCall");
-  const mind = namedMind(t, failed);
-  return (
-    (failed.mindProblem && problemText(t, failed.mindProblem, mind)) ||
-    t(failed.tool === "create_mind" ? "mindCall.createFailed" : "mindCall.failed", { mind })
-  );
+  const mind = failed ? namedMind(t, failed) : "";
+  const reason = !failed
+    ? t("answer.notWritten.noCall")
+    : (failed.mindProblem && problemText(t, failed.mindProblem, mind)) ||
+      t(failed.tool === "create_mind" ? "mindCall.createFailed" : "mindCall.failed", { mind });
+  return t("answer.notWritten", { reason });
 }
 
 /** Why a call of a Minds' Tool changed nothing, in its row's words; null for one of no kind it knows. */

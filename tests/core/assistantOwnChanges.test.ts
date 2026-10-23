@@ -411,15 +411,15 @@ describe("A reply that claims a change no call made", { timeout: 30_000 }, () =>
     expect(shownWithChanges(client).slice(-2)).toEqual(["+ Risks", "+ The supplier is late."]);
   });
 
-  // protects=a reply that still claims a change no call made goes, its claim recorded for the "Nothing was written" line (#1559); fails_when=it is shown as if the change were made; no_claim=how the line reads.
-  test("still claiming it, the reply goes and its claim is recorded", async () => {
+  // protects=a reply that still claims a change no call made is shown flagged, for the line under it (#1559); fails_when=it is shown as if the change were made, or is lost; no_claim=how the line reads.
+  test("still claiming it, the reply is flagged", async () => {
     const model = scriptedModel((): ScriptedReply => ({ text: CLAIM }));
     const { core, mind } = await setUp(model);
 
     const answer = await askAssistant(core, { text: "add risks", mindId: mind.id });
 
     expect(model.doStreamCalls).toHaveLength(2);
-    expect(answer.text).toBe("");
+    expect(answer.text).toBe(CLAIM);
     expect(answer.steps?.unbackedClaims).toEqual(["added"]);
   });
 
@@ -721,8 +721,8 @@ describe("Asking again for a reply that claims a change", { timeout: 30_000 }, (
     expect(answer.text).toBe("No section was added. Say if you'd like one.");
   });
 
-  // protects=when the request asking again fails, the Answer ends as if it had been asked: the claiming reply goes, its claim recorded; fails_when=the Answer fails, or shows the claim; no_claim=none beyond protects.
-  test("a failed second request: the claiming reply goes, its claim recorded", async () => {
+  // protects=when the request asking again fails, the first reply comes back, flagged; fails_when=the Answer fails, shows nothing, or shows the claim unflagged; no_claim=none beyond protects.
+  test("a failed second request brings back the first reply, flagged", async () => {
     const model = scriptedModel(
       (call): ScriptedReply =>
         call.prompt.includes(ASKED_AGAIN)
@@ -734,12 +734,12 @@ describe("Asking again for a reply that claims a change", { timeout: 30_000 }, (
     const answer = await askAssistant(core, { text: "add risks", mindId: mind.id });
 
     expect(answer.status).toBe("done");
-    expect(answer.text).toBe("");
+    expect(answer.text).toBe(CLAIM);
     expect(answer.steps?.unbackedClaims).toEqual(["added"]);
   });
 
-  // protects=when the provider refuses the request asking again, the claiming reply goes, its claim recorded; fails_when=it reads as a model without Tools, or the claim shows; no_claim=none beyond protects.
-  test("a refused second request: the claiming reply goes, its claim recorded", async () => {
+  // protects=when the provider refuses the request asking again, the first reply comes back, flagged; fails_when=it reads as a model without Tools, or the claim is unflagged; no_claim=none beyond protects.
+  test("a refused second request brings back the first reply, flagged", async () => {
     const model = scriptedModel(
       (call): ScriptedReply =>
         call.prompt.includes(ASKED_AGAIN)
@@ -750,7 +750,7 @@ describe("Asking again for a reply that claims a change", { timeout: 30_000 }, (
 
     const answer = await askAssistant(core, { text: "add risks", mindId: mind.id });
 
-    expect(answer.text).toBe("");
+    expect(answer.text).toBe(CLAIM);
     expect(answer.steps?.unbackedClaims).toEqual(["added"]);
   });
 

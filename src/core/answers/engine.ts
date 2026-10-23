@@ -428,8 +428,6 @@ export interface AnswerRequest {
 export type AnswerEngineEvent =
   /** How the model gives Citations, once its provider has accepted the request. */
   | { type: "support"; support: CitationSupport }
-  /** The Answer is written without Tools: its model can't call them, so it can't change a Mind. */
-  | { type: "without-tools" }
   /**
    * What the Answer is doing now: searching the Documents, the model's turn,
    * or asking the model once more for exact quotes (see ./quoteRetry).
@@ -1125,7 +1123,6 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           }
           if (!unsupported || signal.aborted) return;
         }
-        yield { type: "without-tools" };
         for await (const event of onePass("no-documents")) {
           if (event.type === "unsupported") return;
           yield event;
@@ -1248,7 +1245,6 @@ function createWritingEngine(options: AiSdkAnswerEngineOptions): AnswerEngine {
           if (!announced && event.type !== "failed") {
             announced = true;
             yield { type: "support", support };
-            if (support !== "tools") yield { type: "without-tools" };
           }
           yield event;
         }

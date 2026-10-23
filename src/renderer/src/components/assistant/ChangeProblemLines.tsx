@@ -1,6 +1,6 @@
 import type { ConversationAnswer } from "../../../../core/api";
 import { mindName } from "../../../../shared/naming";
-import { notWrittenReason, waitingProblemOf } from "../../changeProblems";
+import { unbackedClaimLine, waitingProblemOf } from "../../changeProblems";
 import { useT } from "../../i18n";
 import { showWaitingChanges, useWaitingIn } from "../../mindChanges";
 import { useAppStore } from "../../store";
@@ -43,12 +43,11 @@ export function WaitingChangesLine({ answer }: { answer: Pick<ConversationAnswer
 }
 
 /**
- * In place of a reply that claimed a change to a Mind none of its Tool calls
- * made, even once the model was asked again (#1559): "Nothing was written:
- * {reason} · Try again", the reason a write call gave for changing nothing,
- * else that none ran. An Answer that did change a Mind shows its card instead.
+ * Under a reply that still claims a change to a Mind none of its Tool calls
+ * made, once asked again (#1559): what wasn't done (`unbackedClaimLine`), with
+ * Try again. The reply stays above it.
  */
-export function NotWrittenLine({
+export function UnbackedClaimLine({
   answer,
   onRetry,
 }: {
@@ -56,19 +55,19 @@ export function NotWrittenLine({
   onRetry(): void;
 }) {
   const t = useT();
-  const reason = notWrittenReason(t, answer);
-  if (reason === null) return null;
+  const line = unbackedClaimLine(t, answer);
+  if (line === null) return null;
   return (
     <ProblemLine
       role="status"
-      testId="answer-not-written"
+      testId="answer-unbacked-claim"
       action={{
         label: t("answer.notWritten.retry"),
-        testId: "answer-not-written-retry",
+        testId: "answer-unbacked-retry",
         onClick: onRetry,
       }}
     >
-      {t("answer.notWritten", { reason })}
+      {line}
     </ProblemLine>
   );
 }

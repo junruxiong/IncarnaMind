@@ -315,7 +315,7 @@ test("asked to write in a Mind not in view, the assistant opens it in a tab besi
   await expect(editor.getByTestId("applied-count")).toHaveText("Wrote 1 paragraph");
 });
 
-test("a reply that claims a write no call made is asked for once more, then the Answer says nothing was written, with Try again, in English and Chinese", async () => {
+test("a reply that claims a write no call made is asked for once more, then stays with a line under it saying nothing was written, with Try again, in English and Chinese", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -324,11 +324,13 @@ test("a reply that claims a write no call made is asked for once more, then the 
   const editor = window.getByTestId("mind-editor");
 
   const answer = await askInAssistant(window, "Say you added the risks");
-  const line = answer.getByTestId("answer-not-written");
+  const line = answer.getByTestId("answer-unbacked-claim");
   await expect(line).toHaveText(
     "Nothing was written: the assistant didn’t run the write · Try again",
   );
-  await expect(answer.getByTestId("assistant-answer-text")).toHaveCount(0);
+  await expect(answer.getByTestId("assistant-answer-text")).toHaveText(
+    "I've added a risks section to “Q3 review”.",
+  );
   await expect(answer.getByTestId("mind-changes")).toHaveCount(0);
   await expect(editor.locator(":scope > p")).toHaveText(["The quarter was good."]);
   await screenshot(window, "not-written-en");
@@ -336,7 +338,7 @@ test("a reply that claims a write no call made is asked for once more, then the 
   await expect(line).toHaveText("未写入任何内容：助手没有执行写入 · 重试");
   await setLanguage(window, "en");
 
-  await pointAndClick(window, line.getByTestId("answer-not-written-retry"));
+  await pointAndClick(window, line.getByTestId("answer-unbacked-retry"));
   await expect(answer).toHaveAttribute("data-status", "done", { timeout: 15_000 });
   await expect(line).toBeVisible();
 });

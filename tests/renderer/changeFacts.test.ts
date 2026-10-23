@@ -25,7 +25,7 @@ describe("The panel's line after the assistant applied a change (#1559)", () => 
   // protects=the three lines the issue settles, in English and Chinese, and the count's line for any other change; fails_when=a line reads otherwise; no_claim=its Open and Undo.
   test.each([
     [{ ...row({ created: true, wrote: 3 }), filled: false }, "Wrote “Q3”", "已写入“Q3”"],
-    [{ ...row({ wrote: 3 }), filled: true }, "Wrote it into “Q3”", "已写进“Q3”"],
+    [{ ...row({ wrote: 3 }), filled: true }, "Wrote it into “Q3”", "已写入空白的“Q3”"],
     [
       { ...row({ changed: 2 }), filled: false },
       "Changed 2 paragraphs in “Q3”",

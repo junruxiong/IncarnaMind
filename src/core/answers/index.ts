@@ -935,8 +935,6 @@ export function createAnswers(options: AnswersOptions) {
     /** The one request to fix figures, if the engine made it (see ./figureRetry). */
     let figureRetry: FigureRetry | null = null;
     let unbackedClaims: ClaimedChange[] = [];
-    /** Its model couldn't call Tools after all, so a claim in its reply had no Tool to back it. */
-    let withoutTools = false;
     /** What the model calls counted, the cached input tokens too. */
     const usage: AnswerUsage = {
       inputTokens: 0,
@@ -2170,9 +2168,6 @@ export function createAnswers(options: AnswersOptions) {
             unbackedClaims = event.claims;
             writeSoon();
             break;
-          case "without-tools":
-            withoutTools = true;
-            break;
           case "usage":
             usage.inputTokens += event.usage.inputTokens ?? 0;
             usage.outputTokens += event.usage.outputTokens ?? 0;
@@ -2247,10 +2242,6 @@ export function createAnswers(options: AnswersOptions) {
             break;
           case "finished":
             outcome = { status: "done" };
-            // A claim no call made stands even once asked again: the reply goes, and the Answer
-            // says what was written, or that nothing was (#1559). With no Tools, the reply is all
-            // there is to put into a Mind by hand.
-            if (unbackedClaims.length > 0 && !withoutTools) markdown = "";
             break;
           case "failed":
             outcome = { status: "failed", error: event.error };
