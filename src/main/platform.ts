@@ -50,6 +50,7 @@ import { createUtilityProcessCrossEncoder } from "./reranker";
 import { loadOsSandbox } from "./sandbox";
 import { createUtilityProcessTextRecognizer } from "./scanReader";
 import { createFileKeychain, SECRETS_FILE, type SecretCipher } from "./secretsFile";
+import { createUtilityProcessSeparator } from "./speakerSeparator";
 import { createUtilityProcessTranscriber } from "./transcriber";
 import { createPostHogSender } from "./usageData";
 import { systemUserName } from "./userName";
@@ -833,6 +834,8 @@ export function createElectronAdapters(log: Logger): CoreAdapters {
     transcriber: fakeTranscriber
       ? recordingSent(createUtilityProcessTranscriber({ fake: fakeTranscriber }))
       : createUtilityProcessTranscriber(),
+    // The fake engine's audio is tones: there are no voices to tell apart.
+    ...(!fakeTranscriber && { speakerSeparator: createUtilityProcessSeparator() }),
     ...(fakeTranscriber && {
       transcriptionModelSource: testModelDownloads?.speech ?? {
         model: { baseUrl: "http://localhost/", files: [] },

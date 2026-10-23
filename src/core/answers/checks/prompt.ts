@@ -36,8 +36,12 @@ const reply = (language: Language) =>
   [
     "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
+    'Scope: same or wider. "wider" when the sentence names the Passage\'s own party or term in general words, a wider group than the Passage\'s ("tenants" for "the Tenant"); "same" otherwise. The Passage\'s own word for its party ("the Tenant" for "the Tenant"), a name for it or another word for the very same party ("Ms Patel" for "the Tenant") is "same".',
+    'Topic: found or not found. "found" when a Passage is about the sentence\'s own subject and detail, even when it gives another value or only part of it; "not found" when none is, though one may be about a neighbouring topic (rent, for a parking fee).',
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
-    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say and, when part of the sentence is supported, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what the cited Passages state ("the speed comparison"), then "Not covered: " and the topics they don't, as a phrase of the same kind ("memory and robustness").`,
+    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say.`,
+    `Add two last lines, "Covered: " and "Not covered: ", only when a Passage states part of what this sentence itself says: the same subject and the same detail, the sentence saying more than the Passage (a wider group, an added condition, more days). "Covered: " is a short phrase in ${LANGUAGE_NAMES[language]} for that part ("the speed comparison"), "Not covered: " for the rest, as a phrase of the same kind ("memory and robustness"). A Passage about a neighbouring thing (the rent for a service charge, another period, site or person) states no part of the sentence: then write neither line.`,
+    `For supported with "Scope: wider", the same two last lines: "Covered: " and what the Passage states for its own party, then "Not covered: " and the wider group.`,
     "Write nothing else.",
   ].join("\n");
 
@@ -148,16 +152,28 @@ export const EVIDENCE_INSTRUCTIONS = [
   'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. If no Passage decides it, reply {"passage": null}.',
 ].join("\n");
 
-/** The request for that record: the sentence, the verdict, and the Passages the check read. */
+/**
+ * What a model is asked once more when it found a sentence unsupported and named a part the
+ * Passages do state, but recorded no Passage for it.
+ */
+export const COVERED_EVIDENCE_INSTRUCTIONS = [
+  "You checked a sentence the User wrote against Passages from the User's Documents, found it unsupported, and named the part of it that a Passage does state.",
+  `Give the Passage that states that part now: the Passage's id, where the quote is as the Passage names it, and ${QUOTE}.`,
+  'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. A Passage about a neighbouring thing doesn\'t state it: if no Passage states it, reply {"passage": null}.',
+].join("\n");
+
+/** The request for that record: the sentence, the verdict, the part covered if asked for, and the Passages the check read. */
 export function evidencePrompt(input: {
   claim: string;
   verdict: ClaimVerdict;
   says: string | null;
+  covered?: string | null;
   passages: readonly { id: string; text: string }[];
 }): string {
   return [
     `<sentence>\n${input.claim.trim()}\n</sentence>`,
     `Your verdict: ${input.verdict}${input.says ? `. ${input.says}` : ""}`,
+    ...(input.covered ? [`Covered: ${input.covered}`] : []),
     "",
     "The Passages:",
     ...input.passages.map((each) => `<passage id="${each.id}">\n${each.text}\n</passage>`),
@@ -236,6 +252,10 @@ export interface ReadVerdict {
   says: string | null;
   covered: string | null;
   uncovered: string | null;
+  /** "wider": the sentence names the Passage's own party in general words; null when the reply doesn't say. */
+  scope: "same" | "wider" | null;
+  /** "not found": no Passage is about the sentence's own subject and detail; null when the reply doesn't say. */
+  topic: "found" | "not found" | null;
 }
 
 const MARKERS = /\s*\[[\^=]?\d{1,4}\]/g;
@@ -248,6 +268,9 @@ const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'�
 /** "Covered: …" and "Not covered: …", in bold or quoted too, on lines of their own. */
 const COVERED = /^[\s>*_#`"'“”-]*(?:covered|已涵盖|涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
 const NOT_COVERED = /^[\s>*_#`"'“”-]*(?:not covered|uncovered|未涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
+/** "Scope: wider" and "Topic: not found", in bold or quoted too, on lines of their own. */
+const SCOPE = /^[\s>*_#`"'“”-]*(?:scope|范围)[\s*_]*[:：][\s*_"'“”`]*(same|wider)\b/i;
+const TOPIC = /^[\s>*_#`"'“”-]*(?:topic|主题)[\s*_]*[:：][\s*_"'“”`]*(found|not found)\b/i;
 const MAX_PHRASE = 120;
 const MAX_REASON = 300;
 const PHRASE_EDGES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`.。;；:：,，]+$/gu;
@@ -262,7 +285,7 @@ function jsonVerdict(reply: string): ReadVerdict | null {
   try {
     const value: unknown = JSON.parse(reply.slice(start, end + 1));
     if (typeof value !== "object" || value === null) return null;
-    const { verdict, says, covered, uncovered } = value as Record<string, unknown>;
+    const { verdict, says, covered, uncovered, scope, topic } = value as Record<string, unknown>;
     const known = VERDICTS.find((each) => each === String(verdict).toLowerCase());
     if (!known) return null;
     return {
@@ -270,6 +293,8 @@ function jsonVerdict(reply: string): ReadVerdict | null {
       says: typeof says === "string" ? cleanSays(says) : null,
       covered: typeof covered === "string" ? phraseOf(covered) : null,
       uncovered: typeof uncovered === "string" ? phraseOf(uncovered) : null,
+      scope: scopeOf(typeof scope === "string" ? `Scope: ${scope}` : undefined),
+      topic: topicOf(typeof topic === "string" ? `Topic: ${topic}` : undefined),
     };
   } catch {
     return null;
@@ -285,6 +310,16 @@ const phraseOf = (text: string | undefined): string | null => {
   if ((text?.length ?? 0) > MAX_PHRASE * 4) return null;
   const phrase = (text ?? "").replace(MARKERS, "").replace(PHRASE_EDGES, "").replace(/\s+/gu, " ");
   return phrase === "" || phrase.length > MAX_PHRASE || NO_PHRASE.test(phrase) ? null : phrase;
+};
+
+const scopeOf = (line: string | undefined): ReadVerdict["scope"] => {
+  const word = line === undefined ? undefined : SCOPE.exec(line)?.[1]?.toLowerCase();
+  return word === "same" || word === "wider" ? word : null;
+};
+
+const topicOf = (line: string | undefined): ReadVerdict["topic"] => {
+  const words = line === undefined ? undefined : TOPIC.exec(line)?.[1]?.toLowerCase();
+  return words === "found" || words === "not found" ? words : null;
 };
 
 /** An unsupported verdict's reason is one sentence: a longer one isn't kept. */
@@ -322,12 +357,17 @@ export function readVerdict(reply: string): ReadVerdict | null {
     const after = lines.slice(at + 1);
     const phrase = (label: RegExp) =>
       phraseOf(after.map((each) => label.exec(each)?.[1]).find(Boolean));
-    const next = after.find((each) => !COVERED.test(each) && !NOT_COVERED.test(each));
+    const next = after.find(
+      (each) =>
+        !COVERED.test(each) && !NOT_COVERED.test(each) && !SCOPE.test(each) && !TOPIC.test(each),
+    );
     return withShortReason({
       verdict,
       says: cleanSays(rest || (next ?? "")),
       covered: phrase(COVERED),
       uncovered: phrase(NOT_COVERED),
+      scope: scopeOf(after.find((each) => SCOPE.test(each))),
+      topic: topicOf(after.find((each) => TOPIC.test(each))),
     });
   }
   return withShortReason(jsonVerdict(text));
