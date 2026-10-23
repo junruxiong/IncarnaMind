@@ -466,8 +466,9 @@ export interface AnswersOptions {
     thinking: "off" | "summary" | "answer" | "careful",
   ): Promise<PreparedChatModel>;
   /**
-   * The quick-tasks model for an Answer asked with `answers`, prepared as
-   * `answers` was: for the calls that don't write the Answer.
+   * The model for the calls that don't write the Answer, asked to skip thinking:
+   * the quick-tasks model for an Answer asked with `answers`, which may be
+   * `answers` itself.
    */
   prepareQuickModel?(
     answers: ChatModelChoice,

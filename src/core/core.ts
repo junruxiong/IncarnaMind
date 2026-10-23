@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
-import { optionsFor } from "../shared/exportOptions";
+import { hasCitationPlace, optionsFor } from "../shared/exportOptions";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import { holdsOnlyItsTitle } from "../shared/madeMind";
@@ -148,6 +148,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports, type ExportsDependencies } from "./exports";
+import { citationPlaceQuestion } from "./exports/citationPlaceQuestion";
 import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { markAiTextQuestion } from "./exports/markAiTextQuestion";
@@ -176,6 +177,7 @@ import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createMeetingFill } from "./meetings/fill";
 import { createCaptureHealth } from "./meetings/health";
+import { createSpeakerPass } from "./meetings/speakerPass";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -262,6 +264,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createSpeakerModel } from "./transcription/speakerModel";
 import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
@@ -1337,6 +1340,26 @@ export function createCore(adapters: CoreAdapters): Core {
         }
       }
       if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
+      if (
+        hasCitationPlace(format) &&
+        settings.get().user.exportOptions.citationPlace === undefined
+      ) {
+        const { numbered, citations, citedDocuments } = mindExports.preview(mindId, { format });
+        if (numbered && citations > 0 && marking.asking) {
+          const ask = citationPlaceQuestion(settings.get().language, {
+            citations,
+            documents: citedDocuments,
+          });
+          const choice = ask.choiceOf(await marking.asking(ask.question));
+          if (choice === null)
+            throw new InvalidInputError({ key: "error.commands.citationPlaceClosed" });
+          const preferences = settings.get().user.exportOptions;
+          await api?.updateSettings({
+            user: { exportOptions: { ...preferences, citationPlace: choice } },
+          });
+          options = { ...options, citationPlace: choice };
+        }
+      }
       const { fileName, data, word } = await mindExports.export(mindId, options);
       // The window shows first what a Word file can't keep (#105); the assistant can't.
       if (word && word.notKept.length > 0) {
@@ -1372,12 +1395,12 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     async prepareQuickModel(answers, prepared) {
       const quick = chat.quickTasksModel(answers);
-      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
-        return prepared.model;
       // An Answer on this computer keeps its small calls there too.
-      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
-        return prepared.model;
-      return (await chat.prepareModel(quick, "chat", "off")).model;
+      const stayHere =
+        !quick ||
+        (prepared.provider.service === null && chat.describeModel(quick)?.service !== null);
+      // Even the Answers model is prepared again: as the Answer's it thinks, and that fills a small call.
+      return (await chat.prepareModel(stayHere ? answers : quick, "chat", "off")).model;
     },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -2889,6 +2912,22 @@ export function createCore(adapters: CoreAdapters): Core {
       return transcriptionModel.vadFile();
     },
   });
+  const speakerModel =
+    adapters.speakerSeparator &&
+    createSpeakerModel({
+      dataDir,
+      ...(adapters.speakerModelSource && { source: adapters.speakerModelSource }),
+      log: adapters.log ?? silentLogger,
+    });
+  const speakerPass =
+    adapters.speakerSeparator &&
+    speakerModel &&
+    createSpeakerPass({
+      separator: adapters.speakerSeparator,
+      model: speakerModel,
+      partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      log: adapters.log ?? silentLogger,
+    });
   const transcripts =
     transcriber &&
     transcriptionModel &&
@@ -2897,6 +2936,7 @@ export function createCore(adapters: CoreAdapters): Core {
       transcriber,
       model: transcriptionModel,
       cloud: cloudTranscription,
+      ...(speakerPass && { speakers: speakerPass }),
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -4199,6 +4239,8 @@ export function createCore(adapters: CoreAdapters): Core {
         fileName,
         fromWord: _,
         theirChanges: _waiting,
+        citedDocuments: _cited,
+        numbered: _numbered,
         data,
         word,
         ...counts
@@ -4393,6 +4435,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
       transcripts?.close();
+      speakerModel?.close();
       // Notes being filled in are left as they were: the next start says so.
       meetingFill.close();
       // Outside agents can't reach the core while it closes.

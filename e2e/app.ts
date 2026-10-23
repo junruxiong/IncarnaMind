@@ -181,6 +181,11 @@ export interface LaunchOptions {
    * with it, the app is left asking.
    */
   askToMarkAiText?: boolean;
+  /**
+   * The first Word or PDF export of a Mind with Citations asks where they go. Without this, a
+   * launch answers it "Footnotes" if nobody has; with it, the app is left asking.
+   */
+  askCitationPlace?: boolean;
 }
 
 /**
@@ -247,6 +252,7 @@ export async function launchApp(
     sandboxed = false,
     sandboxNotice,
     askToMarkAiText = false,
+    askCitationPlace = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -347,18 +353,34 @@ export async function launchApp(
       message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
     });
   }
-  if (!askToMarkAiText) await answerMarkAiText(window);
+  await answerExportQuestions(window, !askToMarkAiText, !askCitationPlace);
   return { app, window };
 }
 
-async function answerMarkAiText(window: Page): Promise<void> {
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { exportOptions } = (await bridge.getSettings()).user;
-    if (exportOptions.docx.markAiText !== null) return;
-    const docx = { ...exportOptions.docx, markAiText: "mark" as const };
-    await bridge.updateSettings({ user: { exportOptions: { ...exportOptions, docx } } });
-  });
+async function answerExportQuestions(
+  window: Page,
+  markAiText: boolean,
+  citationPlace: boolean,
+): Promise<void> {
+  await window.evaluate(
+    async ([mark, place]) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const { exportOptions } = (await bridge.getSettings()).user;
+      const docx =
+        mark && exportOptions.docx.markAiText === null
+          ? { ...exportOptions.docx, markAiText: "mark" as const }
+          : exportOptions.docx;
+      const citations =
+        place && exportOptions.citationPlace === undefined
+          ? { citationPlace: "footnotes" as const }
+          : {};
+      if (docx === exportOptions.docx && Object.keys(citations).length === 0) return;
+      await bridge.updateSettings({
+        user: { exportOptions: { ...exportOptions, docx, ...citations } },
+      });
+    },
+    [markAiText, citationPlace],
+  );
 }
 
 /**
@@ -924,6 +946,14 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
   await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
+}
+
+export async function examplesMenu(window: Page): Promise<Locator> {
+  const row = window.getByTestId("not-in-a-folder");
+  await pointAndClick(window, row.getByTestId("examples-menu"));
+  const menu = row.getByTestId("examples-actions");
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
 /**
