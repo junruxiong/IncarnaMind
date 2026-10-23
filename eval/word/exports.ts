@@ -74,7 +74,8 @@ export interface ExportCheck {
 }
 
 /** A Mind as the import writes one: the Blocks, where each came from, and the file. */
-async function mindOf(bytes: Uint8Array): Promise<Y.Doc> {
+/** A Word file read into a Mind's Yjs document as an import makes it, without the core. */
+export async function mindOf(bytes: Uint8Array): Promise<Y.Doc> {
   const pkg = await openWordPackage(bytes);
   const structure = await readWordStructure(pkg, await reviewOf(pkg));
   const doc = new Y.Doc();
