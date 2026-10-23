@@ -186,6 +186,12 @@ export interface LaunchOptions {
    */
   sandboxNotice?: "switch" | "environment" | "on";
   /**
+   * The search, text recognition and speech engines are the real ones instead of the fake ones, on
+   * the models already in the data folder (a test build reaches no model host): for a recording
+   * of the app as the User runs it.
+   */
+  realEngines?: boolean;
+  /**
    * The first Word export asks whether to mark the text IncarnaMind wrote. Without this, a launch
    * answers it "Mark it" if nobody has, so a test that exports to Word is not stopped by it;
    * with it, the app is left asking.
@@ -262,6 +268,7 @@ export async function launchApp(
     contradictionWatchDelayMs,
     sandboxed = false,
     sandboxNotice,
+    realEngines = false,
     askToMarkAiText = false,
     askCitationPlace = false,
   }: LaunchOptions = {},
@@ -339,8 +346,10 @@ export async function launchApp(
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
-  env.INCARNAMIND_TEST_EMBEDDER = "fake";
-  env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  if (!realEngines) {
+    env.INCARNAMIND_TEST_EMBEDDER = "fake";
+    env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  }
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({
