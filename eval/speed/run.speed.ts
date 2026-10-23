@@ -12,13 +12,14 @@
  * INCARNAMIND_EVAL_SPEED_RUNS: how many times each flow runs per model and language (default: 3).
  * INCARNAMIND_EVAL_SPEED_STOP_USD: stops before the next run once this much is spent (default: 12).
  */
-import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { cpus, loadavg, totalmem } from "node:os";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { cpus, loadavg, tmpdir, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
 import { type Core, chatProviderKinds, type SaveChatProviderInput } from "../../src/core";
 import { createOnnxTextRecognizer } from "../../src/core/documents/scan/onnx";
 import { queryDatabase } from "../../tests/helpers/core";
+import { buildPdf } from "../../tests/helpers/pdf";
 import { reports } from "../everyday/asking";
 import { readConfig } from "../lib/config";
 import { createWorkerEmbedder } from "../lib/embedder";
@@ -61,16 +62,27 @@ function modelsAsked(): SaveChatProviderInput[] {
   });
 }
 
-// The scan set's pictures, read as Documents, for the local text recognition step's times.
+// The scan set's pictures as one scanned PDF, read as a Document, for the text recognition step.
 async function readScans(cacheDir: string, log: ReturnType<typeof createLog>) {
   const folder = join(ROOT, "tests", "fixtures", "scans");
   const pictures = (await readdir(folder)).filter((name) => name.endsWith(".jpg"));
+  const scanned = join(await mkdtemp(join(tmpdir(), "incarnamind-speed-scans-")), "Scans.pdf");
+  await writeFile(
+    scanned,
+    buildPdf(
+      await Promise.all(
+        pictures.map(async (name) => ({
+          scan: new Uint8Array(await readFile(join(folder, name))),
+        })),
+      ),
+    ),
+  );
   const library = await openLibrary({
     name: "speed-scans",
     embedder: createWorkerEmbedder(),
     modelCache: join(cacheDir, "models"),
     textRecognizer: createOnnxTextRecognizer(),
-    documents: pictures.map((name) => ({ key: name, path: join(folder, name) })),
+    documents: [{ key: "scans", path: scanned }],
     embeddings: false,
     keep: false,
     log,
@@ -199,7 +211,7 @@ test("the speed of every AI flow, on each model and language", async () => {
     "",
     "## Reading scans on this computer",
     "",
-    `The scan set's ${scanned.length} pictures (tests/fixtures/scans), added as Documents and read with the built-in text recognition model, as the app reads them.`,
+    "The scan set's pictures (tests/fixtures/scans), as one scanned PDF, read with the built-in text recognition model as the app reads them.",
     "",
     requestTable([
       { flow: "scans", model: "local", language: "en", signs: null, error: null, records: scanned },
