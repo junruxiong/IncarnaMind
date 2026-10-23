@@ -5,9 +5,18 @@
  * however the Documents arrive. Through the core's public interface, with
  * scripted models standing in for every provider.
  */
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { APICallError } from "ai";
 import { describe, expect, test, vi } from "vitest";
-import type { Core, SaveChatProviderInput } from "../../src/core";
-import { createTempDataFolder, startCore, turnOnAutomaticTagging } from "../helpers/core";
+import { type Core, DATABASE_FILE, type SaveChatProviderInput } from "../../src/core";
+import { openDatabase } from "../../src/core/storage";
+import {
+  createMemoryKeychain,
+  createTempDataFolder,
+  startCore,
+  turnOnAutomaticTagging,
+} from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { classifierModel } from "../helpers/library";
 import { scriptedModels } from "../helpers/models";
@@ -187,8 +196,95 @@ describe("The switch for tagging and sorting new Documents", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
-  test("the one-time line about it going off is kept until it is closed", async () => {
-    const { core } = await start();
-    expect((await core.getLibrary()).automaticOffNotice).toBe(false);
+  test("a re-tag the User started that failed keeps its failure and its Retry with the switch off", async () => {
+    const { core, tagging } = await start();
+    await core.saveChatProvider(ANTHROPIC);
+    await turnOnAutomaticTagging(core);
+    await core.saveLibrarySettings({ ...(await core.getLibrary()).settings, automatic: false });
+    const document = await add(core, "Attention.md");
+    tagging.fail(
+      new APICallError({
+        message: "The model does not exist",
+        url: "https://api.example.com/v1/messages",
+        requestBodyValues: {},
+        statusCode: 404,
+        isRetryable: false,
+      }),
+    );
+    await core.retagDocuments([document.id]);
+    await waitForTagging(core, [document.id], (each) => each.tagging === "failed");
+
+    await core.saveLibrarySettings((await core.getLibrary()).settings);
+
+    const [after] = (await core.listDocuments()).filter((each) => each.id === document.id);
+    expect(after).toMatchObject({ tagging: "failed", taggingError: { kind: "model" } });
+  });
+});
+
+describe("The one-time line that it went off, after the migration (#1617)", () => {
+  const AT = "2026-10-22T09:00:00.000Z";
+
+  /** A data folder as migration 103 leaves it for an install with Documents: the question "pending". */
+  async function afterMigration(setup: (core: Core) => Promise<void>) {
+    const dataDir = await createTempDataFolder();
+    const keychain = createMemoryKeychain();
+    const models = scriptedModels(taggingModel(["Paper"]).model);
+    const first = startCore(dataDir, { keychain, createChatModel: models.createChatModel });
+    await setup(first);
+    first.close();
+    const db = openDatabase(join(dataDir, DATABASE_FILE));
+    try {
+      db.run(
+        `INSERT INTO device_settings (id, key, value, created_at, updated_at)
+         VALUES (?, 'libraryAutomaticOffNotice', '"pending"', ?, ?)`,
+        [randomUUID(), AT, AT],
+      );
+    } finally {
+      db.close();
+    }
+    return startCore(dataDir, { keychain, createChatModel: models.createChatModel });
+  }
+  const noticeOf = async (core: Core) => (await core.getLibrary()).automaticOffNotice;
+
+  test("with a cloud model it is said, and kept until it is closed", async () => {
+    const core = await afterMigration(
+      async (each) => void (await each.saveChatProvider(ANTHROPIC)),
+    );
+
+    expect(await noticeOf(core)).toBe(true);
+    expect(await noticeOf(core)).toBe(true);
+    await core.dismissAutomaticOffNotice();
+    expect(await noticeOf(core)).toBe(false);
+  });
+
+  test("with a model on this computer nothing went off, and a cloud model chosen later doesn't bring it back", async () => {
+    const core = await afterMigration(async (each) => void (await each.saveChatProvider(LOCAL)));
+
+    expect(await noticeOf(core)).toBe(false);
+    await core.saveChatProvider(ANTHROPIC);
+    expect(await noticeOf(core)).toBe(false);
+  });
+
+  test("a saved Jev key with a model on this computer is said too: its Documents went to Jev", async () => {
+    const core = await afterMigration(async (each) => {
+      await each.saveChatProvider(LOCAL);
+      await each.saveJevSettings({ apiKey: "jev-test" });
+    });
+
+    expect(await switchOf(core)).toBe(false);
+    expect(await noticeOf(core)).toBe(true);
+  });
+
+  test("turning it on in Settings closes it, and turning it off again doesn't bring it back", async () => {
+    const core = await afterMigration(
+      async (each) => void (await each.saveChatProvider(ANTHROPIC)),
+    );
+    expect(await noticeOf(core)).toBe(true);
+
+    await turnOnAutomaticTagging(core);
+    expect(await noticeOf(core)).toBe(false);
+    await core.saveLibrarySettings({ ...(await core.getLibrary()).settings, automatic: false });
+
+    expect(await noticeOf(core)).toBe(false);
   });
 });

@@ -400,13 +400,19 @@ export function createTagger(options: TaggerOptions) {
         statuses,
       )
       .filter((row) => !organized(row.id));
-    // Off, nothing goes by itself: only what the User asked for is tagged.
-    const left = automatic() ? [] : found.filter((row) => !asked.has(row.id));
+    // Off, nothing goes by itself: only what the User asked for is tagged. A Document that
+    // failed or was stopped keeps its line and its Retry; only one waiting to go by itself is off.
+    const held = automatic() ? [] : found.filter((row) => !asked.has(row.id));
     setStates(
-      left.map((row) => row.id),
+      held
+        .filter(
+          (row) =>
+            row.tagging_status === "pending" || row.tagging_status === "waiting-for-provider",
+        )
+        .map((row) => row.id),
       "off",
     );
-    const rows = found.filter((row) => !left.includes(row));
+    const rows = found.filter((row) => !held.includes(row));
     const stopped = rows.filter((row) => options.stopped(row.id) && !asked.has(row.id));
     setStates(
       stopped.map((row) => row.id),
