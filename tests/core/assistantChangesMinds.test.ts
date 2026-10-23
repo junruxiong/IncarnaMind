@@ -96,6 +96,42 @@ describe("The assistant changes Minds as Proposals", { timeout: 30_000 }, () => 
     expect(lastResult(model)).toMatch(/^Proposed 2 changes in “Q3 review” \(from 11 to 9 words\)/);
   });
 
+  // protects=edit_mind's rewrite is asked of the Answer's model with thinking off, as its quick calls are: a rewrite as asked needs no reasoning first, and Kimi K2.6 thought for a minute on one (#1635); fails_when=the rewrite goes to the Answer's thinking model; no_claim=how well a real model rewrites without thinking, which the everyday evaluation measures.
+  test("edit_mind's rewrite is asked of the Answer's model with thinking off", async () => {
+    const answering = toolModel(
+      { tool: "edit_mind", input: { instruction: "Shorten it" } },
+      "Shortened the summary.",
+    );
+    const quick = scriptedModel(
+      (call: ModelCall): ScriptedReply => shortened(call) ?? { text: "" },
+    );
+    const core = startCore(await createTempDataFolder(), {
+      createChatModel: (spec) => (spec.thinking === "off" ? quick : answering),
+    });
+    // A model on a service: Ollama's thinking is its own settings', not the request's.
+    const saved = await core.saveChatProvider({
+      kind: "anthropic",
+      modelId: "claude-haiku-5-5",
+      apiKey: "sk-ant-test",
+    });
+    if (saved.service) await core.allowDataFlow("chat", saved.service.id);
+    const mind = await core.createMind({ title: "Q3 review" });
+    const client = await connectToMind(core, mind.id);
+    writeMind(client, [note("The quarter was very good, and sales were really strong.")]);
+    await client.settled();
+
+    await ask(core, { text: "Shorten the summary", mindId: mind.id });
+
+    await client.settled();
+    expect(shownWithChanges(client)).toEqual([
+      "The quarter was [-very -]good, and sales were [-really -]strong.",
+    ]);
+    const rewrites = (model: MockLanguageModelV4) =>
+      model.doStreamCalls.filter((call) => JSON.stringify(call.prompt).includes("<passage>"));
+    expect(rewrites(quick)).toHaveLength(1);
+    expect(rewrites(answering)).toHaveLength(0);
+  });
+
   // protects=a Question is answered and changes nothing, though the Minds' Tools are offered; fails_when=the Mind or its Checkpoints change; no_claim=that a real model never edits on a Question.
   test("a Question is answered and changes no Mind", async () => {
     const model = toolModel(null, "The quarter was good.");

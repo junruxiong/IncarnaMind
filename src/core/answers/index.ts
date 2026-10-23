@@ -1848,11 +1848,22 @@ export function createAnswers(options: AnswersOptions) {
           ? { change: route.kind, newMind: route.newMind }
           : null;
       let documentNames: string[] | undefined;
+      let rewriting: Promise<PreparedChatModel> | undefined;
       const mindsTools =
         minds && input.assistant
           ? mindTools({
               minds,
               prepared,
+              rewriting: () => {
+                rewriting ??= options.prepareModel(model, "off").catch((error: unknown) => {
+                  console.warn(
+                    `edit_mind's rewrite couldn't be asked of ${prepared.provider.kind}/${prepared.modelId} without thinking, so it thinks:`,
+                    error,
+                  );
+                  return prepared;
+                });
+                return rewriting;
+              },
               requested,
               paragraph: paragraphAsked(context.question),
               ...input.assistant,
