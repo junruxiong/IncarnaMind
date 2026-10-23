@@ -146,6 +146,41 @@ describe("Choosing a service is the consent (ADR-0022)", () => {
     expect(await core.listDataFlows()).toEqual([]);
   });
 
+  test("in Local mode a connection test to a cloud provider sends nothing, and says so", async () => {
+    const { core, models } = await startWithModel();
+    await core.setLocalOnly(true);
+    const requests = countRequests(core);
+
+    const result = await core.testChatConnection(OPENAI);
+
+    expect(result).toMatchObject({ ok: false, error: { kind: "local-mode" } });
+    expect(models.model.doGenerateCalls).toHaveLength(0);
+    expect(requests).toEqual([]);
+
+    // The key is stored as it is: the first use after Local mode is off tests it.
+    const saved = await core.saveChatProvider(OPENAI);
+    expect(saved.hasApiKey).toBe(true);
+    expect(models.model.doGenerateCalls).toHaveLength(0);
+
+    await core.setLocalOnly(false);
+    expect(await core.testChatConnection(OPENAI)).toEqual({ ok: true });
+    expect(models.model.doGenerateCalls).toHaveLength(1);
+  });
+
+  test("in Local mode a server on this computer is still tested", async () => {
+    const { core, models } = await startWithModel();
+    await core.setLocalOnly(true);
+
+    const result = await core.testChatConnection({
+      kind: "openai-compatible",
+      baseUrl: "http://localhost:1234/v1",
+      modelId: "local-model",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(models.model.doGenerateCalls).toHaveLength(1);
+  });
+
   test("choosing the provider again is a new choice: it replaces an earlier decline, and nothing asks", async () => {
     const { core, models } = await startWithModel();
     await saveProviderUnasked(core, OPENAI);

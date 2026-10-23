@@ -1957,6 +1957,7 @@ export const en = {
   "providers.test.network": "Couldn’t reach the server. Check its URL and your connection.",
   "providers.test.provider": "The provider returned an error.",
   "providers.test.local-mode": "Not sent: “Keep everything on this computer” is on.",
+  "providers.key.notChecked": "Saved, not checked: nothing was sent to {provider}.",
   "providers.test.consent-revoked": "Not sent: you turned off sending to this service.",
   "providers.test.consent-declined":
     "Nothing was sent, because you chose not to send data to this service.",

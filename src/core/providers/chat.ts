@@ -1199,20 +1199,23 @@ export function createChat(options: {
             modelId,
           ),
         });
-        const model = meter.wrap(
-          watchedPlan(
-            server.kind,
-            createModel(await specFor(server, apiKey, modelId, profile)),
-            modelId,
+        const model = gate.testModel(
+          meter.wrap(
+            watchedPlan(
+              server.kind,
+              createModel(await specFor(server, apiKey, modelId, profile)),
+              modelId,
+            ),
+            meteredModel(
+              { kind: server.kind, service },
+              rowByServer(server)?.id ?? server.catalogId ?? server.kind,
+              modelId,
+              "test",
+              facts,
+              profile,
+            ),
           ),
-          meteredModel(
-            { kind: server.kind, service },
-            rowByServer(server)?.id ?? server.catalogId ?? server.kind,
-            modelId,
-            "test",
-            facts,
-            profile,
-          ),
+          service,
         );
         await generateText({
           model,

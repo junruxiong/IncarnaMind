@@ -134,7 +134,8 @@ export function ProviderForm({
 }: {
   /** Saved providers, to tell the User when a key is already stored. */
   providers: readonly ChatProvider[];
-  onSaved(provider: ChatProvider): void;
+  /** `keyNotChecked`: Local mode stopped the key's test, so it was saved unchecked. */
+  onSaved(provider: ChatProvider, keyNotChecked?: boolean): void;
   /** Lists every provider, the best-effort ones under "More…", as Settings does; without it, as first run does: the first-class ones and those the catalog marks `firstRun`. */
   withMoreProviders?: boolean;
   /** The provider chosen when the form opens: the one the User came from. DeepSeek in Chinese, else Anthropic. */
@@ -170,6 +171,7 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
+  const [notChecked, setNotChecked] = useState(false);
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
@@ -299,11 +301,13 @@ export function ProviderForm({
       current === "" || isSuggestion(current) ? suggestedModel(next) : current,
     );
     setTest(null);
+    setNotChecked(false);
     setError(null);
   };
 
   const typeKey = (value: string) => {
     key.type(value, baseUrl);
+    setNotChecked(false);
     const { key: given, stray } = checkApiKey(value);
     // Spaces around the same key change nothing, and leave an agreement to use it where it was.
     if (given === key.text) return;
@@ -349,9 +353,11 @@ export function ProviderForm({
     setBusy("saving");
     setError(null);
     setTest(null);
+    setNotChecked(false);
     try {
       const result = await core.testChatConnection(request);
-      if (!result.ok) {
+      const notChecked = !result.ok && result.error.kind === "local-mode";
+      if (!result.ok && !notChecked) {
         setTest(result);
         return;
       }
@@ -359,7 +365,8 @@ export function ProviderForm({
         keepDefault ? { ...request, keepDefault } : request,
       );
       key.clear();
-      onSaved(provider);
+      setNotChecked(notChecked);
+      onSaved(provider, notChecked);
     } catch (failure) {
       setError(errorMessage(failure, t));
     } finally {
@@ -703,6 +710,8 @@ export function ProviderForm({
             )}
           </div>
 
+          {notChecked && <KeyNotCheckedLine provider={providerName} />}
+
           {(test?.ok === false || error) && (
             <div ref={outcome} className="flex flex-col gap-3">
               {test && !test.ok && (
@@ -746,6 +755,15 @@ export function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusa
       {when
         ? t("providers.form.keyRefused", { provider, when })
         : t("providers.form.keyRefusedNow", { provider })}
+    </span>
+  );
+}
+
+export function KeyNotCheckedLine({ provider }: { provider: string }) {
+  const t = useT();
+  return (
+    <span data-testid="provider-key-not-checked" role="status" className={hintClass}>
+      {t("providers.key.notChecked", { provider })}
     </span>
   );
 }
