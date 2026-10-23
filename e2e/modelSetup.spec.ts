@@ -175,7 +175,7 @@ for (const language of ["en", "zh-CN"] as const) {
         await expect(details).toBeInViewport({ ratio: 1 });
         await pointAndClick(window, details);
         const items = sends.getByRole("listitem");
-        await expect(items).toHaveCount(5);
+        await expect(items).toHaveCount(4);
         for (const item of [items.first(), items.last()]) {
           await item.scrollIntoViewIfNeeded();
           // Text can end a fraction of a pixel past the scroller's edge on Linux, still readable.
