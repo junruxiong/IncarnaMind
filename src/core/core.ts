@@ -2331,7 +2331,6 @@ export function createCore(adapters: CoreAdapters): Core {
       return plan ? pacedBy(chosen, plan.run) : chosen;
     },
   });
-  /** Whether a scan's page images may go to `reader`'s service: the User allowed them there, or it is on this computer. */
   function scanImagesAllowed(reader: ChatModelChoice): boolean {
     const service = chat.describeModel(reader)?.service;
     return !service || consent.allows("scan-images", service);

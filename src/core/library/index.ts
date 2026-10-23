@@ -55,6 +55,8 @@ import type {
 
 const AUTOMATIC: LibraryClassifier = { kind: "automatic" };
 
+const AUTOMATIC_OFF_NOTICE = "libraryAutomaticOffNotice";
+
 function taggingClassifierOf(value: unknown): TaggingClassifier | null {
   if (!isRecord(value)) return null;
   const { kind, baseUrl, modelId } = value;
@@ -245,6 +247,14 @@ export function createLibrary(options: {
     const saved = savedSettings();
     return { ...saved, automatic: saved.automatic ?? !options.usesCloud(saved) };
   };
+  const noticeIsOpen = (marker: unknown) => marker === "pending" || marker === true;
+  const automaticOffNotice = (): boolean => {
+    const marker = settings.readDeviceValue(AUTOMATIC_OFF_NOTICE);
+    if (!noticeIsOpen(marker)) return false;
+    const off = !getSettings().automatic;
+    if (marker === "pending" || !off) settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, off);
+    return off;
+  };
   const placeOf = (id: string): string | null =>
     db.get<{ group_id: string }>(
       "SELECT a.group_id FROM document_groups a JOIN library_groups g ON g.id = a.group_id WHERE a.document_id = ? AND a.deleted_at IS NULL AND g.deleted_at IS NULL",
@@ -346,7 +356,6 @@ export function createLibrary(options: {
         ]))
     );
   };
-  /** Why a scan with no text waits: its page images may not go to the service that would read them yet. */
   const scanWaits = (doc: DocumentRow): ProviderError | undefined => {
     if (doc.kind !== "pdf" || doc.status !== "no-text") return undefined;
     const classifier = organizeModelOf(getSettings());
@@ -799,13 +808,12 @@ export function createLibrary(options: {
         deletedGroups,
         assignments,
         settings: getSettings(),
-        automaticOffNotice: settings.readDeviceValue("libraryAutomaticOffNotice") === true,
+        automaticOffNotice: automaticOffNotice(),
       };
     },
-    /** The one-time line about automatic tagging and sorting going off is closed. */
     dismissAutomaticOffNotice(): void {
-      if (settings.readDeviceValue("libraryAutomaticOffNotice") !== true) return;
-      settings.writeDeviceValue("libraryAutomaticOffNotice", false);
+      if (settings.readDeviceValue(AUTOMATIC_OFF_NOTICE) !== true) return;
+      settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, false);
       changed();
     },
     /** A live Folder, or NotFoundError. */
@@ -997,6 +1005,9 @@ export function createLibrary(options: {
       const before = savedSettings();
       const showing = before.automatic ?? !options.usesCloud(before);
       const setByUser = before.automatic !== null || input.automatic !== showing;
+      if (setByUser && noticeIsOpen(settings.readDeviceValue(AUTOMATIC_OFF_NOTICE))) {
+        settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, false);
+      }
       settings.writeDeviceValue("library", {
         classifier: automaticChosen ? AUTOMATIC : chosen,
         ...(setByUser && { automatic: input.automatic }),
