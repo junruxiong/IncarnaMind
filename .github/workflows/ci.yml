@@ -251,7 +251,21 @@ jobs:
           exit 1
       # The app needs a display: a virtual one, bigger than the window the specs set
       # (e2e/app.ts), at full colour depth. xvfb-run's own default is 640 × 480 at 8 bits.
-      - run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:smoke -- --workers=2 $(node scripts/smoke-shard.mjs ${{ matrix.shard }} 4)
+      # Two lanes of specs, each its own Playwright run on its own virtual display: two windows on
+      # one display take the keyboard focus from each other.
+      - name: Run the specs
+        run: |
+          npx electron-vite build --mode test
+          lane() {
+            xvfb-run --server-num="$1" --server-args="-screen 0 1920x1080x24" \
+              npx playwright test --workers=1 --output="test-results/lane-$1" $(node scripts/smoke-shard.mjs "$2" 8)
+          }
+          lane 99 $((2 * ${{ matrix.shard }} - 1)) & first=$!
+          lane 100 $((2 * ${{ matrix.shard }})) & second=$!
+          status=0
+          wait "$first" || status=1
+          wait "$second" || status=1
+          exit "$status"
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v7
