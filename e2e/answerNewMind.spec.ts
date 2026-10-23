@@ -14,6 +14,7 @@ import {
   removeDataFolder,
   setLanguage,
   setWindowSize,
+  tabMenu,
   useLocalChatModel,
 } from "./app";
 
@@ -82,4 +83,91 @@ test("New Mind fills the empty Mind in front, then makes new Minds named by the 
 
   await setLanguage(window, "zh-CN");
   await expect(button).toHaveText("新建 Mind");
+});
+
+test("by the keyboard: Tab reaches New Mind and Enter fills the empty Mind in front, its Undo taking the focus and the fill back, as ⌘Z does; with text in front, or only a divider, it makes a new Mind beside it, which Delete takes back; ⌘K finds it by the button's name", async () => {
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await newMind(window);
+  const editor = window.getByTestId("mind-editor");
+  const citations = editor.getByTestId("citation");
+  const tabs = window.getByTestId("mind-tab");
+  const answer = await askInAssistant(window, "When do spring tides happen?");
+  const button = answer.getByTestId("answer-new-mind");
+
+  // After Add to note ▾, Tab reaches New Mind.
+  await answer.getByTestId("answer-add-to").focus();
+  await window.keyboard.press("Tab");
+  await expect(button).toBeFocused();
+  await window.keyboard.press("Enter");
+  const added = answer.getByTestId("answer-added");
+  await expect(added.getByRole("status")).toHaveText(/^Added to “.+”$/);
+  await expect(citations.first()).toHaveAttribute("data-check", "found");
+  await expect(tabs).toHaveCount(1);
+  const undo = answer.getByTestId("answer-added-undo");
+  await expect(undo).toBeFocused();
+  // Enter on its Undo, where the focus went, brings back the empty Mind.
+  await window.keyboard.press("Enter");
+  await expect(citations).toHaveCount(0);
+  await expect(editor).toHaveText("");
+
+  // ⌘Z takes the fill back too.
+  await pointAndClick(window, button);
+  await expect(citations.first()).toHaveAttribute("data-check", "found");
+  await expect(undo).toBeFocused();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(citations).toHaveCount(0);
+  await expect(editor).toHaveText("");
+
+  // With text in front, Enter makes a new Mind beside it.
+  await editor.click();
+  await window.keyboard.type("Harbour notes");
+  await answer.getByTestId("answer-add-to").focus();
+  await window.keyboard.press("Tab");
+  await expect(button).toBeFocused();
+  await window.keyboard.press("Enter");
+  await expect(tabs).toHaveCount(2);
+  await expect(citations.first()).toHaveAttribute("data-check", "found");
+  const made = (await frontMindName(window).textContent())?.trim() ?? "";
+  // Making a Mind leaves nothing to undo here: the focus stays on New Mind, in the assistant.
+  await expect(button).toBeFocused();
+
+  // Delete takes the made Mind back, with its tab.
+  await pointAndClick(window, (await tabMenu(window)).getByTestId("mind.delete"));
+  await expect(tabs).toHaveCount(1);
+  await expect(window.getByTestId("undo-message")).toHaveText(
+    `Moved “${made}” to Recently deleted`,
+  );
+
+  // A Mind holding only a divider isn't empty: New Mind makes another beside it.
+  await newMind(window);
+  await expect(tabs).toHaveCount(2);
+  await window.keyboard.type("/divider");
+  await expect(window.getByTestId("slash-item-divider")).toHaveAttribute("aria-selected", "true");
+  await window.keyboard.press("Enter");
+  await expect(editor.locator("hr")).toHaveCount(1);
+  await pointAndClick(window, button);
+  await expect(tabs).toHaveCount(3);
+  await expect(citations.first()).toHaveAttribute("data-check", "found");
+
+  // ⌘K finds it by the button's name, in English and Chinese.
+  const entry = window
+    .getByTestId("palette")
+    .locator('[data-key="command:assistant.lastToNewMind"]');
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type("New Mind from");
+  await expect(entry).toHaveText(/New Mind from the Answer/);
+  await expect(entry).toHaveAttribute("aria-selected", "true");
+  await window.keyboard.press("Enter");
+  await expect(tabs).toHaveCount(4);
+  await setLanguage(window, "zh-CN");
+  await window.keyboard.press("ControlOrMeta+k");
+  await window.keyboard.type("新建 Mind");
+  await expect(entry).toHaveText(/用回答新建 Mind/);
+  await window.keyboard.press("Escape");
 });
