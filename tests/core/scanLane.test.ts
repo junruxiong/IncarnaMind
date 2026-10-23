@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { Core, Document, TextRecognizer } from "../../src/core";
+import { type ReadingChannel, runJob } from "../../src/core/documents/processing";
 import { scansAtOnce } from "../../src/core/documents/processor";
 import { createFakeTextRecognizer } from "../../src/core/documents/scan/fake";
 import { createTempDataFolder, NO_MODEL_FILES, startCore } from "../helpers/core";
@@ -237,6 +238,43 @@ describe("A text file is never held behind a scan (#1502)", { timeout: 180_000 }
     } finally {
       restarted.close();
     }
+  });
+});
+
+describe("A scan told to stop (#1502)", () => {
+  // protects=a scan stopped while its page is being drawn stops, instead of asking for a read nobody answers; fails_when=it asks once stopped and the job never ends, which leaves the scan lane waiting for it; no_claim=the lane, which the tests above cover.
+  test("one stopped while its page is drawn ends as stopped, and asks for no read", async () => {
+    const sources = await createSourceFolder();
+    const file = await writeSourceFile(sources, "Scan.pdf", scanPdf());
+    const stop = new AbortController();
+    const asked: number[] = [];
+    const channel: ReadingChannel = {
+      signal: stop.signal,
+      // The stop lands as the page is drawn, a moment after the first progress.
+      progress: (_hash, read) => {
+        if (read === 0) queueMicrotask(() => stop.abort());
+      },
+      log: () => undefined,
+      read: (page) => {
+        asked.push(page);
+        return new Promise(() => undefined);
+      },
+      readFile: () => new Promise(() => undefined),
+    };
+
+    const result = await runJob(
+      {
+        task: "process",
+        documentId: "scan",
+        kind: "pdf",
+        file,
+        scan: { reader: "fake", keep: null },
+      },
+      channel,
+    );
+
+    expect(result.outcome).toBe("stopped");
+    expect(asked).toEqual([]);
   });
 });
 
