@@ -134,8 +134,10 @@ export interface FileLoggerOptions {
 
 /** The core's `Logger`, plus what the main process logs itself. */
 export interface FileLogger extends Logger {
-  /** An error: its type, scrubbed message and code, and its stack's frames. */
-  /** `componentStack`: the components a panel was drawing when it failed, written after the frames. */
+  /**
+   * An error: its type, scrubbed message and code, and its stack's frames, then `componentStack`,
+   * the components a panel was drawing when it failed.
+   */
   exception(
     event: string,
     error: unknown,
