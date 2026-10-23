@@ -155,7 +155,8 @@ function beginEdit(editor: Editor, mindId: string, requestId: string): Applying 
   if (!doc || !stack || editor.isDestroyed) return null;
   latest.get(editor)?.forget();
   reviewed.delete(editor);
-  setAppliedLine(editor, null);
+  // A menu edit's Try again already made its line the working line, which keeps its box (#1417).
+  if (appliedLineIn(editor.state)?.kind !== "running") setAppliedLine(editor, null);
   stack.addTrackedOrigin(EDIT_FROM_CORE);
   stack.addTrackedOrigin(AcceptingEdit);
   const popped = ({ stackItem }: { stackItem: UndoStep }) => {

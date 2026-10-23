@@ -1,9 +1,11 @@
+import type { Language } from "../../../core/language";
 import { ProblemLine } from "../components/ProblemLine";
 import {
-  ReadinessExplanation,
   readinessAction,
   readinessAlso,
+  readinessInLine,
 } from "../components/providers/ChatReadinessNotice";
+import type { EditProblemWords } from "../editProblems";
 import {
   dismissEditProblem,
   type EditProblem,
@@ -12,7 +14,8 @@ import {
   useEdits,
 } from "../editWithAi";
 import { providerErrorText } from "../errors";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
+import type { SettingsPage } from "../settingsPages";
 import { useAppStore } from "../store";
 
 /**
@@ -47,9 +50,66 @@ export function EditStatus({ mindId }: { mindId: string }) {
 }
 
 /**
- * The one line for why an Edit with AI gave no changes, with the one thing
- * that helps. `onRetry` is told as Try again asks for the edit again.
+ * Why an Edit with AI gave no changes, with the one thing that helps: the
+ * words of its line in the composer, in the selection menu and in the page.
+ * `retrying` is told as Try again asks for the edit again.
  */
+export function editProblemWords(
+  problem: EditProblem,
+  mindId: string,
+  say: {
+    t: ReturnType<typeof useT>;
+    language: Language;
+    openSettings(page: SettingsPage): void;
+  },
+  retrying?: () => void,
+): EditProblemWords {
+  const { t, language, openSettings } = say;
+  const close = () => dismissEditProblem(mindId);
+  switch (problem.kind) {
+    case "not-ready":
+      return {
+        text: readinessInLine(problem.readiness, t, language),
+        role: "alert",
+        action: readinessAction(problem.readiness, t, openSettings, t("question.setUp"), close),
+        also: readinessAlso(problem.readiness, t, openSettings, close),
+      };
+    case "local-mode":
+      return {
+        text: t("edit.problem.local-mode"),
+        role: "alert",
+        action: {
+          label: t("edit.problem.chooseModel"),
+          onClick: () => {
+            close();
+            openSettings("models");
+          },
+        },
+      };
+    case "failed":
+      return {
+        text: t("edit.problem.failed", { message: problem.message }),
+        role: "alert",
+        action: {
+          label: t("edit.problem.retry"),
+          onClick: () => {
+            close();
+            retrying?.();
+            problem.retry();
+          },
+        },
+      };
+    case "consent-revoked":
+      return { text: providerErrorText(problem.error, t), role: "alert" };
+    default:
+      return {
+        text: t(`edit.problem.${problem.kind}`),
+        role: problem.kind === "unchanged" ? "status" : "alert",
+      };
+  }
+}
+
+/** The one line for why an Edit with AI gave no changes, with the one thing that helps. */
 export function EditProblemLine({
   mindId,
   problem,
@@ -62,75 +122,24 @@ export function EditProblemLine({
   onRetry?(): void;
 }) {
   const t = useT();
+  const language = useLanguage();
   const openSettings = useAppStore((state) => state.openSettings);
-  const close = {
-    label: t("edit.close"),
-    testId: "edit-problem-close",
-    onClick: () => dismissEditProblem(mindId),
-  };
-  switch (problem.kind) {
-    case "not-ready":
-      return (
-        <ProblemLine
-          testId="edit-problem"
-          className={className}
-          action={readinessAction(problem.readiness, t, openSettings, t("question.setUp"), () =>
-            dismissEditProblem(mindId),
-          )}
-          also={readinessAlso(problem.readiness, t, openSettings, () => dismissEditProblem(mindId))}
-        >
-          <ReadinessExplanation readiness={problem.readiness} inLine />
-        </ProblemLine>
-      );
-    case "local-mode":
-      return (
-        <ProblemLine
-          testId="edit-problem"
-          className={className}
-          action={{
-            label: t("edit.problem.chooseModel"),
-            onClick: () => {
-              dismissEditProblem(mindId);
-              openSettings("models");
-            },
-          }}
-        >
-          {t("edit.problem.local-mode")}
-        </ProblemLine>
-      );
-    case "failed":
-      return (
-        <ProblemLine
-          testId="edit-problem"
-          className={className}
-          action={{
-            label: t("edit.problem.retry"),
-            onClick: () => {
-              dismissEditProblem(mindId);
-              onRetry?.();
-              problem.retry();
-            },
-          }}
-        >
-          {t("edit.problem.failed", { message: problem.message })}
-        </ProblemLine>
-      );
-    case "consent-revoked":
-      return (
-        <ProblemLine testId="edit-problem" className={className} action={close}>
-          {providerErrorText(problem.error, t)}
-        </ProblemLine>
-      );
-    default:
-      return (
-        <ProblemLine
-          role={problem.kind === "unchanged" ? "status" : "alert"}
-          testId="edit-problem"
-          className={className}
-          action={close}
-        >
-          {t(`edit.problem.${problem.kind}`)}
-        </ProblemLine>
-      );
-  }
+  const words = editProblemWords(problem, mindId, { t, language, openSettings }, onRetry);
+  return (
+    <ProblemLine
+      role={words.role}
+      testId="edit-problem"
+      className={className}
+      action={
+        words.action ?? {
+          label: t("edit.close"),
+          testId: "edit-problem-close",
+          onClick: () => dismissEditProblem(mindId),
+        }
+      }
+      also={words.also}
+    >
+      {words.text}
+    </ProblemLine>
+  );
 }

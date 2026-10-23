@@ -1,4 +1,5 @@
 import type { ChatReadiness } from "../../../../core/api";
+import type { Language } from "../../../../core/language";
 import {
   isSignInRoute,
   SIGN_IN_ROUTES,
@@ -84,10 +85,26 @@ export const readinessAlso = (
   before?: () => void,
 ) => routeWayBack(readiness, 1, t, openSettings, before);
 
+function readinessWords(
+  readiness: Extract<ChatReadiness, { ready: false }>,
+  t: ReturnType<typeof useT>,
+  language: Language,
+): string {
+  const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
+  return t(readinessKey(readiness), { service });
+}
+
 /**
- * What to configure before Questions can be asked. `inLine`: ahead of an
- * action on the same line, so without the full stop that ends it otherwise.
+ * What to configure before Questions can be asked, ahead of an action on the
+ * same line: without the full stop that ends it otherwise.
  */
+export const readinessInLine = (
+  readiness: Extract<ChatReadiness, { ready: false }>,
+  t: ReturnType<typeof useT>,
+  language: Language,
+): string => readinessWords(readiness, t, language).replace(/[.。]$/, "");
+
+/** What to configure before Questions can be asked. `inLine`: as `readinessInLine` says. */
 export function ReadinessExplanation({
   readiness,
   inLine = false,
@@ -97,9 +114,8 @@ export function ReadinessExplanation({
 }) {
   const t = useT();
   const language = useLanguage();
-  const service = "provider" in readiness ? serviceName(readiness.provider, t, language) : "";
-  const words = t(readinessKey(readiness), { service });
-  if (inLine) return <>{words.replace(/[.。]$/, "")}</>;
+  if (inLine) return <>{readinessInLine(readiness, t, language)}</>;
+  const words = readinessWords(readiness, t, language);
   return <>{/[.。]$/.test(words) ? words : `${words}${language === "zh-CN" ? "。" : "."}`}</>;
 }
 

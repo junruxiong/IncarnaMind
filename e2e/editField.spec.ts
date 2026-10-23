@@ -635,6 +635,141 @@ for (const sidebar of ["shown", "hidden"] as const) {
   });
 }
 
+interface LineFrame {
+  /** Before a frame the window draws, rather than after a change to the text. */
+  drawn: boolean;
+  line: "failed" | "running" | "applied" | null;
+  tops: number[];
+}
+
+/**
+ * From now until `stopWatchingLine`, before every frame the window draws and after every change
+ * to the Mind's text: which of a menu edit's lines it shows, and the top of each paragraph.
+ */
+async function watchLine(window: Page): Promise<void> {
+  await window.evaluate(() => {
+    const editor = document.querySelector('[data-testid="mind-editor"]');
+    if (!editor) throw new Error("The Mind's text isn't there.");
+    const state = { frames: [] as LineFrame[], watching: true };
+    (globalThis as unknown as { __line: typeof state }).__line = state;
+    const look = (drawn: boolean) =>
+      state.frames.push({
+        drawn,
+        line: editor.querySelector('[data-testid="edit-problem"]')
+          ? "failed"
+          : editor.querySelector('[data-testid="menu-edit-line"]')
+            ? "running"
+            : editor.querySelector('[data-testid="applied-line"]')
+              ? "applied"
+              : null,
+        tops: [...editor.querySelectorAll(":scope > p")].map(
+          (each) => each.getBoundingClientRect().top,
+        ),
+      });
+    const frame = () => {
+      look(true);
+      if (state.watching) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    new MutationObserver(() => look(false)).observe(editor, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+  });
+}
+
+const linesSeen = (frames: readonly LineFrame[]) =>
+  frames.flatMap((each, index) => (frames[index - 1]?.line === each.line ? [] : [each.line]));
+
+const watchedLine = (window: Page) =>
+  window.evaluate(
+    () => (globalThis as unknown as { __line: { frames: LineFrame[] } }).__line.frames,
+  );
+
+const stopWatchingLine = (window: Page) =>
+  window.evaluate(() => {
+    const state = (globalThis as unknown as { __line: { frames: LineFrame[]; watching: boolean } })
+      .__line;
+    state.watching = false;
+    return state.frames;
+  });
+
+const RETRIED = {
+  en: {
+    text: "The tides here are very strong and really regular.",
+    next: "Notes:",
+    ask: "Shorten this slowly",
+    retry: "Try again",
+    working: "Making the changes…",
+    shortened: "The tides here are strong and regular.",
+  },
+  "zh-CN": {
+    text: "这里的潮汐非常强，而且真的很有规律。",
+    next: "备注：",
+    ask: "缩短 slowly",
+    retry: "重试",
+    working: "正在修改…",
+    shortened: "这里的潮汐强，而且很有规律。",
+  },
+} as const;
+
+for (const language of ["en", "zh-CN"] as const) {
+  test(`Try again turns the failure line into the working line in its box: nothing under it moves through a second failure and a success, in ${language}`, async () => {
+    const { app, window } = await launchApp(dataDir, { fakeChat: true });
+    await dismissChatSetup(window);
+    await useLocalChatModel(window, "fake-not-found");
+    await setWindowSize(app, window, 1280, 820);
+    await setLanguage(window, language);
+    const words = RETRIED[language];
+    await newMind(window);
+    const editor = window.getByTestId("mind-editor");
+    await editor.click();
+    await window.keyboard.type(words.text);
+    await window.keyboard.press("Enter");
+    await window.keyboard.type(words.next);
+    const paragraphs = editor.locator(":scope > p");
+    const menu = window.getByTestId("selection-menu");
+    const problem = editor.getByTestId("edit-problem");
+
+    await slideSelect(window, paragraphs.first(), words.text);
+    await window.keyboard.press("ControlOrMeta+j");
+    await window.keyboard.type(words.ask);
+    await window.keyboard.press("Enter");
+    await expect(menu.getByTestId("edit-problem")).toBeVisible();
+    await window.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(problem.getByTestId("menu-edit-action")).toHaveText(words.retry);
+    await watchLine(window);
+
+    // Try again, and it fails again.
+    await pointAndClick(window, problem.getByTestId("menu-edit-action"));
+    await expect
+      .poll(async () =>
+        linesSeen(await watchedLine(window))
+          .slice(1)
+          .includes("failed"),
+      )
+      .toBe(true);
+
+    // Try again with a model that answers: the working line until the Undo line takes its place.
+    await useLocalChatModel(window);
+    await pointAndClick(window, problem.getByTestId("menu-edit-action"));
+    await expect(editor.getByTestId("menu-edit-line")).toContainText(words.working);
+    await expect(editor.getByTestId("applied-line")).toBeVisible({ timeout: 40_000 });
+    await expect(paragraphs.first()).toHaveText(words.shortened);
+
+    const frames = await stopWatchingLine(window);
+    const [first] = frames;
+    if (!first) throw new Error("Nothing was looked at.");
+    expect(frames.filter((each) => each.tops.join() !== first.tops.join())).toEqual([]);
+    expect(linesSeen(frames)).toEqual(["failed", "running", "failed", "running", "applied"]);
+    expect(frames.some((each) => each.drawn && each.line === "running")).toBe(true);
+    await app.close();
+  });
+}
+
 test("Close on the failure line takes it away", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);

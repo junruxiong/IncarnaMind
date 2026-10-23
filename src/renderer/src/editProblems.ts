@@ -10,3 +10,18 @@ export const failedEdit = (error: ProviderError, retry: () => void): EditProblem
   error.kind === "consent-revoked"
     ? { kind: "consent-revoked", error }
     : { kind: "failed", message: error.message, retry };
+
+interface LineChoice {
+  label: string;
+  onClick(): void;
+}
+
+/** What the line for an Edit with AI that gave no changes says, wherever it shows. */
+export interface EditProblemWords {
+  text: string;
+  role: "alert" | "status";
+  /** The one thing that helps; none where closing the line is all there is. */
+  action?: LineChoice;
+  /** A sign-in route's second way back. */
+  also?: LineChoice | undefined;
+}

@@ -15,6 +15,7 @@ import type { Language } from "../../../core/language";
 import type { MessageKey, MessageParams } from "../../../shared/i18n";
 import { type ChangeCounts, changeFact } from "../changeFacts";
 import { SPARK_PATH } from "../components/iconPaths";
+import type { EditProblemWords } from "../editProblems";
 import {
   type ChangedBlock,
   LINE_WIDGET,
@@ -96,13 +97,7 @@ export type AppliedLine = (
     }
   // An edit asked in the selection menu, once the menu is closed: it holds the spot its Undo line lands in.
   | { kind: "running"; blockId: string | null; stop(): void }
-  | {
-      kind: "failed";
-      blockId: string | null;
-      text: string;
-      action: { label: string; run(): void } | null;
-      close(): void;
-    }
+  | { kind: "failed"; blockId: string | null; words: EditProblemWords; close(): void }
 ) & {
   /** The language it was last drawn in, once that changed. */
   language?: Language;
@@ -360,13 +355,17 @@ function mainLine(line: AppliedLine, options: Options, blocks: ChangedBlocks): H
     const mark = document.createElement("span");
     mark.className = "applied-problem-dot";
     mark.setAttribute("aria-hidden", "true");
-    const parts: (Node | string)[] = [mark, text("min-w-0", line.text)];
-    if (line.action) {
-      parts.push(dot(), actionButton(line.action.label, "menu-edit-action", line.action.run));
+    const { words } = line;
+    const parts: (Node | string)[] = [mark, text("min-w-0", words.text)];
+    if (words.action) {
+      parts.push(dot(), actionButton(words.action.label, "menu-edit-action", words.action.onClick));
+    }
+    if (words.also) {
+      parts.push(dot(), actionButton(words.also.label, "menu-edit-also", words.also.onClick));
     }
     parts.push(dot(), actionButton(t("edit.close"), "menu-edit-close", line.close));
     const element = lineElement("edit-problem", "applied-line applied-line--problem", parts);
-    element.setAttribute("role", "alert");
+    element.setAttribute("role", words.role);
     return element;
   }
   if (line.kind === "applied") {
@@ -640,7 +639,7 @@ function decorations(state: EditorState, line: AppliedLine, options: Options): D
         : line.kind === "review"
           ? changedBlocksOf(state, line.changes)
           : { paragraphs: 0, tables: 0 };
-    const words = line.kind === "failed" ? line.text : "";
+    const words = line.kind === "failed" ? line.words.text : "";
     const count = `${blocks.paragraphs}/${blocks.tables}`;
     const canUndo = line.kind !== "review" || !line.undo || line.undo.available();
     marks.push(
