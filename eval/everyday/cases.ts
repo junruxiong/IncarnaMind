@@ -392,7 +392,7 @@ export const CASES: readonly EverydayCase[] = [
     library: "papers",
     mind: TYPOS,
     request: "Translate my notes into Chinese",
-    expected: EDIT,
+    expected: { ...EDIT, terms: [{ want: "大潮", not: ["春潮"] }] },
   },
   {
     id: "edit-formal",
