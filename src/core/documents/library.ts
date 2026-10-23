@@ -216,6 +216,11 @@ export function suggestLayout(relatives: Iterable<string>): LinkedFolderLayout {
 export interface LibraryHooks {
   /** Processing is due (a new file, or a new version): queue it, unless its Linked folder is paused. */
   process(documentId: string): void;
+  /**
+   * A Document found queued, its file still the version it was: queue it if its job was dropped.
+   * A job still queued, waiting its turn in the scan lane or under way keeps its place.
+   */
+  stillQueued(documentId: string): void;
   /** Push a Document's current state. */
   announce(documentId: string): void;
   /** A new Document was stored and announced; its processing isn't queued yet. */
@@ -732,7 +737,7 @@ export function createLibrary(options: LibraryOptions) {
       }
       if (placeChanged) noteMoved(row, place, changes);
       if (row.file_device === null) await noteIdentity(row);
-      if (row.status === "queued") hooks.process(row.id);
+      if (row.status === "queued") hooks.stillQueued(row.id);
       return true;
     }
     let hashed: Awaited<ReturnType<typeof hashFile>>;
@@ -776,7 +781,8 @@ export function createLibrary(options: LibraryOptions) {
     }
     if (placeChanged) noteMoved(row, place, changes);
     // A new version is processed; its text replaces the old one's in search once indexed.
-    if (newVersion || current.status === "queued") hooks.process(row.id);
+    if (newVersion) hooks.process(row.id);
+    else if (current.status === "queued") hooks.stillQueued(row.id);
     return true;
   }
 

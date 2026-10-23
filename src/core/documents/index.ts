@@ -1348,6 +1348,9 @@ export function createDocuments(options: DocumentsOptions) {
     detectDataless: options.linkedFolders.detectDataless,
     hooks: {
       process,
+      stillQueued: (id) => {
+        if (find(id)?.status === "queued" && !processor.has(id)) process(id);
+      },
       announce,
       added: (id) => options.onFound?.(id),
       moved: (ids) => {
