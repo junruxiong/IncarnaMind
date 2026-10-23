@@ -1923,6 +1923,7 @@ export const zhCN = {
   "providers.test.network": "无法连接到服务器。请检查地址和网络连接。",
   "providers.test.provider": "服务返回了错误。",
   "providers.test.local-mode": "未发送：已开启“所有内容都留在这台电脑上”。",
+  "providers.key.notChecked": "已保存，未验证：没有向 {provider} 发送任何内容。",
   "providers.test.consent-revoked": "未发送：你关闭了向此服务发送内容。",
   "providers.test.consent-declined": "没有发送任何内容，因为你选择不向此服务发送数据。",
   "providers.test.too-long": "这个模型的上下文窗口太小，连很短的请求都放不下。",
