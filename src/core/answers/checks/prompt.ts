@@ -330,6 +330,7 @@ const NOT_COVERED = /^[\s>*_#`"'“”-]*(?:not covered|uncovered|未涵盖)[\s*
 const SCOPE = /^[\s>*_#`"'“”-]*(?:scope|范围)[\s*_]*[:：](.*)$/i;
 const TOPIC = /^[\s>*_#`"'“”-]*(?:topic|主题)[\s*_]*[:：][\s*_"'“”`]*(found|not found)\b/i;
 const ROLES = /^[\s>*_#`"'“”-]*(?:roles|角色)[\s*_]*[:：](.*)$/i;
+const FIELDS = [COVERED, NOT_COVERED, SCOPE, TOPIC, ROLES];
 const MAX_PHRASE = 120;
 const MAX_REASON = 300;
 const PHRASE_EDGES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`.。;；:：,，]+$/gu;
@@ -433,19 +434,22 @@ export function readVerdict(reply: string): ReadVerdict | null {
     // One sentence: what follows the verdict on its line, else the next line. Notes after it aren't.
     const rest = line.slice(match[0].length).trim();
     const after = lines.slice(at + 1);
+    // A reply that ends by repeating its verdict line leaves its fields above it (#1668).
+    const fields = after.some((each) => FIELDS.some((field) => field.test(each)))
+      ? after
+      : lines.slice(0, at);
     const phrase = (label: RegExp) =>
-      phraseOf(after.map((each) => label.exec(each)?.[1]).find(Boolean));
-    const next = after.find(
-      (each) => ![COVERED, NOT_COVERED, SCOPE, TOPIC, ROLES].some((field) => field.test(each)),
-    );
+      phraseOf(fields.map((each) => label.exec(each)?.[1]).find(Boolean));
+    const next = after.find((each) => !FIELDS.some((field) => field.test(each)));
     return withShortReason({
       verdict,
       says: cleanSays(rest || (next ?? "")),
       covered: phrase(COVERED),
       uncovered: phrase(NOT_COVERED),
-      scope: scopeOf(after.find((each) => SCOPE.test(each))),
-      topic: topicOf(after.find((each) => TOPIC.test(each))),
-      roles: rolesOf(after.find((each) => ROLES.test(each))),
+      scope: scopeOf(fields.find((each) => SCOPE.test(each))),
+      topic: topicOf(fields.find((each) => TOPIC.test(each))),
+      // A model that corrects its Roles line writes it again: its last one counts.
+      roles: rolesOf(fields.findLast((each) => ROLES.test(each))),
     });
   }
   return withShortReason(jsonVerdict(text));
