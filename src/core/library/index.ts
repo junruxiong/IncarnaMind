@@ -55,6 +55,8 @@ import type {
 
 const AUTOMATIC: LibraryClassifier = { kind: "automatic" };
 
+const AUTOMATIC_OFF_NOTICE = "libraryAutomaticOffNotice";
+
 function taggingClassifierOf(value: unknown): TaggingClassifier | null {
   if (!isRecord(value)) return null;
   const { kind, baseUrl, modelId } = value;
@@ -201,6 +203,14 @@ export function createLibrary(options: {
    */
   readsPages(classifier: TaggingClassifier): boolean;
   /**
+   * Whether the model tagging or organizing would use runs on another computer:
+   * the switch for doing it by itself is off for one until the User turns it on.
+   */
+  usesCloud(settings: {
+    classifier: LibraryClassifier;
+    organizeWith: TaggingClassifier | null;
+  }): boolean;
+  /**
    * The service that would read a scan's pages for this classifier if the User
    * allowed it, while they haven't; null when it reads them, or can't.
    */
@@ -218,12 +228,13 @@ export function createLibrary(options: {
    * "Organize manually" before there was Automatic, gets Automatic; any other
    * choice is kept as it was saved.
    */
-  const getSettings = (): LibrarySettings => {
+  const savedSettings = () => {
     const stored = settings.readDeviceValue("library");
     const saved = isRecord(stored) ? stored : {};
     return {
       classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
-      automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
+      // Null until the User sets the switch: it follows the model then (see `LibrarySettings.automatic`).
+      automatic: typeof saved.automatic === "boolean" ? saved.automatic : null,
       organizeWith: taggingClassifierOf(saved.organizeWith),
       taggingStopped: Array.isArray(saved.taggingStopped)
         ? saved.taggingStopped.filter(
@@ -231,6 +242,18 @@ export function createLibrary(options: {
           )
         : [],
     };
+  };
+  const getSettings = (): LibrarySettings => {
+    const saved = savedSettings();
+    return { ...saved, automatic: saved.automatic ?? !options.usesCloud(saved) };
+  };
+  const noticeIsOpen = (marker: unknown) => marker === "pending" || marker === true;
+  const automaticOffNotice = (): boolean => {
+    const marker = settings.readDeviceValue(AUTOMATIC_OFF_NOTICE);
+    if (!noticeIsOpen(marker)) return false;
+    const off = !getSettings().automatic;
+    if (marker === "pending" || !off) settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, off);
+    return off;
   };
   const placeOf = (id: string): string | null =>
     db.get<{ group_id: string }>(
@@ -719,7 +742,7 @@ export function createLibrary(options: {
       const taggingStopped = stop
         ? [...new Set([...before.taggingStopped, ...places])]
         : before.taggingStopped.filter((each) => !places.includes(each));
-      settings.writeDeviceValue("library", { ...before, taggingStopped });
+      settings.writeDeviceValue("library", { ...savedSettings(), taggingStopped });
       changed();
       if (stop || !before.automatic || !organizeModelOf(before) || groups().length === 0) return;
       const ids = db
@@ -780,7 +803,18 @@ export function createLibrary(options: {
           `SELECT ${GROUP_COLUMNS} FROM library_groups WHERE deleted_at IS NOT NULL ORDER BY name COLLATE NOCASE, id`,
         )
         .map(toGroup);
-      return { groups: groups(), deletedGroups, assignments, settings: getSettings() };
+      return {
+        groups: groups(),
+        deletedGroups,
+        assignments,
+        settings: getSettings(),
+        automaticOffNotice: automaticOffNotice(),
+      };
+    },
+    dismissAutomaticOffNotice(): void {
+      if (settings.readDeviceValue(AUTOMATIC_OFF_NOTICE) !== true) return;
+      settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, false);
+      changed();
     },
     /** A live Folder, or NotFoundError. */
     folder: group,
@@ -967,11 +1001,18 @@ export function createLibrary(options: {
         if (!isRecord(each)) throw new InvalidInputError("Choose a classifier.");
         checkClassifier(each);
       }
+      // A save that leaves the switch where it shows doesn't set it: it goes on following the model.
+      const before = savedSettings();
+      const showing = before.automatic ?? !options.usesCloud(before);
+      const setByUser = before.automatic !== null || input.automatic !== showing;
+      if (setByUser && noticeIsOpen(settings.readDeviceValue(AUTOMATIC_OFF_NOTICE))) {
+        settings.writeDeviceValue(AUTOMATIC_OFF_NOTICE, false);
+      }
       settings.writeDeviceValue("library", {
         classifier: automaticChosen ? AUTOMATIC : chosen,
-        automatic: input.automatic,
+        ...(setByUser && { automatic: input.automatic }),
         organizeWith,
-        taggingStopped: getSettings().taggingStopped,
+        taggingStopped: before.taggingStopped,
       });
       revision++;
       changed();

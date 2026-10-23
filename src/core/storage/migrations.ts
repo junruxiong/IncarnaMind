@@ -1798,6 +1798,37 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    version: 103,
+    description: "Tagging and sorting new Documents by themselves is off for a cloud model (#1617)",
+    // The Library setting "automatic" was saved as true by every save of the Tagging setting, so a
+    // true can't tell the User's choice from the old default. It is forgotten, and the switch
+    // follows the model: on for one on this computer, off for a cloud model. Only a false stays.
+    // Where Documents were being tagged by themselves, the Library decides at its first start
+    // whether to say it is off now: only then is the model known (the "pending" value).
+    sql: `
+      INSERT INTO device_settings (id, key, value, created_at, updated_at)
+        SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4'
+            || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', 1 + (random() & 3), 1)
+            || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))),
+          'libraryAutomaticOffNotice', '"pending"',
+          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE EXISTS (SELECT 1 FROM documents WHERE deleted_at IS NULL)
+          AND NOT EXISTS (
+            SELECT 1 FROM device_settings
+            WHERE key = 'library' AND deleted_at IS NULL
+              AND json_extract(value, '$.automatic') = 0
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM device_settings WHERE key = 'libraryAutomaticOffNotice'
+          );
+      UPDATE device_settings
+        SET value = json_remove(value, '$.automatic'),
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE key = 'library' AND deleted_at IS NULL
+          AND json_extract(value, '$.automatic') = 1;
+    `,
+  },
+  {
     version: 104,
     description: "How long each AI request and local step took, by flow (#1624)",
     // This computer's own measurements, never synced: times in milliseconds from started_at,

@@ -7709,6 +7709,8 @@
   .setup-card {
     --pad: 10px;
     padding-block: var(--pad);
+    /* A control scrolled to the edge can end a fraction of a pixel past it, as the scroll offset snaps to a device pixel. */
+    scroll-padding-bottom: 2px;
 
     /* Room for the title and for the tallest action row (it wraps) with its focus ring, so Tab never lands a control under them. */
     &:has([data-setup-title]) {

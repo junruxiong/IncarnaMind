@@ -2252,6 +2252,7 @@ export function createCore(adapters: CoreAdapters): Core {
     now,
     tags,
     enabled: () => !organizesNewDocuments(),
+    automatic: () => library.settings().automatic,
     organizing: (id) => organizing() && library.isOrganizing(id),
     stopped: (id) => library.taggingStoppedFor(id),
     canRun: async () => {
@@ -2346,6 +2347,17 @@ export function createCore(adapters: CoreAdapters): Core {
           return reader !== null && scanImagesAllowed(reader);
         }
       }
+    },
+    usesCloud: ({ classifier, organizeWith }) => {
+      const sorts = classifier.kind === "automatic" ? organizeWith : classifier;
+      if (sorts && tagging.service(sorts) !== null) return true;
+      if (classifier.kind !== "automatic") return tagging.service(classifier) !== null;
+      const picked = tagging.lastResolved();
+      if (picked) return tagging.service(picked) !== null;
+      // Not worked out yet: Jev, else the chat model, where Automatic looks first.
+      if (jev.service()) return true;
+      const chosen = settings.get().user.chatModel;
+      return !!chosen && chat.describeModel(chosen)?.service !== null;
     },
     pagesWaitFor: (classifier) => {
       if (classifier.kind !== "chat") return null;
@@ -2584,7 +2596,14 @@ export function createCore(adapters: CoreAdapters): Core {
     if (endsPause) rateLimit.resumeNow();
     tagger.resume();
     library.resume();
+    // The switch for tagging and sorting follows the model until the User sets it: say when it moved.
+    const automatic = library.settings().automatic;
+    if (automatic !== lastAutomatic) {
+      lastAutomatic = automatic;
+      events.emit("library.changed", null);
+    }
   };
+  let lastAutomatic = library.settings().automatic;
 
   /** Jev was set up, changed or removed: say so, and Documents waiting may go on. */
   const jevChanged = async () => {
@@ -4021,18 +4040,20 @@ export function createCore(adapters: CoreAdapters): Core {
       const after = library.settings();
       // Choosing the model that tags or organizes Documents, where a line says what goes,
       // allows it (ADR-0022). Saving the same one again, for another setting, isn't a new choice.
+      const switchedOn = !before.automatic && after.automatic;
       const tagsAnew = JSON.stringify(after.classifier) !== JSON.stringify(before.classifier);
       const organizesAnew =
         JSON.stringify(organizeModelOf(after)) !== JSON.stringify(organizeModelOf(before));
-      if (tagsAnew) {
+      // Turning on tagging and sorting by themselves, where a line says what goes, is the consent too (#1617).
+      if (tagsAnew || switchedOn) {
         for (const service of await taggingServices()) consent.choose(["tagging"], service);
       }
-      if (organizesAnew) {
+      if (organizesAnew || switchedOn) {
         for (const service of await classificationServices()) {
           consent.choose(["classification"], service);
         }
       }
-      if (tagsAnew || organizesAnew) await dataFlowsChanged();
+      if (tagsAnew || organizesAnew || switchedOn) await dataFlowsChanged();
       await taggingChanged();
     },
     getTaggingModels: async () => {
@@ -4186,6 +4207,7 @@ export function createCore(adapters: CoreAdapters): Core {
       library.setTaggingStopped([folderId], !on);
       tagger.resume();
     },
+    dismissAutomaticOffNotice: async () => library.dismissAutomaticOffNotice(),
 
     getJevSettings: () => jev.status(),
     saveJevSettings: async (input) => {

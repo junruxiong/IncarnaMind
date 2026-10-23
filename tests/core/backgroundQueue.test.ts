@@ -13,7 +13,13 @@ import { createTags } from "../../src/core/tags";
 import type { TagClassifier } from "../../src/core/tags/classify";
 import { createTagger } from "../../src/core/tags/tagger";
 import { type FlowTag, flowNow, inFlow } from "../../src/core/timing/flows";
-import { createTempDataFolder, nextEvent, nextTurn, startCore } from "../helpers/core";
+import {
+  createTempDataFolder,
+  nextEvent,
+  nextTurn,
+  startCore,
+  turnOnAutomaticTagging,
+} from "../helpers/core";
 import { addAndProcess, writeSourceFile } from "../helpers/documents";
 import { connectToMind } from "../helpers/mindClient";
 import { question, writeMind } from "../helpers/minds";
@@ -430,6 +436,7 @@ async function setUp(provider: SaveChatProviderInput) {
   });
   core.on("consent.requested", ({ requestId }) => void core.respondToConsent(requestId, true));
   await core.saveChatProvider(provider);
+  await turnOnAutomaticTagging(core);
   const mind = await core.createMind({ title: "Tides" });
   const writer = await connectToMind(core, mind.id);
   const asked = question("What is attention?");

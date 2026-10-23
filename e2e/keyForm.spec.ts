@@ -874,25 +874,21 @@ async function refusingAddress(): Promise<string> {
   return `http://127.0.0.1:${port}/v1`;
 }
 
-for (const { value, connect, connecting, tags, keyTags, unreachable } of [
+for (const { value, connect, connecting, unreachable } of [
   {
     value: "en",
     connect: "Connect server",
     connecting: "Connecting…",
-    tags: "Tagging starts when you connect the server.",
-    keyTags: "Tagging starts when you save the key.",
     unreachable: "Couldn’t reach the server. Check its URL and your connection.",
   },
   {
     value: "zh-CN",
     connect: "连接服务器",
     connecting: "正在连接…",
-    tags: "连接服务器后就开始打标签。",
-    keyTags: "保存密钥后就开始打标签。",
     unreachable: "无法连接到服务器。请检查地址和网络连接。",
   },
 ] as const) {
-  test(`a server that needs no key says Connect server, and tagging starts once it is connected; a refused address keeps the form for the next try (${value})`, async () => {
+  test(`a server that needs no key says Connect server; a refused address keeps the form for the next try (${value})`, async () => {
     const fake = await keylessServer();
     const refused = await refusingAddress();
     const { app, window } = await launchApp(dataDir);
@@ -906,8 +902,6 @@ for (const { value, connect, connecting, tags, keyTags, unreachable } of [
       const key = form.locator('input[type="password"]');
       const button = form.getByTestId("provider-use-key");
       await expect(button).toHaveText(connect);
-      await expect(form.getByText(tags)).toBeVisible();
-      await expect(form.getByText(keyTags)).toHaveCount(0);
 
       await address.fill(refused);
       await model.fill("any");
@@ -919,7 +913,6 @@ for (const { value, connect, connecting, tags, keyTags, unreachable } of [
       await expect(model).toHaveValue("any");
       await expect(key).toHaveValue("");
       await expect(button).toHaveText(connect);
-      await expect(form.getByText(tags)).toBeVisible();
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/keyless-server-refused-${value}.png`,
