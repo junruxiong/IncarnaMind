@@ -30,7 +30,7 @@ import { type ReviewReading, reviewReading } from "../mindText";
 import { attribute, contentMarkdown, textAttribute, toMarkdown } from "./blocks";
 import { answerMarkdown } from "./contextText";
 import type { AnswerMessage } from "./engine";
-import { onScreenLine } from "./prompt";
+import { askedAbout, onScreenLine } from "./prompt";
 import {
   type ChangeStates,
   type MindNames,
@@ -591,7 +591,7 @@ export function conversationContextOf(
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
     if (message.kind === "question")
-      return message.text ? [{ role: "user", text: message.text }] : [];
+      return message.text ? [{ role: "user", text: askedAbout(message) }] : [];
     const record = toolRecord(message.toolCalls, mindNames, message.citations.length, changeStates);
     const text =
       message.status === "failed"

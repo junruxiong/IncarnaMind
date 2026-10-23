@@ -3835,6 +3835,7 @@ export const zhCN = {
   "error.approval.commandOnce": "命令只能逐次允许，不能设为始终允许。",
   "error.question.answer": "这个问题不接受这样的回答。",
   "error.question.onScreen": "无法确定打开了哪些文档，请重新提问。",
+  "error.question.quotes": "无法读取你选中用来提问的文字，请重新选择。",
   "error.mindStyle.invalid": "无法使用这个字体和字号。",
   "error.privacy.usageDataLocalMode": "使用数据保持关闭：已开启“所有内容都留在这台电脑上”。",
   "error.check.claimTooLong": "这条说法太长，无法核对：最多 {max} 个字符。",
