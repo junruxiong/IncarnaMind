@@ -35,20 +35,24 @@ export function UndoLine() {
   return (
     <div role="status" aria-live="polite" data-testid="undo-line" className="flex flex-col">
       {/* A change shown where the User made it, under an Answer in the assistant, isn't shown twice. */}
-      {line && !line.change?.shownAt && <Line key={line.id} line={line} />}
+      {line && !placeOf(line) && <Line key={line.id} line={line} />}
     </div>
   );
 }
 
 /** The line of a change made in a place of its own, shown there instead of the sidebar's foot (`Undoable.shownAt`). */
-export function UndoLineAt({ place }: { place: string }) {
-  const line = useUndo((state) => (state.line?.change?.shownAt === place ? state.line : null));
+export function UndoLineAt({ place, className }: { place: string; className?: string }) {
+  const line = useUndo((state) =>
+    state.line && placeOf(state.line) === place ? state.line : null,
+  );
   return (
-    <div aria-live="polite" data-testid="undo-line-here">
+    <div aria-live="polite" data-testid="undo-line-here" className={className}>
       {line && <Line key={line.id} line={line} />}
     </div>
   );
 }
+
+const placeOf = (line: UndoLineState) => line.change?.shownAt ?? line.shownAt;
 
 const report = (error: unknown) => useAppStore.getState().reportError(error);
 
@@ -110,7 +114,7 @@ function Line({ line }: { line: UndoLineState }) {
     // A longer line, said for the User rather than by them: all of it, its actions under it.
     return (
       <div ref={shown} className={`${lineClass} flex-col`}>
-        <span data-testid="undo-message" className="min-w-0 break-words">
+        <span data-testid="undo-message" className="min-w-0 break-words text-balance">
           {message}
         </span>
         <span className="-ml-1 flex items-center gap-1">

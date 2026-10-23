@@ -266,6 +266,25 @@ describe("the undo stack", () => {
   });
 });
 
+describe("what an undo says afterwards", () => {
+  test("a note says what an undo left, in the place its change showed its line (#1573)", async () => {
+    const log: string[] = [];
+    push({
+      ...change("Local mode", log),
+      undoneNote: () => () => "Still using the model",
+      shownAt: "setup",
+    });
+    await undo();
+    const { line } = useUndo.getState();
+    expect(line?.note?.(noWords)).toBe("Still using the model");
+    expect(line?.shownAt).toBe("setup");
+
+    push({ ...change("Move", log), undoneNote: () => () => "Kept the Folder" });
+    await undo();
+    expect(useUndo.getState().line?.shownAt).toBeUndefined();
+  });
+});
+
 describe("the lines follow the interface language", () => {
   let language: Language;
   const t = (key: MessageKey, params?: MessageParams) => translate(language, key, params);

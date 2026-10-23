@@ -1992,6 +1992,7 @@ export const en = {
   "localMode.turnedOff": "Turned off “Keep everything on this computer”",
   "localMode.turnedOn": "Turned on “Keep everything on this computer”",
   "localMode.chosen": "Using {model} · Everything stays on this computer",
+  "localMode.chosen.undone": "Turned off “Keep everything on this computer” · Still using {model}",
   "localMode.change": "Change",
   "localMode.keep.label": "Also keep everything on this computer",
   "localMode.keep.nothing": "Nothing in the cloud is set up yet.",

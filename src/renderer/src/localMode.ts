@@ -48,6 +48,7 @@ export async function localModeChosen(
     redo: () => setLocalMode(now),
     ...(shownAt && { shownAt }),
     ...(using && {
+      undoneNote: () => (t) => t("localMode.chosen.undone", { model: using }),
       also: {
         label: (t) => t("localMode.change"),
         testId: "undo-change-local-mode",

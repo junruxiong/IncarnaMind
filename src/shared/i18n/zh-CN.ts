@@ -1915,6 +1915,7 @@ export const zhCN = {
   "localMode.turnedOff": "已关闭“所有内容都留在这台电脑上”",
   "localMode.turnedOn": "已开启“所有内容都留在这台电脑上”",
   "localMode.chosen": "使用 {model} · 所有内容都留在这台电脑上",
+  "localMode.chosen.undone": "已关闭“所有内容都留在这台电脑上” · 仍在使用 {model}",
   "localMode.change": "更改",
   "localMode.keep.label": "同时让所有内容都留在这台电脑上",
   "localMode.keep.nothing": "目前没有设置任何云端服务。",
