@@ -1,0 +1,82 @@
+name: PowerPoint patch spike
+
+# The spike of #1264 (eval/pptx/README.md): patches the pinned corpus, then runs the Open XML
+# SDK's schema check and LibreOffice on every original and every patched copy. On demand, and on
+# pushes to the spike's branch; never on main.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/1264-pptx-patch]
+
+permissions:
+  contents: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  spike:
+    name: Patch, schema check and LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Patch the corpus
+        run: npm run eval:pptx
+      - name: Collect the files
+        run: |
+          out=$(ls -d eval/results/pptx-*/ | tail -1)
+          echo "OUT=$out" >> "$GITHUB_ENV"
+          mkdir -p "$out/originals"
+          cp ~/.cache/incarnamind-eval/pptx-corpus/*.pptx "$out/originals/"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Schema check
+        run: |
+          dotnet build eval/pptx/validator -c Release -o /tmp/validator
+          dotnet /tmp/validator/Validator.dll "$OUT"/outputs/*.pptx > "$OUT/schema-outputs.jsonl"
+          dotnet /tmp/validator/Validator.dll "$OUT"/originals/*.pptx > "$OUT/schema-originals.jsonl"
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-impress
+      - name: Open every file in LibreOffice
+        run: |
+          for kind in outputs originals; do
+            mkdir -p "/tmp/pdf/$kind"
+            for file in "$OUT/$kind"/*.pptx; do
+              name=$(basename "$file" .pptx)
+              start=$(date +%s)
+              if timeout 180 soffice --headless --norestore --convert-to pdf --outdir "/tmp/pdf/$kind" "$file" > /dev/null 2>&1 \
+                && [ -s "/tmp/pdf/$kind/$name.pdf" ]; then ok=true; else ok=false; fi
+              pages=$( [ "$ok" = true ] && (pdfinfo "/tmp/pdf/$kind/$name.pdf" 2>/dev/null | awk '/^Pages:/ {print $2}') || echo 0)
+              echo "{\"kind\":\"$kind\",\"file\":\"$name.pptx\",\"opened\":$ok,\"pages\":${pages:-0},\"seconds\":$(( $(date +%s) - start ))}" >> "$OUT/libreoffice.jsonl"
+            done
+          done
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pptx-spike
+          path: |
+            ${{ env.OUT }}outputs/
+            ${{ env.OUT }}*.json
+            ${{ env.OUT }}*.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload the person's check
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pptx-owner-check
+          path: ${{ env.OUT }}owner-check/
+          if-no-files-found: warn
+          retention-days: 90

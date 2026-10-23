@@ -23,6 +23,7 @@
     "test:smoke": "electron-vite build --mode test && playwright test",
     "test:packaged": "playwright test -c e2e/packaged/playwright.packaged.config.ts",
     "eval": "vitest run --config eval/vitest.config.ts",
+    "eval:pptx": "vitest run --config eval/pptx/vitest.config.ts",
     "eval:classification": "vitest run --config eval/classification/vitest.config.ts",
     "eval:organize": "vitest run --config eval/organize/vitest.config.ts",
     "eval:hard": "vitest run --config eval/hard/vitest.config.ts",

@@ -17,14 +17,7 @@ import {
   type StyleBases,
   type StyleRole,
 } from "../docx";
-import { commentsPart, footnotesPart, W_NAMESPACE, WordIds, XML_DECLARATION } from "../wordml";
-import {
-  CONTENT_TYPES,
-  type PartRelationships,
-  type PartText,
-  RELATIONSHIP_TYPES,
-  type WordPackageWriter,
-} from "./package";
+import type { PackageWriter, PartRelationships, PartText } from "../packagePatch/package";
 import {
   appendInside,
   applySplices,
@@ -33,7 +26,33 @@ import {
   type Splice,
   selfClosing,
   startOf,
-} from "./text";
+} from "../packagePatch/text";
+import {
+  COMMENTS_CONTENT_TYPE,
+  COMMENTS_RELATIONSHIP,
+  commentsPart,
+  footnotesPart,
+  W_NAMESPACE,
+  WordIds,
+  XML_DECLARATION,
+} from "../wordml";
+
+const RELATIONSHIP_TYPES = {
+  footnotes: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes",
+  numbering: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering",
+  styles: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles",
+  hyperlink: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+  image: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
+  comments: COMMENTS_RELATIONSHIP,
+} as const;
+
+const WORDPROCESSING = "application/vnd.openxmlformats-officedocument.wordprocessingml";
+const CONTENT_TYPES = {
+  footnotes: `${WORDPROCESSING}.footnotes+xml`,
+  numbering: `${WORDPROCESSING}.numbering+xml`,
+  styles: `${WORDPROCESSING}.styles+xml`,
+  comments: COMMENTS_CONTENT_TYPE,
+} as const;
 
 /** A part's name relative to the folder of the document part: "word/styles.xml" → "styles.xml". */
 const relativeTo = (owner: string, part: string) => {
@@ -58,7 +77,7 @@ export class DocumentStyles {
   readonly bases: StyleBases;
 
   private constructor(
-    private readonly pkg: WordPackageWriter,
+    private readonly pkg: PackageWriter,
     private readonly document: string,
     private readonly relationships: PartRelationships,
     private readonly name: string,
@@ -84,7 +103,7 @@ export class DocumentStyles {
   }
 
   static async read(
-    pkg: WordPackageWriter,
+    pkg: PackageWriter,
     document: string,
     relationships: PartRelationships,
   ): Promise<DocumentStyles> {
@@ -197,7 +216,7 @@ export class DocumentNumbering {
   private readonly own = new Map<boolean, number>();
 
   private constructor(
-    private readonly pkg: WordPackageWriter,
+    private readonly pkg: PackageWriter,
     private readonly document: string,
     private readonly relationships: PartRelationships,
     private readonly name: string,
@@ -213,7 +232,7 @@ export class DocumentNumbering {
   }
 
   static async read(
-    pkg: WordPackageWriter,
+    pkg: PackageWriter,
     document: string,
     relationships: PartRelationships,
   ): Promise<DocumentNumbering> {
@@ -293,7 +312,7 @@ export class DocumentFootnotes {
   private readonly added: string[] = [];
 
   private constructor(
-    private readonly pkg: WordPackageWriter,
+    private readonly pkg: PackageWriter,
     private readonly document: string,
     private readonly relationships: PartRelationships,
     readonly name: string,
@@ -301,7 +320,7 @@ export class DocumentFootnotes {
   ) {}
 
   static async read(
-    pkg: WordPackageWriter,
+    pkg: PackageWriter,
     document: string,
     relationships: PartRelationships,
   ): Promise<DocumentFootnotes> {
@@ -347,7 +366,7 @@ export class DocumentFootnotes {
 /** The document's comments part, and IncarnaMind's comments added (#107). */
 export class DocumentComments {
   private constructor(
-    private readonly pkg: WordPackageWriter,
+    private readonly pkg: PackageWriter,
     private readonly document: string,
     private readonly relationships: PartRelationships,
     private readonly name: string,
@@ -355,7 +374,7 @@ export class DocumentComments {
   ) {}
 
   static async read(
-    pkg: WordPackageWriter,
+    pkg: PackageWriter,
     document: string,
     relationships: PartRelationships,
   ): Promise<DocumentComments> {
@@ -392,7 +411,7 @@ const STORY_PART = /^word\/(?:document\d*|header\d*|footer\d*|footnotes|endnotes
  * own, and every `w:id` its stories have (their changes, comments and
  * bookmarks), so a new tracked change's or comment's is its own.
  */
-export async function reserveIds(pkg: WordPackageWriter, ids: WordIds): Promise<void> {
+export async function reserveIds(pkg: PackageWriter, ids: WordIds): Promise<void> {
   for (const name of pkg.zip.names()) {
     if (!STORY_PART.test(name)) continue;
     const text = (await pkg.text(name)) ?? "";
@@ -423,7 +442,7 @@ export class PatchTarget implements DocxTarget {
   private readonly contentTypes: Promise<void>[] = [];
 
   constructor(
-    private readonly pkg: WordPackageWriter,
+    private readonly pkg: PackageWriter,
     private readonly document: string,
     private readonly relationships: PartRelationships,
     /** The footnotes part's: links in footnotes are its own. */
