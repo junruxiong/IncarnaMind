@@ -695,7 +695,7 @@ test("an empty conversation says once what it reads and searches, following focu
   await expect(reads).toHaveCount(0);
   await window.mouse.move(10, 10);
   const actions = answer.getByTestId("answer-actions");
-  await expect(actions).toHaveText("CopyAdd to note");
+  await expect(actions).toHaveText("CopyAdd to noteNew Mind");
   await expect(actions).not.toContainText(MODEL_NAME);
   await expect(answer.getByTestId("answer-copy")).toHaveCSS("font-size", "13px");
   await expect(answer.getByTestId("answer-copy")).toHaveCSS("font-weight", "400");

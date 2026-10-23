@@ -127,9 +127,9 @@ function addAnswerInFocus(): void {
   );
 }
 
-/** "Add the last Answer to a new Mind", as Add to note ▾ → New Mind does. */
+/** New Mind under the Answer in focus, or the newest (#1559), as Add to note ▾ → New Mind does. */
 function lastToNewMind(): void {
-  const answer = lastAnswer();
+  const answer = answerInFocus();
   if (!keepable(answer)) return;
   const conversation = conversationById(answer.conversationId);
   void addAnswer({ answer, conversation, blocks: notesToAdd(answer) }, { kind: "new" });
@@ -250,11 +250,10 @@ export const assistantCommands: readonly Command[] = [
     id: "assistant.lastToNewMind",
     label: "assistant.lastToNewMind",
     group: "main",
-    // Undo deletes the Mind it made.
+    // Filling the empty Mind in front is one step of its Undo; a Mind it makes, Delete takes back.
     reversible: true,
     when: isThere,
-    enabled: () =>
-      keepable(lastAnswer()) ? true : { reason: "assistant.lastToNewMind.unavailable" },
+    enabled: noAnswer,
     run: lastToNewMind,
   },
   {
