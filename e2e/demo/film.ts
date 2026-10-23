@@ -252,12 +252,6 @@ export class Film {
       ["-loop", "0"],
     );
   }
-
-  async encodeMp4(output: string, { fps }: Encoding): Promise<number> {
-    return this.make(output, fps, "format=yuv420p[out]", [
-      ...["-c:v", "libx264", "-crf", "20", "-preset", "slow", "-movflags", "+faststart"],
-    ]);
-  }
 }
 
 function ffmpeg(args: string[]): Promise<void> {

@@ -15,9 +15,9 @@ import { type DemoLanguage, writeTermSheets } from "./documents";
 import type { Block, DemoScript } from "./script";
 
 /** The model the recording is made with. */
-export const MODEL = "claude-sonnet-5-5";
+const MODEL = "claude-sonnet-5-5";
 /** The keys to try, in order: the first the provider doesn't refuse is used. */
-export const KEY_NAMES = ["ANTHROPIC_API_KEY_JOEYXIONG26", "ANTHROPIC_API_KEY_JOEYXIONG28"];
+const KEY_NAMES = ["ANTHROPIC_API_KEY_JOEYXIONG26", "ANTHROPIC_API_KEY_JOEYXIONG28"];
 
 const SHIPPED = resolve(__dirname, "../../resources/examples");
 
@@ -90,9 +90,6 @@ const blockElement = (block: Block) =>
 export interface Workspace {
   /** The Mind of the draft. */
   paperId: string;
-  creditFolderId: string;
-  /** The Mind the term sheets are compared in. */
-  optionsId: string;
 }
 
 /**
@@ -124,7 +121,8 @@ export async function buildWorkspace(
     },
     { folders: script.folders, creditFiles, sheets },
   );
-  // "Ready" comes before the search finds every Document's words: an Answer asked in between says they are still being read.
+  // "Ready" comes before the search finds every Document's words: an Answer asked in between
+  // says they are still being read.
   await expect
     .poll(
       () =>
@@ -161,7 +159,7 @@ export async function buildWorkspace(
       { type: "paragraph", text: script.options.intro },
     ].map((block) => blockElement(block as Block)),
   );
-  const optionsId = await window.evaluate(
+  await window.evaluate(
     async ({ title, folderId, change }) => {
       const bridge = () => (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
       const mind = await bridge().createMind({ title, folderId });
@@ -175,7 +173,7 @@ export async function buildWorkspace(
       change: Array.from(Y.encodeStateAsUpdate(options)),
     },
   );
-  return { paperId, creditFolderId, optionsId };
+  return { paperId };
 }
 
 /**

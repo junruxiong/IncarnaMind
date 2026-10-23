@@ -186,8 +186,9 @@ export interface LaunchOptions {
    */
   sandboxNotice?: "switch" | "environment" | "on";
   /**
-   * The search, text recognition and speech models are the real ones instead of the fake ones,
-   * downloaded on first use: for a recording of the app as the User runs it.
+   * The search, text recognition and speech engines are the real ones instead of the fake ones, on
+   * the models already in the data folder (a test build reaches no model host): for a recording
+   * of the app as the User runs it.
    */
   realEngines?: boolean;
   /**

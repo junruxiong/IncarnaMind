@@ -111,7 +111,8 @@ export const SCRIPTS: Record<DemoLanguage, DemoScript> = {
         "Free, open source, runs on your computer.",
         "github.com/IncarnaMind/IncarnaMind",
       ],
-      audience: "For analysts, lawyers and engineers who write from documents.",
+      audience:
+        "For analysts, lawyers and engineers who write from documents and stand behind every figure.",
     },
     words: {
       contradicted: /Contradicted/,
