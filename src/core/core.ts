@@ -427,7 +427,7 @@ function parseQuoted(input: unknown): ScannedQuoteInput {
 
 function parseSelectedPart(input: unknown): SelectedPart {
   if (!isRecord(input) || typeof input.text !== "string") {
-    throw new InvalidInputError("Each part of a selection is its text and its Unit.");
+    throw new InvalidInputError({ key: "error.selection.none" });
   }
   const count = (value: unknown) =>
     typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
@@ -3765,14 +3765,11 @@ export function createCore(adapters: CoreAdapters): Core {
       });
     },
     citeSelection: async (input) => {
-      if (!isRecord(input) || typeof input.documentId !== "string" || input.documentId === "") {
-        throw new InvalidInputError("citeSelection needs the Document's id.");
-      }
-      if (!Array.isArray(input.parts) || input.parts.length === 0) {
-        throw new InvalidInputError("citeSelection needs the selected text, part by part.");
+      if (!isRecord(input) || !Array.isArray(input.parts) || input.parts.length === 0) {
+        throw new InvalidInputError({ key: "error.selection.none" });
       }
       return citeSelection(documents, {
-        documentId: input.documentId,
+        documentId: parseDocumentId(input.documentId),
         parts: input.parts.map(parseSelectedPart),
       });
     },
