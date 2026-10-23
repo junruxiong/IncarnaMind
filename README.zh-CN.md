@@ -37,7 +37,7 @@
 
 ## 下载
 
-**IncarnaMind 还没有正式发布。** 发布后，[发布页](https://github.com/IncarnaMind/IncarnaMind/releases)会提供 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的安装包。想在发布时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。想现在试用，可以用 Node.js 24 或更高版本从源码运行：
+**公开 alpha 将在 2027 年初开放。** 在那之前，[发布页](https://github.com/IncarnaMind/IncarnaMind/releases)上有 macOS（Apple 芯片和 Intel）、Windows 和 Linux 的早期测试版，以预发布版本的形式提供：更新频繁，暂未签名，第一次打开时系统会给出警告（见下）。想在 alpha 开放时收到通知，可以[留下邮箱](https://tally.so/r/LZA5aG?ref=readme-zh)，或点本页右上角的 **Watch → Custom → Releases**。也可以用 Node.js 24 或更高版本从源码运行：
 
 ```shell
 git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind

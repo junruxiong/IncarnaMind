@@ -37,7 +37,7 @@
 
 ## Download
 
-**IncarnaMind isn't released yet.** Once it is, the [Releases page](https://github.com/IncarnaMind/IncarnaMind/releases) will have installers for macOS (Apple silicon and Intel), Windows and Linux. To hear when, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. To try it now, run it from source with Node.js 24 or newer:
+**The public alpha opens in early 2027.** Until then, early test builds for macOS (Apple silicon and Intel), Windows and Linux are on the [Releases page](https://github.com/IncarnaMind/IncarnaMind/releases) as pre-releases: they change often and they aren't signed yet, so your system warns you the first time you open one (see below). To hear when the alpha opens, [leave your e-mail](https://tally.so/r/rjN2jL?ref=readme) or click **Watch → Custom → Releases** at the top of this page. Or run it from source with Node.js 24 or newer:
 
 ```shell
 git clone https://github.com/IncarnaMind/IncarnaMind.git && cd IncarnaMind
