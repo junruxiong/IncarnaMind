@@ -1,13 +1,14 @@
 /**
  * The AI flows `npm run eval:speed` times (eval/speed/README.md), each driven through the core as
  * the app drives it, in English and Chinese. A flow's run is timed from the User's action, as
- * the events the window shows arrive: the first sign of work, the first words (in the panel, or
- * the first change in the page), the end, and the longest wait with no sign between them. The
+ * the events the window shows arrive: the first sign of work, the first words (in the panel or
+ * the page), the first change in the page, the end, and the longest wait with no sign between them. The
  * model requests and local steps it made come from the core's own timing records
  * (src/core/timing), tagged with the flow.
  */
 import { randomUUID } from "node:crypto";
-import type { Core, CoreEventName, Document } from "../../src/core";
+import { type Core, type CoreEventName, type Document, messageReference } from "../../src/core";
+import { pageBlocks } from "../../src/shared/answerBlocks";
 import { connectToMind } from "../../tests/helpers/mindClient";
 import { note, writeMind } from "../../tests/helpers/minds";
 import { ask } from "../everyday/asking";
@@ -23,8 +24,12 @@ export interface FlowContext {
 
 /** When the window saw each kind of sign, in milliseconds from the User's action. */
 export interface FlowSigns {
+  /** The User's action, after whatever the flow set up first. */
+  startedAt: string;
   firstSignMs: number | null;
   firstWordsMs: number | null;
+  /** The first change in the page, which an Answer's words in the panel may come before. */
+  firstChangeMs: number | null;
   doneMs: number;
   /** The longest stretch with no new sign of work, from the action to the end. */
   longestQuietMs: number;
@@ -65,16 +70,19 @@ export async function timed(
   mindId: string,
   act: () => Promise<unknown>,
 ): Promise<FlowSigns> {
+  const startedAt = new Date().toISOString();
   const start = performance.now();
   const at = () => performance.now() - start;
   const signs: number[] = [];
   let firstWordsMs: number | null = null;
+  let firstChangeMs: number | null = null;
   const stops = SIGNS.map((event) =>
     core.on(event, (payload: unknown) => {
       const place = payload as { mindId?: string | null };
       if (typeof place.mindId === "string" && place.mindId !== mindId) return;
       signs.push(at());
       if (WORDS.has(event)) firstWordsMs ??= at();
+      if (event === "mind.update") firstChangeMs ??= at();
     }),
   );
   try {
@@ -87,7 +95,14 @@ export async function timed(
   const longestQuietMs = marks
     .slice(1)
     .reduce((longest, mark, index) => Math.max(longest, mark - (marks[index] ?? 0)), 0);
-  return { firstSignMs: signs[0] ?? null, firstWordsMs, doneMs, longestQuietMs };
+  return {
+    startedAt,
+    firstSignMs: signs[0] ?? null,
+    firstWordsMs,
+    firstChangeMs,
+    doneMs,
+    longestQuietMs,
+  };
 }
 
 const inLanguage = <T>(language: Language, words: Record<Language, T>): T => words[language];
@@ -112,6 +127,11 @@ const CLAIM = {
   en: "The JP Morgan report sets targets for its financed emissions.",
   "zh-CN": "摩根大通的报告为其融资排放设定了目标。",
 };
+const SUMMARISE = {
+  en: "Summarise the JP Morgan report's emissions targets in a short paragraph",
+  "zh-CN": "用一小段话概括摩根大通报告的排放目标",
+};
+const LONGER = { en: "Make the summary longer.", "zh-CN": "把摘要写长一点。" };
 const UN_CLAIM = {
   en: "The UN's 2022 annual report covers its work in more than 190 countries.",
   "zh-CN": "联合国 2022 年度报告介绍了它在 190 多个国家的工作。",
@@ -161,6 +181,36 @@ export const FLOWS: readonly Flow[] = [
       { en: "Make the second paragraph more formal", "zh-CN": "把第二段改得更正式" },
       (language) => [CLAIM[language], INFORMAL[language]],
     ),
+  },
+  {
+    id: "assistant-longer",
+    label: "Ask the assistant to make a summary it added to the page longer",
+    async run({ core, language }) {
+      const { mindId } = await mindWith(core, language, [NOTES[language]]);
+      const question = SUMMARISE[language];
+      const summary = await ask(core, {
+        text: question,
+        mindId,
+        conversationId: null,
+        focus: null,
+      });
+      await core.addToNote({
+        mindId,
+        blocks: pageBlocks(summary, question),
+        origin: { from: messageReference(summary.conversationId, summary.id), question },
+        model: summary.model,
+      });
+      const client = await connectToMind(core, mindId);
+      await client.settled();
+      return timed(core, mindId, () =>
+        ask(core, {
+          text: LONGER[language],
+          mindId,
+          conversationId: summary.conversationId,
+          focus: null,
+        }),
+      );
+    },
   },
   {
     id: "edit-with-ai",

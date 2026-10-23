@@ -164,10 +164,11 @@ test("the speed of every AI flow, on each model and language", async () => {
               error = thrown instanceof Error ? thrown.message : String(thrown);
               log(`  failed: ${error}`);
             }
+            // From the User's action: what a flow set up first (an earlier Answer) isn't its.
             const records = queryDatabase<TimingRecord>(
               dataDir,
               "SELECT * FROM ai_timings WHERE started_at >= ? ORDER BY started_at, rowid",
-              [since],
+              [signs?.startedAt ?? since],
             );
             results.push({ flow: flow.id, model: name, language, signs, error, records });
           }

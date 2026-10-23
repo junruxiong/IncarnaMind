@@ -4,7 +4,7 @@
 
 ## What it measures
 
-- **Each flow** (`flows.ts`), from the User's action: the first sign of work the window shows (a step, a spinner, the first words), the first words, the end, and the longest wait with no new sign. Every flow is held to one rule: a sign within 0.5 s, and no silent wait over 2 s.
+- **Each flow** (`flows.ts`), from the User's action: the first sign of work the window shows (a step, a spinner, the first words), the first words (in the panel or the page), the first change in the page, the end, and the longest wait with no new sign. Every flow is held to one rule: a sign within 0.5 s, and no silent wait over 2 s.
 - **Each model request and local step** the flows made, from the core's own timing records (`src/core/timing`): by flow and step, the times to the first byte, the first reasoning, the first text and the end, with the tokens and the reasoning setting. A request made outside any tagged flow shows under its data flow (`tagging` for Tags, `classification` for Organize), so a new flow appears by itself.
 
 The core keeps these records for any use of the app, in its own database, for 30 days: times, tokens and names, never text, and nothing is sent anywhere.

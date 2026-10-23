@@ -1,8 +1,8 @@
 /**
  * The speed baseline's tables (eval/speed/README.md): per flow, model and language, the median and
- * 90th percentile of the time to the first sign of work, the first words and the end, against
- * the rule every flow is held to (a sign within 0.5 s, no silent wait over 2 s); then each model
- * request and local step the flows made, by flow and step.
+ * 90th percentile of the time to the first sign of work, the first words, the first change in
+ * the page and the end, against the rule every flow is held to (a sign within 0.5 s, no silent
+ * wait over 2 s); then each model request and local step the flows made, by flow and step.
  */
 import type { FlowSigns, Language } from "./flows";
 
@@ -64,19 +64,19 @@ export function flowTable(runs: readonly FlowRun[]): string {
       const timed = each.flatMap((run) => (run.signs ? [run.signs] : []));
       const sign = known(timed.map((run) => run.firstSignMs));
       const quiet = timed.map((run) => run.longestQuietMs);
+      // A flow's requests are tagged with the core's flows it runs, not with its own id.
       const calls = each.map(
         (run) =>
-          run.records.filter((record) => record.kind === "model" && record.flow === run.flow)
-            .length,
+          run.records.filter((record) => record.kind === "model" && record.flow !== null).length,
       );
       const signOk = (percentile(sign, 0.9) ?? Number.POSITIVE_INFINITY) <= SIGN_WITHIN_MS;
       const quietOk = (percentile(quiet, 0.9) ?? Number.POSITIVE_INFINITY) <= QUIET_AT_MOST_MS;
-      return `| ${flow} | ${model} | ${language} | ${timed.length}/${each.length} | ${pair(sign)} | ${pair(known(timed.map((run) => run.firstWordsMs)))} | ${pair(timed.map((run) => run.doneMs))} | ${pair(quiet)} | ${percentile(calls, 0.5) ?? "–"} | ${signOk ? "yes" : "**no**"} | ${quietOk ? "yes" : "**no**"} |`;
+      return `| ${flow} | ${model} | ${language} | ${timed.length}/${each.length} | ${pair(sign)} | ${pair(known(timed.map((run) => run.firstWordsMs)))} | ${pair(known(timed.map((run) => run.firstChangeMs)))} | ${pair(timed.map((run) => run.doneMs))} | ${pair(quiet)} | ${percentile(calls, 0.5) ?? "–"} | ${signOk ? "yes" : "**no**"} | ${quietOk ? "yes" : "**no**"} |`;
     },
   );
   return [
-    "| Flow | Model | Language | Runs | First sign (median / p90) | First words | Done | Longest silent wait | Model calls | Sign ≤ 0.5 s | Silence ≤ 2 s |",
-    "|---|---|---|---|---|---|---|---|---|---|---|",
+    "| Flow | Model | Language | Runs | First sign (median / p90) | First words | First change in the page | Done | Longest silent wait | Model calls | Sign ≤ 0.5 s | Silence ≤ 2 s |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ...rows,
   ].join("\n");
 }
