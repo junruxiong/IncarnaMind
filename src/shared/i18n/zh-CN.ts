@@ -3483,6 +3483,7 @@ export const zhCN = {
   "error.connector.notInDirectory": "目录里没有这个连接器。",
   "error.examples.reading": "示例文档还在读取中，稍后再试一次。",
   "sheet.noSavedValue": "无保存的值",
+  "error.selection.none": "没有选中文字。",
   "error.document.notFound": "找不到这个文档。",
   "error.checkRecord.noPdf": "这个版本的 IncarnaMind 无法生成 PDF。",
   "error.export.choice": "{name} 只能是 true 或 false。",
