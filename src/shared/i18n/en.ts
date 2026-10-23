@@ -650,6 +650,9 @@ export const en = {
   "claim.calculated.negative": "counted as negative",
   "claim.cited": "Cited in this sentence",
   "claim.unsupported.notFound": "I didn’t find this in “{scope}”.",
+  "claim.unsupported.notFound.more": "I didn’t find this in “{scope}” or {count} more.",
+  "claim.checkedIn": "Checked against “{scope}”",
+  "claim.checkedIn.more": "Checked against “{scope}” and {count} more",
   "claim.unsupported.differs": "Your Documents say something different:",
   "claim.unsupported.covers.one":
     "Your Citation supports {covered}, not the parts about {uncovered}.",
@@ -704,6 +707,7 @@ export const en = {
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
   "claim.recheck.scope": "The Mind is in another Folder now.",
+  "claim.recheck.search-scope": "The Mind’s Search scope has changed since.",
   "health.label": "Sentences and Citations",
   "health.found.one": "1 Citation found",
   "health.found": "{count} Citations found",
@@ -744,6 +748,21 @@ export const en = {
   "editor.ai.addDocumentsToCheck": "Add Documents to check",
   "editor.ai.addDocumentsToFindSupport": "Add Documents to find support",
   "checks.problem.no-documents.all": "Nothing to check against: add Documents first.",
+  "checks.problem.scope.empty":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, has no Documents.",
+  "checks.problem.scope.empty.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, have no Documents.",
+  "checks.problem.scope.ownFile":
+    "Nothing to check against: “{scope}”, this Mind’s Search scope, holds only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.ownFile.more":
+    "Nothing to check against: “{scope}” and {count} more, this Mind’s Search scope, hold only the file this Mind was made from, which a check never counts.",
+  "checks.problem.scope.gone.folder":
+    "Nothing to check against: the Folder this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.tag":
+    "Nothing to check against: the Tag this Mind’s Search scope names was deleted.",
+  "checks.problem.scope.gone.document":
+    "Nothing to check against: the Document this Mind’s Search scope names was deleted.",
+  "checks.changeScope": "Change the Search scope…",
   "checks.problem.nothing": "There’s no sentence to check in what you selected.",
   "checks.waiting.one": "1 sentence with changes waiting wasn’t checked",
   "checks.waiting": "{count} sentences with changes waiting weren’t checked",
@@ -1105,6 +1124,8 @@ export const en = {
     "The page as it looks wasn’t kept: its PDF would be over 50 MB.",
   "viewer.web.look.failed.stopped":
     "The page as it looks wasn’t kept: IncarnaMind stopped while making it.",
+  "viewer.web.look.failed.local-mode":
+    "Not kept as it looks: “Keep everything on this computer” is on. It would load the page from its site.",
   "viewer.web.look.failed.failed": "The page as it looks wasn’t kept.",
   "viewer.web.pictureNotSaved": "Not saved with the page",
   "viewer.docx.comment": "Comment by {author}",
@@ -1480,6 +1501,11 @@ export const en = {
   "webPages.reason.not-public": "it’s on this computer or a local network",
   "webPages.reason.too-many-redirects": "it redirects too many times",
   "webPages.reason.not-from-search": "the web search didn’t return it",
+  "webPages.reason.local-mode": "“Keep everything on this computer” is on",
+  "webPages.localMode":
+    "Not fetched: “Keep everything on this computer” is on. It would contact {site}.",
+  "webPages.localMode.once": "Fetch this page once",
+  "webPages.localMode.keep": "Don’t fetch",
   "webPages.fetchAgain": "Fetch again",
   "webPages.openLive": "Open the live page",
   "webPages.copyAddress": "Copy address",
@@ -2477,6 +2503,8 @@ export const en = {
   "composer.scope.allEmptyFolder":
     "“{folder}” has no Documents yet, so all your Documents are searched. Type @ to limit it",
   "composer.scope.change": "{name}. Change the Search scope (@)",
+  "composer.scope.back": "Back to “{name}”",
+  "composer.scope.backAll": "Back to All Documents",
   "composer.skills.label": "Skills",
   "composer.skills.manage": "Manage Skills…",
   "composer.expand": "Expand the composer",
@@ -3474,6 +3502,8 @@ export const en = {
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: I didn’t find this in “{scope}”.",
+  "export.comment.sentence.unsupported.more":
+    "Unsupported: I didn’t find this in “{scope}” or {count} more.",
   "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
   "export.comment.sentence.ownWorkings": "Unsupported: only your own working file says this.",
   "export.comment.sentence.unsupported.citation":
@@ -3491,6 +3521,8 @@ export const en = {
     "Needs re-check: a Document it was checked against was deleted.",
   "export.comment.sentence.needs-recheck.scope":
     "Needs re-check: the Mind is in another Folder now.",
+  "export.comment.sentence.needs-recheck.search-scope":
+    "Needs re-check: the Mind’s Search scope has changed since.",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",
@@ -3599,6 +3631,7 @@ export const en = {
   "error.document.fileCantOpen": "The Document’s file can’t be opened.",
   "error.document.noSuchPicture": "The Document shows no such picture.",
   "error.document.idRequired": "A Document id is required.",
+  "error.webPage.localModeOnceNotBoolean": "Letting a page go in this mode must be true or false.",
   "error.webPage.keepLookNotBoolean": "Whether to keep a page as it looks must be true or false.",
   "error.webPage.lookNotWebPage": "Only a web page can be kept as it looks.",
   "error.webPage.lookGone": "The PDF of how this page looked is gone.",

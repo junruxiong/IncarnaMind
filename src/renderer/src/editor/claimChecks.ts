@@ -8,9 +8,10 @@ import { Extension, Mark } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { CLAIM_CHECK_MARK, type ClaimCheckAttributes } from "../../../core/api";
+import { CLAIM_CHECK_MARK, type ClaimCheckAttributes, type SearchScope } from "../../../core/api";
 import { type ClaimCheckShown, claimCheckShown, readClaimCheck } from "../../../shared/claimChecks";
 import { sentenceKey } from "../../../shared/mindCheck";
+import { sameScope } from "../../../shared/searchScope";
 import { INLINE_NODE, sentenceSpans } from "../../../shared/sentences";
 
 /** Every attribute a check's mark keeps: all of `ClaimCheckAttributes`, never read from pasted HTML. */
@@ -119,6 +120,7 @@ export interface ClaimContext {
   /** Each live Document's current version, by id; null while they aren't known. */
   versions: ReadonlyMap<string, string> | null;
   folderId: string | null;
+  scope: SearchScope | null;
 }
 
 /** A check where it is, and how it shows: never one the User keeps as their own view, which shows nothing. */
@@ -139,7 +141,7 @@ const claimsKey = new PluginKey<ClaimState>("claimChecks");
 /** A transaction with this meta compares the checks with new Documents or a new Folder (`setClaimContext`). */
 const CONTEXT = "claimContext";
 
-const NO_CONTEXT: ClaimContext = { versions: null, folderId: null };
+const NO_CONTEXT: ClaimContext = { versions: null, folderId: null, scope: null };
 
 /** The checks in a document as they show now, and the sentences the User keeps as their own view. */
 export function claimsOf(
@@ -231,10 +233,13 @@ export function keptSentences(state: EditorState): ReadonlySet<string> {
   return claimsKey.getState(state)?.kept ?? NONE_KEPT;
 }
 
-/** Compares the checks with the Documents and the Mind's Folder as they are now. */
+/** Compares the checks with the Documents and the Mind's Folder and scope as they are now. */
 export function setClaimContext(view: EditorView, context: ClaimContext): void {
   const now = claimsKey.getState(view.state)?.context;
-  if (now?.versions === context.versions && now.folderId === context.folderId) return;
+  const sameScopes =
+    now?.scope === context.scope ||
+    (now?.scope && context.scope && sameScope(now.scope, context.scope));
+  if (now?.versions === context.versions && now.folderId === context.folderId && sameScopes) return;
   view.dispatch(view.state.tr.setMeta(CONTEXT, context).setMeta("addToHistory", false));
 }
 

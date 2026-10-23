@@ -181,8 +181,12 @@ export interface CreateMindInput {
  *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
  *   which an older version's editor would strip, so the sentence would count
  *   and be checked again. Older content is version 25 content as it is.
+ * - 26: a check made in the Search scope the User set for the Mind (#1623):
+ *   `chosen` in the `claimCheck` mark's `scope`. An older version would read
+ *   it as made in the Mind's Folder or in every Document, and say so on its
+ *   card. Older content is version 26 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 25;
+export const CONTENT_SCHEMA_VERSION = 26;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -2772,6 +2776,19 @@ export interface SaveWebPageInput {
    * `UserSettings.keepWebPageLook` says. Ignored with `html`.
    */
   keepLook?: boolean;
+  /**
+   * Local mode is on and the User let this one page be fetched ("Fetch this
+   * page once"): without it, an address that isn't saved yet isn't fetched in
+   * Local mode, and the result says why ("local-mode"). It doesn't turn Local
+   * mode off.
+   */
+  localModeOnce?: boolean;
+}
+
+/** What `fetchWebPageAgain` takes besides the Document. */
+export interface FetchWebPageAgainOptions {
+  /** As `SaveWebPageInput.localModeOnce`. */
+  localModeOnce?: boolean;
 }
 
 /**
@@ -2791,10 +2808,17 @@ export type WebPageLook =
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
  * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
- * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "local-mode",
+ * "Keep everything on this computer" is on, so the page wasn't loaded; "failed",
  * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
+export type WebPageLookFailure =
+  | "timed-out"
+  | "unreachable"
+  | "too-large"
+  | "stopped"
+  | "local-mode"
+  | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -2814,6 +2838,9 @@ export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "st
  * - "too-many-redirects": it redirected more than web search's fetcher follows.
  * - "not-from-search": web search fetches only the pages its search returned
  *   in the same Answer, and this wasn't one.
+ * - "local-mode": "Keep everything on this computer" is on, so nothing was
+ *   fetched: the site would have seen the request, and the address can name
+ *   a matter. The User can let this one page go (`localModeOnce`).
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -2828,7 +2855,8 @@ export type WebPageFailureReason =
   | "not-text"
   | "not-public"
   | "too-many-redirects"
-  | "not-from-search";
+  | "not-from-search"
+  | "local-mode";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -4901,15 +4929,17 @@ export interface CheckClaimInput {
 }
 
 /**
- * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document (`widened`)
- * because the User asked ("Search all Documents") or the Mind's Folder held
- * no Document (#1359). A Mind moved to another Folder since needs its
- * sentences checked again; one whose check was widened doesn't.
+ * Where a sentence's check searched: the Search scope the User set for the
+ * Mind (`chosen`, #1623), else the Mind's Folder (null for a Mind in none,
+ * which searches every Document), or every Document (`widened`) because the
+ * User asked ("Search all Documents") or the Mind's Folder held no Document
+ * (#1359). A Mind moved to another Folder since needs its sentences checked
+ * again, unless they were checked in its chosen scope or widened.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
   widened: boolean;
+  chosen?: SearchScope;
 }
 
 /**
@@ -4990,8 +5020,17 @@ export type CheckSentencesResult =
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** Nothing was sent: the scope holds no Document with text to check against. */
-  | { kind: "no-documents"; folderId: string | null }
+  /**
+   * Nothing was sent: the scope holds no Document with text to check against. `chosen`: that
+   * scope is the Search scope the User set for the Mind, while other Documents are there; its
+   * items may be deleted, or, `onlyLeftOut`, hold only what the check leaves out (the file the
+   * Mind was made from).
+   */
+  | {
+      kind: "no-documents";
+      folderId: string | null;
+      chosen?: { scope: SearchScope; onlyLeftOut: boolean };
+    }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
   /** Nothing was sent: every sentence of the selection holds changes still waiting. */
@@ -8754,9 +8793,10 @@ export interface CoreApi {
    * page that changed becomes a new version. Citations keep pointing at the
    * version they quote. One that can't be fetched now leaves the Document as
    * it was: the result says why. Throws NotFoundError for an unknown
-   * Document, and InvalidInputError for one that isn't a web page.
+   * Document, and InvalidInputError for one that isn't a web page. In Local
+   * mode nothing is fetched unless `localModeOnce` says the User let it.
    */
-  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  fetchWebPageAgain(documentId: string, options?: FetchWebPageAgainOptions): Promise<WebPageResult>;
   /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its

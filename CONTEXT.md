@@ -35,7 +35,7 @@ What an Answer is generated from: in a Mind, every Block above its Question, exc
 _Avoid_: prompt, history
 
 **Search scope**:
-The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope while the Folder holds a Document, and with every Document while it holds none; the User can remove the Folder; a Question with no Search scope searches all Documents.
+The Folders, Tags and individual Documents that a Question's Document search is limited to, resolved when the Question is asked: a Document filed into a Folder since is in it, one filed out is not. A Question in a Folder's Mind starts with the Folder as its Search scope while the Folder holds a Document, and with every Document while it holds none; the User can remove the Folder; a Question with no Search scope searches all Documents. The Search scope the User sets in a Mind's composer stays with the Mind, and checks of its sentences look there too; text added from an Answer brings its Question's Search scope to a Mind that has none.
 _Avoid_: filter, context
 
 ### The assistant

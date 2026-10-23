@@ -268,7 +268,9 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       versions: [...read].map(
         ([documentId, contentHash]): CheckedVersion => ({ documentId, contentHash }),
       ),
-      excluded: [...excluded.values()].filter((each) => each.reason === "own-file"),
+      excluded: [...excluded.values()].filter(
+        (each) => each.reason === "own-file" || each.reason === "checked-document",
+      ),
     });
     const workingsSayingIt = (): LeftOutDocument[] =>
       [...workings].flatMap(([documentId, passages]) => {
