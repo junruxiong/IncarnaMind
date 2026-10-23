@@ -93,6 +93,7 @@ test("the reviewing pane lists their changes and comments in order, follows the 
   await expect(line.getByTestId("their-changes-count")).toHaveText(
     "7 changes from Dana Kim and Luis Ortega",
   );
+  await screenshot(window, "review-line");
   await pointAndClick(window, line.getByTestId("their-changes-review"));
   const pane = window.getByTestId("review-pane");
   await expect(pane).toHaveAttribute("data-placement", "beside");
