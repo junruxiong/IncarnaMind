@@ -28,7 +28,7 @@ export function useTabStripFit(
     let wheelTimer: ReturnType<typeof setTimeout> | undefined;
     let frame: number | undefined;
 
-    const place = (reveal: boolean) => {
+    const place = (reveal: boolean, byUser = false) => {
       const tabs = Array.from(element.querySelectorAll<HTMLElement>(':scope > [role="tab"]'));
       const shown = tabs.findIndex((tab) => tab.dataset.tabId === shownId);
       const was = element.scrollLeft;
@@ -54,7 +54,8 @@ export function useTabStripFit(
       if (Math.abs(element.scrollLeft - result.scrollLeft) >= 0.5) {
         element.scrollLeft = result.scrollLeft;
       }
-      following = shown < 0 || (shown >= result.first && shown <= result.last);
+      if (reveal) following = true;
+      else if (byUser) following = shown < 0 || (shown >= result.first && shown <= result.last);
     };
 
     const placeLater = () => {
@@ -67,15 +68,16 @@ export function useTabStripFit(
     };
 
     const onWheel = (event: WheelEvent) => {
-      // A mouse wheel turns vertically; the strip scrolls sideways.
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      element.scrollLeft += event.deltaY;
+      // A mouse wheel turns vertically; the strip scrolls sideways. A trackpad's sideways swipe scrolls it itself.
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) element.scrollLeft += event.deltaY;
       clearTimeout(wheelTimer);
       wheelTimer = setTimeout(() => {
         wheelTimer = undefined;
-        place(false);
+        place(false, true);
       }, WHEEL_QUIET_MS);
     };
+    // Scrolls that aren't the User's (a focus, a script) settle on whole tabs too, but they
+    // don't say the User looked away from the shown tab.
     const onScrollEnd = () => {
       if (wheelTimer === undefined) place(false);
     };

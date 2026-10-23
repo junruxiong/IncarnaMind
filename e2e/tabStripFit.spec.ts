@@ -87,9 +87,11 @@ function problemsOf(window: Page, shownInView: boolean): Promise<string[]> {
       const where = `Strip ${at + 1}`;
       const view = list.getBoundingClientRect();
       const add = plus.getBoundingClientRect();
+      const fade = 32;
       let before = 0;
       let after = 0;
       let shown = 0;
+      let shownBox: DOMRect | undefined;
       const tabs = Array.from(list.querySelectorAll<HTMLElement>('[role="tab"]'));
       for (const tab of tabs) {
         const box = tab.getBoundingClientRect();
@@ -102,6 +104,7 @@ function problemsOf(window: Page, shownInView: boolean): Promise<string[]> {
         if (!inside && !hiddenLeft && !hiddenRight) problems.push(`${where}: "${name}" is clipped`);
         if (tab.getAttribute("aria-selected") === "true") {
           shown++;
+          shownBox = box;
           if (requireShown && !inside)
             problems.push(`${where}: the shown tab "${name}" isn't whole`);
         }
@@ -127,12 +130,20 @@ function problemsOf(window: Page, shownInView: boolean): Promise<string[]> {
       if (tabs.length > 0 && tabs.length === before + after)
         problems.push(`${where}: shows no tab`);
       if (shown > 1) problems.push(`${where}: ${shown} tabs are shown`);
-      if (before > 0 && !list.hasAttribute("data-hidden-before")) {
+      const shownLeft =
+        shownBox !== undefined && shownBox.right > view.left && shownBox.left < view.left + fade;
+      const shownRight =
+        shownBox !== undefined && shownBox.right > view.right - fade && shownBox.left < view.right;
+      const fadeLeft = list.hasAttribute("data-hidden-before");
+      const fadeRight = list.hasAttribute("data-hidden-after");
+      if (before > 0 && !fadeLeft && !shownLeft) {
         problems.push(`${where}: tabs hide on the left with no fade`);
       }
-      if (after > 0 && !list.hasAttribute("data-hidden-after")) {
+      if (after > 0 && !fadeRight && !shownRight) {
         problems.push(`${where}: tabs hide on the right with no fade`);
       }
+      if (fadeLeft && shownLeft) problems.push(`${where}: the fade covers the shown tab`);
+      if (fadeRight && shownRight) problems.push(`${where}: the fade covers the shown tab`);
       const onPlus = document.elementFromPoint(add.left + add.width / 2, add.top + add.height / 2);
       if (!onPlus?.closest('[data-testid="new-tab"]')) problems.push(`${where}: the + is covered`);
     });
@@ -313,6 +324,141 @@ for (const language of LANGUAGES) {
     await expectResting(window, "a Document opened");
     await openDocumentAt(window, { documentId: report, ...OPENS_PDF });
     await expectResting(window, "a Citation opened the Document");
+    await app.close();
+  });
+
+  test(`the strip rests on whole tabs at every window width from 960 to 1,300 px, whichever tab is shown (${language})`, async () => {
+    test.setTimeout(300_000);
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1100, 760);
+    await setLanguage(window, language);
+    for (let index = 0; index < 5; index++) {
+      await addMind(window, groupAt(window, 0), nameOf(language, index));
+    }
+    // The room the tabs have differs by system (the buttons beside the strip, the fonts), so a
+    // width that fits two tabs on one fits one on another.
+    for (let width = 1300; width >= 960; width -= 10) {
+      await setWindowSize(app, window, width, 760);
+      for (let step = 0; step < 3; step++) {
+        if (step > 0) await window.keyboard.press("Control+Tab");
+        await expectResting(window, `${width} px, shown tab ${step + 1} of the three tried`);
+      }
+    }
+    await app.close();
+  });
+
+  test(`a tab under the fade at the strip's edge is closed by its ✕, a middle click, its menu and ⌘W (${language})`, async () => {
+    test.setTimeout(240_000);
+    const { app, window } = await launchApp(dataDir);
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1440, 900);
+    await setLanguage(window, language);
+    for (let index = 0; index < 8; index++) {
+      await addMind(window, groupAt(window, 0), nameOf(language, index));
+    }
+    const list = listAt(window, 0);
+    const tabsLeft = (count: number) => expect(window.getByTestId("mind-tab")).toHaveCount(count);
+    await expectResting(window, "eight Minds");
+
+    /** The whole tab at the strip's right end, which the fade is over: its name, box and ✕. */
+    const rightEdge = async () => {
+      const found = await list.evaluate((element) => {
+        const view = element.getBoundingClientRect();
+        const inside = Array.from(element.querySelectorAll<HTMLElement>('[role="tab"]')).filter(
+          (tab) => {
+            const box = tab.getBoundingClientRect();
+            return box.left >= view.left - 1 && box.right <= view.right + 1;
+          },
+        );
+        const tab = inside.at(-1);
+        if (!tab) return null;
+        const box = tab.getBoundingClientRect();
+        return {
+          name: tab.getAttribute("aria-label") ?? "",
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+          underFade: box.right > view.right - 32,
+        };
+      });
+      if (!found) throw new Error("No tab is whole in the strip.");
+      const tab = window.getByRole("tab", { name: found.name, exact: true });
+      // A person points at a tab before its ✕ shows.
+      await window.mouse.move(found.x + found.width / 2 - 30, found.y + found.height / 2, {
+        steps: 6,
+      });
+      await window.mouse.move(found.x + found.width / 2, found.y + found.height / 2, { steps: 4 });
+      const close = await tab.getByTestId("tab-close").boundingBox();
+      if (!close) throw new Error("The tab's ✕ isn't visible.");
+      return {
+        ...found,
+        tab,
+        centre: { x: found.x + found.width / 2, y: found.y + found.height / 2 },
+        close: { x: close.x + close.width / 2, y: close.y + close.height / 2 },
+      };
+    };
+
+    // ⌘W closes the shown tab, which is at the strip's end, with no fade over it.
+    await expect(list).toHaveAttribute("data-hidden-before", "true");
+    await expect(list).not.toHaveAttribute("data-hidden-after");
+    await window.keyboard.press("ControlOrMeta+w");
+    await tabsLeft(7);
+    await expectResting(window, "⌘W at the end");
+
+    // Ctrl+Tab goes round to the first tab: it is shown, and the fade is on the other end.
+    await window.keyboard.press("Control+Tab");
+    await expect(shownTab(window)).toHaveAttribute("aria-label", nameOf(language, 0));
+    await expect(list).toHaveAttribute("data-hidden-after", "true");
+    await expect(list).not.toHaveAttribute("data-hidden-before");
+    await expectResting(window, "the first tab shown");
+
+    // The last whole tab is under the fade, and its ✕ takes the click.
+    const first = await rightEdge();
+    expect(first.underFade).toBe(true);
+    await expect
+      .poll(() =>
+        window.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.closest("button")?.dataset.testid,
+          first.close,
+        ),
+      )
+      .toBe("tab-close");
+    await window.mouse.click(first.close.x, first.close.y);
+    await tabsLeft(6);
+    await expect(first.tab).toHaveCount(0);
+    await expect(shownTab(window)).toHaveAttribute("aria-label", nameOf(language, 0));
+    await expectResting(window, "closed by its ✕ under the fade");
+
+    // A middle click closes the tab at the edge, as in a browser.
+    const second = await rightEdge();
+    expect(second.underFade).toBe(true);
+    await window.mouse.click(second.centre.x, second.centre.y, { button: "middle" });
+    await tabsLeft(5);
+    await expect(second.tab).toHaveCount(0);
+    await expectResting(window, "closed by a middle click");
+
+    // Its menu's Close does too.
+    const third = await rightEdge();
+    expect(third.underFade).toBe(true);
+    await window.mouse.click(third.centre.x, third.centre.y, { button: "right" });
+    const menu = third.tab.getByTestId("tab-actions");
+    await expect(menu).toBeVisible();
+    await menu.getByTestId("tab.close").click();
+    await tabsLeft(4);
+    await expect(third.tab).toHaveCount(0);
+    await expectResting(window, "closed from its menu");
+
+    // ⌘W closes the shown tab at the strip's start.
+    await list.getByRole("tab").first().click();
+    await expect(shownTab(window)).toHaveAttribute("aria-label", nameOf(language, 0));
+    await window.keyboard.press("ControlOrMeta+w");
+    await tabsLeft(3);
+    await expect(window.getByRole("tab", { name: nameOf(language, 0), exact: true })).toHaveCount(
+      0,
+    );
+    await expectResting(window, "⌘W at the start");
     await app.close();
   });
 }

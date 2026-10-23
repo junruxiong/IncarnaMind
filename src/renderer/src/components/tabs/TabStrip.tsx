@@ -51,9 +51,9 @@ export function TabStrip({
   const layout = useAppStore((state) => state.layout);
   const createMind = useAppStore((state) => state.createMind);
   const list = useRef<HTMLDivElement>(null);
-  const overflow = useOverflow(list);
   const tabs = merged && layout ? layout.groups.flatMap((each) => each.tabs) : group.tabs;
   const shownId = group.activeTabId;
+  const overflow = useOverflow(list, shownId);
   const shown = group.tabs.find((tab) => tab.id === shownId);
   const last = merged || index === (layout?.groups.length ?? 1) - 1;
 
@@ -334,18 +334,31 @@ function RenameTab({ mindId, title, onDone }: { mindId: string; title: string; o
   );
 }
 
+// The width of the fade at each end of `.tab-list` in styles.css.
+const FADE_PX = 32;
+
 /**
  * Whether tabs are scrolled out of sight before or after the strip's visible
- * part: the strip fades out on that side (see `.tab-list`).
+ * part: the strip fades out on that side (see `.tab-list`), unless the shown
+ * tab is in the way, which the fade never covers.
  */
-function useOverflow(list: RefObject<HTMLDivElement | null>) {
+function useOverflow(list: RefObject<HTMLDivElement | null>, shownId: string | null | undefined) {
   const [overflow, setOverflow] = useState({ before: false, after: false });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `shownId` is when the tab that stays clear of the fade changes.
   useEffect(() => {
     const element = list.current;
     if (!element) return;
     const measure = () => {
-      const before = element.scrollLeft > 1;
-      const after = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
+      const view = element.getBoundingClientRect();
+      const shown = element
+        .querySelector('[role="tab"][aria-selected="true"]')
+        ?.getBoundingClientRect();
+      const under = (from: number, to: number) =>
+        shown !== undefined && shown.right > from && shown.left < to;
+      const before = element.scrollLeft > 1 && !under(view.left, view.left + FADE_PX);
+      const after =
+        element.scrollLeft + element.clientWidth < element.scrollWidth - 1 &&
+        !under(view.right - FADE_PX, view.right);
       setOverflow((current) =>
         current.before === before && current.after === after ? current : { before, after },
       );
@@ -362,6 +375,6 @@ function useOverflow(list: RefObject<HTMLDivElement | null>) {
       resized.disconnect();
       changed.disconnect();
     };
-  }, [list]);
+  }, [list, shownId]);
   return overflow;
 }
