@@ -698,6 +698,7 @@ export const en = {
   "claim.recheck.new-version": "A Document it was checked against has a new version.",
   "claim.recheck.document-removed": "A Document it was checked against was deleted.",
   "claim.recheck.scope": "The Mind is in another Folder now.",
+  "claim.recheck.search-scope": "The Mind’s Search scope has changed since.",
   "health.label": "Sentences and Citations",
   "health.found.one": "1 Citation found",
   "health.found": "{count} Citations found",
@@ -2430,6 +2431,8 @@ export const en = {
   "composer.scope.allEmptyFolder":
     "“{folder}” has no Documents yet, so all your Documents are searched. Type @ to limit it",
   "composer.scope.change": "{name}. Change the Search scope (@)",
+  "composer.scope.widen": "Search all Documents, not only “{name}”",
+  "composer.scope.widenAll": "Search all Documents, not only these {count}",
   "composer.skills.label": "Skills",
   "composer.skills.manage": "Manage Skills…",
   "composer.expand": "Expand the composer",
@@ -3433,6 +3436,8 @@ export const en = {
     "Needs re-check: a Document it was checked against was deleted.",
   "export.comment.sentence.needs-recheck.scope":
     "Needs re-check: the Mind is in another Folder now.",
+  "export.comment.sentence.needs-recheck.search-scope":
+    "Needs re-check: the Mind’s Search scope has changed since.",
   "export.html.notes": "Notes",
   "export.html.back": "Back to text",
   "export.citation.location": "{document}, {location}",

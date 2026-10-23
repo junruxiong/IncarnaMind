@@ -18,6 +18,7 @@ import {
   filingFolder,
   hasSearchScope,
   mindSearchScope,
+  NO_SCOPE,
   type ScopeKind,
   scopeIds,
 } from "../../../shared/searchScope";
@@ -396,6 +397,11 @@ export function Composer({
   const removeFromScope = (kind: ScopeKind, id: string) => {
     const left = scopeIds(scope, kind).filter((each) => each !== id);
     updateScope({ ...scope, [SCOPE_LISTS[kind]]: left });
+  };
+
+  const widenScope = () => {
+    updateScope(NO_SCOPE);
+    field.current?.focus();
   };
 
   /** A chip's name, or "All Documents": types the "@" that opens the picker. */
@@ -880,6 +886,7 @@ export function Composer({
               scope={scope}
               ownFolderId={folderId}
               onRemove={removeFromScope}
+              {...(draft.scope !== null && hasSearchScope(draft.scope) && { onWiden: widenScope })}
               onChange={openScopePicker}
               shown={CHIPS_SHOWN}
               className="composer-scope"

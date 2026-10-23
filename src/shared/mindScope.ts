@@ -40,16 +40,26 @@ export const setMindScope = (doc: Y.Doc, scope: SearchScope | null): void =>
 /**
  * Text added from an Answer brings the scope its Question was asked with, when the Mind has
  * none of its own, so a summary of one Document is checked against that Document. A Question
- * that searched everything, or the Mind's own Folder, leaves the Mind as it is.
+ * that searched everything, or the Mind's own Folder, leaves the Mind as it is. Returns the
+ * scope it kept, for Undo; null when it kept none.
  */
 export function carryAnswerScope(
   doc: Y.Doc,
   asked: SearchScope | null,
   folderId: string | null,
-): void {
+): SearchScope | null {
   const settings = settingsOf(doc);
-  if (mindScopeIn(settings) !== null || asked === null || !hasSearchScope(asked)) return;
-  keep(settings, chosenScope(asked, folderId));
+  if (mindScopeIn(settings) !== null || asked === null || !hasSearchScope(asked)) return null;
+  const kept = chosenScope(asked, folderId);
+  keep(settings, kept);
+  return kept;
+}
+
+/** Takes back a scope `carryAnswerScope` kept, unless the Mind's scope has changed since. */
+export function uncarryAnswerScope(doc: Y.Doc, carried: SearchScope): void {
+  const settings = settingsOf(doc);
+  const kept = mindScopeIn(settings);
+  if (kept && sameScope(kept, carried)) keep(settings, null);
 }
 
 /** Calls `listener` whenever the Mind's scope may have changed, here or from elsewhere. Returns how to stop. */

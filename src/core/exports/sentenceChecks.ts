@@ -2,13 +2,15 @@ import type * as Y from "yjs";
 import { checkedScope, claimCheckShown, coveredPart } from "../../shared/claimChecks";
 import { type ScopeKind, scopeName } from "../../shared/searchScope";
 import { checkedSentences } from "../answers/checks/sentences";
-import type { CitationAttributes } from "../api";
+import type { CitationAttributes, SearchScope } from "../api";
 import type { FailedSentence } from "../mindText";
 
 /** What the checks of a Mind's sentences are compared with, and how an export names things. */
 export interface SentenceCheckContext {
   versions: ReadonlyMap<string, string>;
   folderId: string | null;
+  /** The Search scope the User set for the Mind; null for none. */
+  scope: SearchScope | null;
   /** A Folder's, Tag's or Document's name; null for one that isn't there. */
   scopeItemName(kind: ScopeKind, id: string): string | null;
   /** A Passage's Document and Location, as a footnote says it. */
@@ -27,6 +29,7 @@ export function failedSentences(
       text: sentence,
       versions: context.versions,
       folderId: context.folderId,
+      scope: context.scope,
     });
     if (shown.state === "contradicted") {
       const { calculation } = check;

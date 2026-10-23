@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { addedCouldChange, claimCheckShown } from "../../../shared/claimChecks";
 import { readMindCheck, sentenceKey, writeMindCheck } from "../../../shared/mindCheck";
 import { mindModelOf } from "../../../shared/mindModel";
+import { mindScopeIn } from "../../../shared/mindScope";
 import { oneFolderOf } from "../../../shared/searchScope";
 import { isClaim } from "../../../shared/sentences";
 import { judgesUnreliably } from "../../../shared/smallModel";
@@ -177,9 +178,13 @@ export function createMindCheck(options: MindCheckOptions) {
   function addedSince(mindId: string): Map<string, string[]> {
     const versions = options.documentVersions();
     const folderId = options.mindFolder(mindId);
+    const scope = content.readSettings(mindId, mindScopeIn);
     const changeable = content.read(mindId, (blocks) =>
       checkedSentences(blocks).flatMap(({ check, sentence }) =>
-        addedCouldChange(check, claimCheckShown(check, { text: sentence, versions, folderId }))
+        addedCouldChange(
+          check,
+          claimCheckShown(check, { text: sentence, versions, folderId, scope }),
+        )
           ? [check]
           : [],
       ),
@@ -222,6 +227,7 @@ export function createMindCheck(options: MindCheckOptions) {
     const skipped = new Set(content.readSettings(mindId, readMindCheck)?.skipped ?? []);
     const versions = options.documentVersions();
     const folderId = options.mindFolder(mindId);
+    const scope = content.readSettings(mindId, mindScopeIn);
     const added = mode === "added" ? addedSince(mindId) : null;
     return content.read(mindId, (blocks) => {
       const sentences = everySentence(blocks).filter((sentence) => isClaim(sentence.text));
@@ -251,7 +257,12 @@ export function createMindCheck(options: MindCheckOptions) {
           if (!skipped.has(sentenceKey(sentence.text))) fresh.push(sentence);
           continue;
         }
-        const shown = claimCheckShown(mark.check, { text: sentence.text, versions, folderId });
+        const shown = claimCheckShown(mark.check, {
+          text: sentence.text,
+          versions,
+          folderId,
+          scope,
+        });
         if (shown.state === "needs-recheck") again.push(sentence);
       }
       return { fresh, again, keys, skipped, widened };

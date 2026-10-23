@@ -124,7 +124,12 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
   const versions = new Map((await core.listDocuments()).map((each) => [each.id, each.contentHash]));
   return claimSpans(readMind(client)).map((span) => ({
     sentence: span.sentence.text.trim(),
-    shown: claimCheckShown(span.check, { text: span.sentence.text, versions, folderId }),
+    shown: claimCheckShown(span.check, {
+      text: span.sentence.text,
+      versions,
+      folderId,
+      scope: null,
+    }),
   }));
 }
 

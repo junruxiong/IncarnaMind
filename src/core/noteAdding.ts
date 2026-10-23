@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { asGenerated } from "../shared/aiText";
 import { parseOrigin, removeOrigins, setOrigins } from "../shared/blockOrigins";
-import { carryAnswerScope } from "../shared/mindScope";
+import { carryAnswerScope, uncarryAnswerScope } from "../shared/mindScope";
 import {
   citedTables,
   parseNoteBlocks,
@@ -117,6 +117,8 @@ function proposalsOf(note: Y.XmlFragment, request: string) {
 
 export function createNoteAdding(options: NoteAddingOptions) {
   const { content } = options;
+  // Undo is offered only while the app runs: what an add brought, by its first Block, stays here.
+  const carried = new Map<string, SearchScope>();
 
   return {
     async add(input: unknown): Promise<AddedToNote> {
@@ -144,7 +146,8 @@ export function createNoteAdding(options: NoteAddingOptions) {
         });
         const doc = note.doc;
         if (doc && origin) setOrigins(doc, ids, origin);
-        if (doc) carryAnswerScope(doc, asked, folderId);
+        const brought = doc && carryAnswerScope(doc, asked, folderId);
+        if (brought && ids[0]) carried.set(ids[0], brought);
         if (doc && proposed && model && !proposalRequestOf(doc, request)) {
           recordProposalRequest(doc, request, {
             source: "answer-added",
@@ -216,6 +219,12 @@ export function createNoteAdding(options: NoteAddingOptions) {
           }
         }
         if (note.doc) removeOrigins(note.doc, [...blockIds]);
+        for (const id of blockIds) {
+          const brought = carried.get(id);
+          if (!brought) continue;
+          carried.delete(id);
+          if (note.doc) uncarryAnswerScope(note.doc, brought);
+        }
       });
     },
   };

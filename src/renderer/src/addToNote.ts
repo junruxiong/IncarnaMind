@@ -20,11 +20,13 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Selection } from "@tiptap/pm/state";
+import { ySyncPluginKey, yUndoPluginKey } from "@tiptap/y-tiptap";
 import {
   BLOCK_ID_ATTRIBUTE,
   type BlockOrigin,
   type Conversation,
   type ConversationAnswer,
+  MIND_SETTINGS_FIELD,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
@@ -75,7 +77,12 @@ const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
  * as one step of the note's Undo. Returns their new ids, or null when the
  * editor couldn't take them.
  */
-function addInEditor(editor: Editor, blocks: readonly NodeJSON[], atCursor: boolean) {
+function addInEditor(
+  editor: Editor,
+  blocks: readonly NodeJSON[],
+  atCursor: boolean,
+  inTheSameStep: () => void,
+) {
   const place = notePlace(editor.state.doc, atCursor ? editor.state.selection : null);
   const ids = blocks.map(() => crypto.randomUUID());
   let nodes: ProseMirrorNode[];
@@ -91,16 +98,18 @@ function addInEditor(editor: Editor, blocks: readonly NodeJSON[], atCursor: bool
     useAppStore.getState().reportError(error);
     return null;
   }
-  const done = asOneStep(editor, () =>
-    editor.commands.command(({ tr }) => {
+  const done = asOneStep(editor, () => {
+    const added = editor.commands.command(({ tr }) => {
       const fragment = Fragment.from(nodes);
       tr.replaceWith(place.from, place.to, fragment);
       // The cursor goes after what came in, so the next Answer added goes after it, in order.
       const end = Math.min(place.from + fragment.size, tr.doc.content.size);
       tr.setSelection(Selection.near(tr.doc.resolve(end), -1));
       return true;
-    }),
-  );
+    });
+    if (added) inTheSameStep();
+    return added;
+  });
   if (!done) return null;
   const first = editor.view.nodeDOM(place.from);
   if (first instanceof HTMLElement) first.scrollIntoView({ block: "nearest" });
@@ -118,11 +127,18 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
   );
   const { editor, doc } = read;
   if (editor.isDestroyed) return false;
-  const ids = addInEditor(editor, checked, read.cursorInMind());
+  const folderId = useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId;
+  // As the editor's own change, so the note's Undo takes the scope back with the Blocks.
+  const bringScope = () => {
+    yUndoPluginKey.getState(editor.state)?.undoManager.addToScope(doc.getMap(MIND_SETTINGS_FIELD));
+    doc.transact(
+      () => carryAnswerScope(doc, questionOf(added.answer)?.scope ?? null, folderId ?? null),
+      ySyncPluginKey,
+    );
+  };
+  const ids = addInEditor(editor, checked, read.cursorInMind(), bringScope);
   if (!ids) return true;
   setOrigins(doc, ids, originOf(added));
-  const folderId = useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId;
-  carryAnswerScope(doc, questionOf(added.answer)?.scope ?? null, folderId ?? null);
   flashBlocks(editor, ids);
   const { model } = added.answer;
   // After the Mind's own update, so the record finds the Blocks there.

@@ -5,7 +5,14 @@
  */
 import type { JSONContent } from "@tiptap/core";
 import { describe, expect, test } from "vitest";
-import type { Core, SearchScope } from "../../src/core";
+import * as Y from "yjs";
+import {
+  CONTENT_SCHEMA_VERSION_KEY,
+  type Core,
+  MIND_CONTENT_FIELD,
+  MIND_SETTINGS_FIELD,
+  type SearchScope,
+} from "../../src/core";
 import { messageReference } from "../../src/core/references";
 import { claimSpans } from "../../src/renderer/src/editor/claimChecks";
 import { checkedScope, claimCheckShown } from "../../src/shared/claimChecks";
@@ -132,6 +139,7 @@ describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) =
         text: unfiled.sentence.text,
         versions: null,
         folderId: folder.id,
+        scope: documentsScope(own.id),
       }),
     ).toEqual({ state: "supported" });
     const before = calls.length;
@@ -198,6 +206,90 @@ describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) =
       model: null,
     });
     expect(mindScopeOf((await connectToMind(core, plain.id)).doc)).toBeNull();
+  });
+
+  // protects=Undo of Add to note takes back the scope the add brought, and leaves one the User set since; fails_when=the Mind keeps the Answer's scope after Undo, or Undo clears the User's own choice; no_claim=the editor's own Undo of an add into the open Mind (the same step, in the editor).
+  test("Undo of the add takes back the scope it brought, unless the User changed it since", async () => {
+    const { core, words, own, other } = await setUp(language);
+    const answer = await askAssistant(core, { text: words.summary, scope: documentsScope(own.id) });
+    const origin = { from: messageReference(answer.conversationId, answer.id), question: "" };
+    const blocks = [{ type: "paragraph", content: [text(words.own.line)] }];
+
+    const mind = await core.createMind({ title: "Summary" });
+    const added = await core.addToNote({ mindId: mind.id, blocks, origin, model: null });
+    const client = await connectToMind(core, mind.id);
+    expect(mindScopeOf(client.doc)).toEqual(documentsScope(own.id));
+    await core.undoAddToNote({ mindId: mind.id, blockIds: added.blockIds });
+    expect(mindScopeOf((await connectToMind(core, mind.id)).doc)).toBeNull();
+
+    const again = await core.addToNote({ mindId: mind.id, blocks, origin, model: null });
+    setMindScope(client.doc, documentsScope(other.id));
+    await client.settled();
+    await core.undoAddToNote({ mindId: mind.id, blockIds: again.blockIds });
+    expect(mindScopeOf((await connectToMind(core, mind.id)).doc)).toEqual(documentsScope(other.id));
+  });
+
+  // protects=a change of the Mind's own scope marks the checks made before it for a re-check, and Check again looks in the new scope; fails_when=earlier checks still show their verdicts as if they held, or Check again searches the old scope; no_claim=a Folder move (#96's tests).
+  test("a change of the Mind's scope marks its earlier checks for a re-check, and Check again looks in the new one", async () => {
+    const { core, words, own, other, calls, handed } = await setUp(language);
+    const folder = await core.createLibraryGroup({ name: "Agreements", description: "" });
+    await core.moveToFolder({ documentIds: [own.id], folderId: folder.id });
+    const { mindId, client } = await mindWith(core, words.own.line, folder.id);
+    await checkAll(core, mindId);
+    const planned = () => core.planMindCheck(mindId, "changed");
+    expect(await planned()).toEqual({ kind: "nothing" });
+
+    setMindScope(client.doc, documentsScope(other.id));
+    await client.settled();
+    const span = await checkOf(client);
+    expect(
+      claimCheckShown(span.check, {
+        text: span.sentence.text,
+        versions: null,
+        folderId: folder.id,
+        scope: documentsScope(other.id),
+      }),
+    ).toEqual({ state: "needs-recheck", why: "search-scope" });
+    expect(await planned()).toMatchObject({ kind: "ready", sentences: 1 });
+    const before = calls.length;
+    await core.checkMind({ requestId: "again", mindId, mode: "changed" });
+    expect([...handed(before)]).toEqual([words.other.name]);
+    expect(checkedScope((await checkOf(client)).check.scope)).toEqual(documentsScope(other.id));
+
+    // Back to the Mind's own Folder: the check made in the other Document needs one again.
+    setMindScope(client.doc, null);
+    await client.settled();
+    expect(await planned()).toMatchObject({ kind: "ready", sentences: 1 });
+  });
+});
+
+describe("A Mind from before checks in a chosen scope", () => {
+  // protects=a Mind written by an older version, with no scope of its own, is checked where it was before: its Folder while that holds a Document, else every Document marked as widened; fails_when=it is checked elsewhere, or its marks read as made in a chosen scope; no_claim=Minds with a scope (above).
+  test("with no scope of its own is checked in its Folder, else in every Document, as before", async () => {
+    const { core, words, own } = await setUp("en");
+    const older = async (folderId: string | null) => {
+      const mind = await core.createMind({ title: "Older", folderId });
+      const doc = new Y.Doc();
+      const paragraph = new Y.XmlElement("paragraph");
+      paragraph.setAttribute("id", "one");
+      const line = new Y.XmlText();
+      line.insert(0, words.own.line);
+      paragraph.insert(0, [line]);
+      doc.getXmlFragment(MIND_CONTENT_FIELD).push([paragraph]);
+      doc.getMap(MIND_SETTINGS_FIELD).set(CONTENT_SCHEMA_VERSION_KEY, 25);
+      await core.applyMindUpdate(mind.id, Y.encodeStateAsUpdate(doc));
+      const client = await connectToMind(core, mind.id);
+      expect(mindScopeOf(client.doc)).toBeNull();
+      await checkAll(core, mind.id);
+      return (await checkOf(client)).check.scope;
+    };
+    const folder = await core.createLibraryGroup({ name: "Okoro", description: "" });
+    await core.moveToFolder({ documentIds: [own.id], folderId: folder.id });
+    const empty = await core.createLibraryGroup({ name: "Nothing yet", description: "" });
+
+    expect(await older(folder.id)).toEqual({ folderId: folder.id, widened: false });
+    expect(await older(null)).toEqual({ folderId: null, widened: false });
+    expect(await older(empty.id)).toEqual({ folderId: empty.id, widened: true });
   });
 });
 

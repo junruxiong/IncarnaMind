@@ -15,6 +15,7 @@ import type { DrawnPage } from "../../shared/citedPage";
 import { titleWithoutSite } from "../../shared/documentNames";
 import { translate } from "../../shared/i18n";
 import type { Translate } from "../../shared/locations";
+import { mindScopeOf } from "../../shared/mindScope";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { pendingProposals } from "../../shared/proposals";
@@ -223,6 +224,7 @@ export function createExports(deps: ExportsDependencies) {
         readOptions.sentenceChecks = failedSentences(fragment, {
           versions: new Map(documents.map((document) => [document.id, document.contentHash])),
           folderId: mind.folderId,
+          scope: doc ? mindScopeOf(doc) : null,
           scopeItemName: deps.scopeItemName,
           sourceOf: (passage) => footnoteOf(passage, documents, kept, language, deps).source,
         });

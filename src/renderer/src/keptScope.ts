@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type * as Y from "yjs";
+import type { SearchScope } from "../../core/api";
 import { mindScopeOf, observeMindScope } from "../../shared/mindScope";
 import { sameScope } from "../../shared/searchScope";
 import { useComposer } from "./composer";
@@ -16,4 +17,14 @@ export function useKeptScope(mindId: string, doc: Y.Doc): void {
     mirror();
     return observeMindScope(doc, mirror);
   }, [mindId, doc]);
+}
+
+/** The scope kept with the Mind, as it is now. */
+export function useMindScope(doc: Y.Doc): SearchScope | null {
+  const [scope, setScope] = useState(() => mindScopeOf(doc));
+  useEffect(() => {
+    setScope(mindScopeOf(doc));
+    return observeMindScope(doc, () => setScope(mindScopeOf(doc)));
+  }, [doc]);
+  return scope;
 }

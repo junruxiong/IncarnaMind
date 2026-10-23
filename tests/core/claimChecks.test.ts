@@ -118,7 +118,12 @@ async function shownChecks(core: Core, client: MindClient, folderId: string | nu
   return claimSpans(readMind(client)).map((span) => ({
     check: span.check,
     sentence: span.sentence.text,
-    shown: claimCheckShown(span.check, { text: span.sentence.text, versions, folderId }),
+    shown: claimCheckShown(span.check, {
+      text: span.sentence.text,
+      versions,
+      folderId,
+      scope: null,
+    }),
   }));
 }
 

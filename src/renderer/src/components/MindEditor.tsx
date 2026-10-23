@@ -108,7 +108,7 @@ import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
-import { useKeptScope } from "../keptScope";
+import { useKeptScope, useMindScope } from "../keptScope";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { type OpenedCopy, openMindCopy } from "../mindCopies";
@@ -433,7 +433,8 @@ function MindEditorView({
     if (!editor.isDestroyed) editor.setEditable(!readOnly && !importing);
   }, [editor, readOnly, importing]);
 
-  // A sentence's check needs a re-check once a Document it read changes, or the Mind moves (#96).
+  // A sentence's check needs a re-check once a Document it read changes, or the Mind moves (#96)
+  // or its scope changes (#1623).
   const documents = useAppStore((state) =>
     state.status.kind === "ready" ? state.documents : null,
   );
@@ -444,9 +445,10 @@ function MindEditorView({
     () => (documents ? new Map(documents.map((each) => [each.id, each.contentHash])) : null),
     [documents],
   );
+  const scope = useMindScope(doc);
   useEffect(() => {
-    if (!editor.isDestroyed) setClaimContext(editor.view, { versions, folderId });
-  }, [editor, versions, folderId]);
+    if (!editor.isDestroyed) setClaimContext(editor.view, { versions, folderId, scope });
+  }, [editor, versions, folderId, scope]);
 
   // The Citations and References in the Mind's citation style (#289), formatted off the
   // window's thread, and the footnotes numbered again when the style counts Citations otherwise.
