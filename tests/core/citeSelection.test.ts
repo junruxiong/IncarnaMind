@@ -198,6 +198,35 @@ describe("citeSelection", () => {
     expect(cited).toMatchObject({ check: "found", pageFrom: 4, pageTo: 4 });
   });
 
+  test("a selection that names its Unit for some parts and not others isn't looked for elsewhere", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await addPaper(core);
+
+    const cited = await core.citeSelection({
+      documentId: document.id,
+      parts: [
+        { unit: 4, text: "Pooling the cuts," },
+        { unit: null, text: "the recovery peaks in the second quarter." },
+      ],
+    });
+
+    expect(cited).toMatchObject({ check: "not-found", pageFrom: null });
+  });
+
+  test("a Unit that isn't one, or nothing but spaces, is refused", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await addPaper(core);
+    const cite = (parts: unknown[]) =>
+      core.citeSelection({ documentId: document.id, parts } as Parameters<
+        typeof core.citeSelection
+      >[0]);
+
+    await expect(cite([{ unit: 0, text: REPEATED }])).rejects.toThrow("No text is selected.");
+    await expect(cite([{ unit: 1.5, text: REPEATED }])).rejects.toThrow("No text is selected.");
+    await expect(cite([{ unit: 2, text: " \n " }])).rejects.toThrow("No text is selected.");
+    await expect(cite([])).rejects.toThrow("No text is selected.");
+  });
+
   test("a deleted Document can't be checked", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await addPaper(core);
