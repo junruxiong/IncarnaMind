@@ -882,8 +882,11 @@ for (const { id, tongue, made } of [
   { id: "kimi", tongue: "zh-CN", made: "intl" },
   { id: "kimi", tongue: "en", made: "cn" },
   { id: "qwen", tongue: "en", made: "cn" },
+  { id: "qwen", tongue: "zh-CN", made: "intl" },
   { id: "glm", tongue: "en", made: "cn" },
+  { id: "glm", tongue: "zh-CN", made: "intl" },
   { id: "siliconflow", tongue: "en", made: "cn" },
+  { id: "siliconflow", tongue: "zh-CN", made: "intl" },
 ] as const) {
   const opens = tongue === "en" ? "intl" : "cn";
   test(`a ${id} key made in ${made === "cn" ? "China" : "International"} works with the interface in ${tongue === "en" ? "English" : "Chinese"}: the form's region refuses it, says where, and the button sends it to the other region on purpose`, async () => {
@@ -952,6 +955,14 @@ test("a region picked by hand before sending keeps the typed key and decides the
     await expect(regionOf(form)).toHaveValue("cn");
     await expect(field).toHaveValue(theKey);
     expect(await hostsAsked(app)).toEqual([]);
+
+    // The arrow keys move the choice, as in any group of radio buttons, and keep the key too.
+    await regionOf(form).focus();
+    await window.keyboard.press("ArrowLeft");
+    await expect(regionOf(form)).toHaveValue("intl");
+    await window.keyboard.press("ArrowRight");
+    await expect(regionOf(form)).toHaveValue("cn");
+    await expect(field).toHaveValue(theKey);
 
     await pointAndClick(window, form.getByTestId("provider-use-key"));
     await expect.poll(() => savedRegions(window, "kimi")).toEqual(["cn"]);
