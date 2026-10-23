@@ -5,7 +5,24 @@
  * puts after a line), and how many of the page's lines with text come before
  * and after them.
  */
+import { createContext, useContext, useEffect } from "react";
 import type { SelectedPart } from "../../../core/api";
+
+/** How a view reads what is selected in it, part by part (`pdfSelection`), for its tab's selection menu. */
+export type SelectionReader = (range: Range) => SelectedPart[];
+
+export const SelectionReaderContext = createContext<(reader: SelectionReader | null) => void>(
+  () => undefined,
+);
+
+/** Lends the view's reader to its tab's selection menu while the view is there. */
+export function useSelectionReader(reader: SelectionReader): void {
+  const lend = useContext(SelectionReaderContext);
+  useEffect(() => {
+    lend(reader);
+    return () => lend(null);
+  }, [lend, reader]);
+}
 
 const linesWithText = (lines: readonly string[]) =>
   lines.filter((line) => line.trim() !== "").length;

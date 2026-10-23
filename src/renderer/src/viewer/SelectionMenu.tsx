@@ -7,7 +7,7 @@ import { AddToMindPicker } from "../components/assistant/AddToMindPicker";
 import { CopyLineIcon, PlusLineIcon } from "../components/lineIcons";
 import { Popover } from "../editor/Popover";
 import { useT } from "../i18n";
-import { pdfSelection, selectionEnd } from "./selectedText";
+import { type SelectionReader, selectionEnd } from "./selectedText";
 import {
   addSelectionToNote,
   addsWithoutAsking,
@@ -38,8 +38,8 @@ function drawHeld(range: Range | null): void {
 }
 
 /**
- * The small menu under text selected in a PDF (#101; DESIGN.md › Viewer ›
- * Selecting to ask): Add to note and Copy with citation. It shows once the
+ * The small menu under text selected in a Document's view (#101; DESIGN.md ›
+ * Viewer › Selecting to ask), as the view reads it: Add to note and Copy with citation. It shows once the
  * mouse comes up on a selection, or Shift extends one, and goes with it. ⌘/
  * moves into it, ↑ ↓ go through it, Esc closes it, as the Mind's selection
  * menu does. ⌘K reaches both while the selection lasts.
@@ -47,10 +47,12 @@ function drawHeld(range: Range | null): void {
 export function SelectionMenu({
   document,
   section,
+  reader,
 }: {
   document: Document;
   /** The viewer it is the menu of. */
   section: HTMLElement | null;
+  reader: SelectionReader;
 }) {
   const t = useT();
   const [held, setHeld] = useState<Held | null>(null);
@@ -70,7 +72,7 @@ export function SelectionMenu({
   const [away, setAway] = useState(false);
 
   useEffect(() => {
-    if (!section || document.kind !== "pdf") return;
+    if (!section) return;
     const read = () => {
       const selection = window.getSelection();
       const range =
@@ -78,7 +80,7 @@ export function SelectionMenu({
           ? selection.getRangeAt(0)
           : null;
       if (!range || !section.contains(range.commonAncestorContainer)) return;
-      const parts = pdfSelection(range, section);
+      const parts = reader(range);
       setHeld(
         parts.length > 0 ? { selection: { document, parts }, range: range.cloneRange() } : null,
       );
@@ -121,7 +123,7 @@ export function SelectionMenu({
       section.removeEventListener("keyup", onKeyUp);
       window.document.removeEventListener("selectionchange", onChange);
     };
-  }, [section, document]);
+  }, [section, document, reader]);
 
   // ⌘/ moves into the menu, opening it again over the selection if Esc closed it.
   useEffect(() => {
