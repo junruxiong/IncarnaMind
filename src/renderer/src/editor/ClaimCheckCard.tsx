@@ -295,7 +295,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
 /**
  * A sentence check's card: its state; for a Passage found, the Document and
  * Location with the quote washed in the state's colour, and Add as Citation
- * when it isn't cited yet; for a contradiction, what the Document says; for a
+ * when it isn't cited yet, or "Already cited" with the Citation's own words
+ * and number when the sentence has one on those words; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
  * looked, with Search all Documents, or, for a court decision no Document
  * holds, that it can't be checked here, with Remove the mark only; for a
