@@ -185,7 +185,6 @@ export interface ClaimCheckNow {
   scope: SearchScope | null;
 }
 
-/** Whether a check would search elsewhere now that the Mind's own scope is what it is. */
 function scopeChanged(searched: ClaimCheckScope, now: ClaimCheckNow): boolean {
   const chosen = now.scope && !sameScope(now.scope, folderScope(now.folderId)) ? now.scope : null;
   if (searched.chosen) return !chosen || !sameScope(chosen, searched.chosen);
