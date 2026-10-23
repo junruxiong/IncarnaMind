@@ -13,6 +13,7 @@ export interface RepeatRow extends RepeatResult {
   key: string;
   kind: RepeatSentence["kind"];
   expected: Expected;
+  knownMiss?: number;
 }
 
 const OUTCOMES: readonly Outcome[] = [
@@ -34,6 +35,7 @@ export function meetsExpected(row: Pick<RepeatRow, "outcome" | "expected">): boo
   if (row.expected === "supported") return verdict === "supported";
   if (row.expected === "partly") return row.outcome === "partly";
   if (row.expected === "unsupported") return verdict === "unsupported";
+  if (row.expected === "contradicted") return verdict === "contradicted";
   return verdict === "unsupported" || verdict === "contradicted";
 }
 
@@ -64,8 +66,12 @@ export interface GroupSummary {
   /** Repeats whose verdicts differ from the one before on any sentence, of those that follow one. */
   disagreeing: number;
   followed: number;
-  /** Every result that isn't the verdict its Documents give. */
+  /** The genuine conflicts Contradicted, of those checked, known misses left out; null without any. */
+  conflicts: { contradicted: number; checked: number } | null;
+  /** Every result that isn't the verdict its Documents give, known misses left out. */
   misses: RepeatRow[];
+  /** The results of the sentences a known miss is filed for, apart. */
+  known: RepeatRow[];
 }
 
 export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
@@ -110,12 +116,14 @@ export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
     const pairs = repeats
       .slice(1)
       .map((repeat, index): [number, number] => [repeats[index] as number, repeat]);
+    const counted = group.filter((row) => row.knownMiss === undefined);
+    const conflicts = counted.filter((row) => row.expected === "contradicted");
     return {
       set: first.set,
       model: first.model,
       repeats: repeats.length,
       sentences,
-      falseSupported: group.filter(
+      falseSupported: counted.filter(
         (row) => !STATED.has(row.expected) && row.outcome === "supported",
       ).length,
       partlyOnAbsent: group.filter((row) => row.kind === "absent" && row.outcome === "partly")
@@ -125,12 +133,30 @@ export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
       disagreeing: pairs.filter(([before, after]) => verdictsIn(before) !== verdictsIn(after))
         .length,
       followed: pairs.length,
-      misses: group.filter((row) => !meetsExpected(row)),
+      conflicts:
+        conflicts.length === 0
+          ? null
+          : {
+              contradicted: conflicts.filter((row) => row.outcome === "contradicted").length,
+              checked: conflicts.length,
+            },
+      misses: counted.filter((row) => !meetsExpected(row)),
+      known: group.filter((row) => row.knownMiss !== undefined),
     };
   });
 }
 
 const cell = (text: string | null) => (text ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+
+function knownLines(known: readonly RepeatRow[]): string[] {
+  const keys = [...new Set(known.map((row) => row.key))];
+  return keys.map((key) => {
+    const own = known.filter((row) => row.key === key);
+    const met = own.filter((row) => meetsExpected(row)).length;
+    const supported = own.filter((row) => row.outcome === "supported").length;
+    return `- Known miss (#${own[0]?.knownMiss}), not counted: ${key}, ${met} of ${own.length} as expected, ${supported} Supported`;
+  });
+}
 
 export function report(
   summaries: readonly GroupSummary[],
@@ -155,6 +181,12 @@ export function report(
       `- Absent, for a sentence they state: ${group.absentOnStated}`,
       `- The partly-supported card, for a sentence whose topic they don't hold: ${group.partlyOnAbsent}`,
       `- Checks whose verdicts differ from the one before: ${group.disagreeing} of ${group.followed}`,
+      ...(group.conflicts
+        ? [
+            `- Genuine conflicts Contradicted: ${group.conflicts.contradicted} of ${group.conflicts.checked}`,
+          ]
+        : []),
+      ...knownLines(group.known),
       "",
       ...(group.misses.length > 0
         ? [

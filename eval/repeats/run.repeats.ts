@@ -112,6 +112,7 @@ test("repeated checks of an unchanged Mind", async () => {
             key: sentence.key,
             kind: sentence.kind,
             expected: sentence.expected,
+            ...(sentence.knownMiss !== undefined && { knownMiss: sentence.knownMiss }),
           });
         }
       }

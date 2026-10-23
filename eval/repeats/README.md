@@ -19,12 +19,13 @@ The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core
 
 ## The sets
 
-An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and four Minds:
+An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and six Minds:
 
 | Set | Sentences |
 |---|---|
 | `en`, `zh` | The three sentences of #1608 (notice as a paraphrase; holiday with a wrong figure; "Staff" for "the Employee"), the agreement's own words, a car allowance it doesn't mention, and a near miss that names days it doesn't |
 | `en-control`, `zh-control` | The home-working clause four ways: a paraphrase about the same Employee, the Employee by name, "Staff" (员工) and "Employees" (职工) |
+| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreement, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), a party (who reports to whom), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), the pension shares swapped, an entitlement turned off, and "unlimited"; in English also a duty for a permission ("must" for "may"), in Chinese the two parties swapped |
 
 ## Running it
 
@@ -41,7 +42,9 @@ npm run eval:repeats
 - `INCARNAMIND_EVAL_REPEATS_SETS`: only these sets, by id (`en,zh`).
 - `INCARNAMIND_EVAL_REPEATS_BUDGET`: stops after the check that takes the spend past this many dollars, at the app's own count (5).
 
-**Cost and time:** ten checks of the four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5.
+**Cost and time:** ten checks of the first four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5. The two conflict Minds add about 9 minutes and $0.25 on Haiku 5.5, and roughly $4 on Sonnet 5.5 (from the other sets' ratio, not measured), so run them there with fewer checks.
+
+**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`) and reported on a line of its own, "Known miss (#…), not counted", outside every other count; take the mark off once the issue is fixed.
 
 ## Results
 
@@ -74,7 +77,8 @@ Haiku 5.5 ran twice after (runs 1 and 2, the last two commits; the second only a
 
 Every other sentence was Supported in every check of every run. No check gave a false Supported, and none after was not checked.
 
-- **The near miss:** Contradicted in 0 of 20 checks in Chinese and 1 of 20 in English on Haiku 5.5 after, against 15 of 20 and 8 of 20 before. Its "D" cards are unsupported verdicts whose nearest line the existing nearest-line judgement (#770) calls different, as before.
+- **The near miss:** rarely Contradicted on Haiku 5.5 after, not never: 3 of 30 checks in Chinese and 1 of 30 in English in a re-test (0 of 20 and 1 of 20 in the runs above), against 15 of 20 and 8 of 20 before. Its "D" cards are unsupported verdicts whose nearest line the existing nearest-line judgement (#770) calls different, as before.
+- **Genuine conflicts** (`en-conflicts`, `zh-conflicts`, 5 checks on Haiku 5.5, added after): Contradicted in 64 of 65 checks in English and 54 of 60 in Chinese, with no false Supported. The Chinese reversed reporting line, "人力资源总监向乙方汇报。", gets the partly-supported card in 5 of 5: the check and the first confirmation call it a conflict, and the strict judgement, writing it in English, reads the direction backwards and says "same". The English one gets that card once in 5. One Chinese check of the date was not checked: its reply wrote the verdict lines beside `cite` with no marker, which the Answer engine drops as a preamble, so what was left had no verdict. The two known misses (#1668), "must" for "may" and the swapped parties, were Supported in 4 of 5 and 5 of 5, by the first verdict, before any judgement.
 - **Why a second judgement and not the existing one:** asked for one word, both existing judgements called the near miss a conflict in 10 of 10 requests each, in English and Chinese, on Haiku 5.5 with thinking off, as checks run. The strict one did in 0 of 10 in English and 1 of 30 in Chinese; with its lines in the sentence's language, 9 of 60 in Chinese. It still called every genuine conflict tried a conflict, 10 of 10 each: the two holiday figures, three days a week, "Mondays, Wednesdays and Fridays" against two days a week (in English and Chinese), other hours, another manager, a later date, another pension share and a longer probation; and Sonnet 5.5 judged all 12 cases tried as expected. Asking it for the parts in the same request swayed its word (the Chinese near miss a conflict in 15 of 20), so the parts are a request of their own.
 - **Time:** the strict judgement is one more request for a sentence the check calls contradicted: a median of 1.0 to 1.2 s (90th percentile 1.5 to 2.0 s) on Haiku 5.5, 1.9 s (3.7 s) on Sonnet 5.5. The parts request, when needed, about 1 s. Sentences are checked several at once, so a Mind's check takes longer only by what its slowest sentence adds.
 - **Spend:** $3.27 in all: Haiku 5.5 $0.52 (four runs of the four sets while building it, and the diagnosis), the judgement trials $0.32 (Sonnet 5.5 $0.09 of it), Sonnet 5.5 $2.43 (the four sets, then `en-control` again).
