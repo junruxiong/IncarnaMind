@@ -10,9 +10,11 @@
  * - Into another Mind: at its end, through the core. With no Mind in focus
  *   (`openIt`), it is shown too, in a new tab beside the focused one if it isn't open,
  *   never replacing it.
- * - Into a new Mind: made from the Answer, in its conversation's Folder, named by
- *   its first line, opened in a new tab beside the focused one, the Answer waiting
- *   there as changes to accept or reject.
+ * - Into a new Mind (New Mind under the Answer, #1559): the empty Mind the
+ *   assistant reads, when it is empty, as at its cursor; else a new Mind in the
+ *   conversation's Folder, named by its first line (" 2" after a name another
+ *   Mind has), with the Answer in it at once, opened in a new tab beside the
+ *   focused one.
  *
  * Each says what it did under the Answer, with Undo (and ⌘Z), and what went
  * in at once is recorded as AI use (#292); a change, once it is accepted.
@@ -25,12 +27,14 @@ import {
   type BlockOrigin,
   type Conversation,
   type ConversationAnswer,
+  MIND_CONTENT_FIELD,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
-import { cutTitle, mindName } from "../../shared/naming";
+import { holdsNothing } from "../../shared/madeMind";
+import { cutTitle, mindName, numberedName } from "../../shared/naming";
 import {
   citedTables,
   firstLineOfBlocks,
@@ -174,28 +178,33 @@ const openBeside = (mindId: string) =>
  * any Mind; the conversation's name goes on it only when the User gave the conversation one,
  * never the name it takes from the first Question, which is an instruction (#1174).
  */
-async function newMindFor(added: AddedAnswer) {
-  const title = added.conversation?.title ?? "";
-  return core.createMind({ title, folderId: added.conversation?.folderId ?? null });
-}
+const newMindFor = (added: AddedAnswer, title = added.conversation?.title ?? "") =>
+  core.createMind({ title, folderId: added.conversation?.folderId ?? null });
 
-const putIn = (mindId: string, added: AddedAnswer, proposed: boolean) =>
+const putIn = (mindId: string, added: AddedAnswer) =>
   core.addToNote({
     mindId,
     blocks: added.blocks,
     origin: originOf(added),
     model: added.answer.model,
-    proposed,
   });
 
 /**
- * Into a new Mind: in its conversation's Folder, the Answer in it as changes to
- * accept or reject, in a new tab beside the focused one. Like any Mind made, it says
- * nothing, and Delete takes it back.
+ * Into a new Mind: the empty Mind the assistant reads, when there is one; else one in its
+ * conversation's Folder, the Answer in it at once, in a new tab beside the focused one. Like any
+ * Mind made, it says nothing, and Delete takes it back.
  */
 async function addToNewMind(added: AddedAnswer): Promise<void> {
-  const mind = await newMindFor(added);
-  await putIn(mind.id, added, true);
+  const read = readMindHandle.current;
+  const empty =
+    read && !read.editor.isDestroyed && holdsNothing(read.doc.getXmlFragment(MIND_CONTENT_FIELD));
+  if (read && empty && (await addToReadMind(added, read.mindId))) return;
+  // A name another Mind has gets a number, so a second Mind of the same Answer reads apart.
+  const given = added.conversation?.title ?? "";
+  const named = given || cutTitle(firstLineOfBlocks(added.blocks));
+  const taken = useAppStore.getState().minds.map((mind) => mindName(mind));
+  const mind = await newMindFor(added, numberedName(named, taken) ?? given);
+  await putIn(mind.id, added);
   await openBeside(mind.id);
 }
 
@@ -215,7 +224,7 @@ export async function openTable(added: AddedAnswer): Promise<void> {
     const mind = await newMindFor(added);
     await openBeside(mind.id);
     try {
-      await putIn(mind.id, added, false);
+      await putIn(mind.id, added);
     } catch (error) {
       useAppStore.getState().reportError(error);
       await core.deleteMind(mind.id);

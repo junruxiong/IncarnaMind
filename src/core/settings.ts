@@ -12,7 +12,9 @@ import {
   MARK_AI_TEXT_CHOICES,
   MAX_MONTHLY_CAP,
   type MarkAiTextChoice,
+  MODEL_SOURCE_CHOICES,
   MOTION_PREFERENCES,
+  type ModelSourceChoice,
   type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
@@ -232,6 +234,7 @@ const deviceScope: Scope<DeviceSettings> = {
     suggestionOffers: 0,
     meetingSystemAudio: true,
     transcriptionRoute: null,
+    modelSource: "auto",
     meetingNoticeAccepted: false,
     meetingPanel: true,
     meetingPanelHidden: true,
@@ -253,6 +256,8 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
+    modelSource: (value): value is ModelSourceChoice =>
+      MODEL_SOURCE_CHOICES.some((choice) => choice === value),
     meetingNoticeAccepted: isBoolean,
     meetingPanel: isBoolean,
     meetingPanelHidden: isBoolean,

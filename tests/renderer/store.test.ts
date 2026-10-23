@@ -615,8 +615,11 @@ describe("making a Mind", () => {
 });
 
 describe("Get started's Add your Documents", () => {
-  const inFolder = (id: string, linkedFolderId: string | null) =>
-    ({ ...doc(id), linkedFolderId }) as Document;
+  const inFolder = (
+    id: string,
+    linkedFolderId: string | null,
+    status: Document["status"] = "ready",
+  ) => ({ ...doc(id), linkedFolderId, status }) as Document;
   const example = (linkedFolderId: string) =>
     ({
       group: "credit",
@@ -655,6 +658,25 @@ describe("Get started's Add your Documents", () => {
     expect(ticked()).toBe(false);
 
     emit("document.status", inFolder("mine", "theirs"));
+    expect(ticked()).toBe(true);
+  });
+
+  test("a Document the User adds ticks it once it has been read, not while it is read or when it can't be (#1457)", () => {
+    for (const status of ["queued", "extracting", "failed", "no-text"] as const) {
+      emit("document.status", inFolder("mine", null, status));
+      expect(ticked()).toBe(false);
+    }
+    emit("document.status", inFolder("mine", null, "waiting-for-model"));
+    expect(ticked()).toBe(true);
+  });
+
+  test("the Documents already there tick it only when one of the User's own has been read (#1457)", () => {
+    useAppStore.setState({ documents: [inFolder("a", "old"), inFolder("mine", null, "failed")] });
+    emit("connectors.changed", []);
+    expect(ticked()).toBe(false);
+
+    useAppStore.setState({ documents: [inFolder("a", "old"), inFolder("mine", null)] });
+    emit("connectors.changed", []);
     expect(ticked()).toBe(true);
   });
 });

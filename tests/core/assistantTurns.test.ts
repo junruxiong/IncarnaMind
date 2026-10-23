@@ -15,10 +15,10 @@ import {
 } from "../helpers/models";
 
 /**
- * How the assistant reads what the User asked for (`routeRequest`), through
- * the core's public interface: the model is told, a request for text in a
- * Mind that got a reply instead is asked for once more, and the requests the
- * calls make record what was asked, for the changes that apply at once
+ * Every turn in the assistant has the Minds' Tools, and the model decides
+ * (#1559): through the core's public interface, a reply that claims a change
+ * no call made is asked for once more and then flagged, and the requests the
+ * calls make record what they were, for the changes that apply at once
  * (#880). The model's choices are scripted.
  */
 
@@ -37,8 +37,9 @@ const editPassage = (call: ModelCall): string | null =>
     ? (/<passage>\n([\s\S]*?)\n<\/passage>/.exec(call.prompt)?.[1] ?? null)
     : null;
 
-const ASKED_TO_WRITE = "The User asked for this in a Mind";
+const ASKED_AGAIN = "but no Tool did that";
 const SUMMARY_PAGE = "## Summary\n\nThe paper is about spring tides.";
+const MIND_TOOL_NAMES = ["read_mind", "edit_mind", "add_to_mind", "create_mind"];
 
 async function setUp(model: MockLanguageModelV4) {
   const core = startCore(await createTempDataFolder(), {
@@ -61,102 +62,142 @@ async function madeBy(core: Core, answer: Awaited<ReturnType<typeof askAssistant
   return connectToMind(core, made.mindId);
 }
 
-describe("A request for text in a Mind", { timeout: 30_000 }, () => {
-  // protects=asked for a page, a reply that writes it in the panel is held back, the model is asked once more, and it writes the page, tagged as asked; fails_when=the panel text shows, the model isn't asked again, or the page's request isn't tagged "write"; no_claim=that a real model complies.
-  test("written in the reply instead, it is asked for once more and goes into a page", async () => {
-    let system = "";
+describe("Every turn has the write and edit commands (#1559)", { timeout: 30_000 }, () => {
+  // protects=a Question, a request no keyword names and a request for a piece alike are offered the Minds' Tools, whatever the Question's language; fails_when=a turn goes without them; no_claim=that a real model chooses well, or what the prompt says.
+  test.each([
+    "how was the quarter?",
+    "Could you shorten my summary?",
+    "帮我写一份关于这个知识库的总结",
+    "用 English 总结",
+  ])("“%s” is offered them", async (text) => {
+    const calls: ModelCall[] = [];
     const model = scriptedModel((call): ScriptedReply => {
-      system = call.system;
-      if (!asked(call).includes(ASKED_TO_WRITE))
-        return { text: "Summary: the paper is about tides." };
-      return called(call, "create_mind")
-        ? { text: "It covers the paper." }
-        : {
-            calls: [{ tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } }],
-          };
+      calls.push(call);
+      return { text: "The quarter was good." };
     });
     const { core, mind } = await setUp(model);
-    const shown: string[] = [];
-    core.on("answer.delta", (event) => shown.push(event.text));
+
+    const answer = await askAssistant(core, { text, mindId: mind.id });
+
+    expect(answer.text).toBe("The quarter was good.");
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(calls[0]?.tools).toEqual(expect.arrayContaining(MIND_TOOL_NAMES));
+  });
+
+  // protects=a request for a piece, answered by the model with a new Mind, makes it with its change tagged as written, so it applies at once; fails_when=the change waits as Proposals to accept; no_claim=that a real model calls create_mind.
+  test("a piece the model writes into a new Mind applies at once", async () => {
+    const model = scriptedModel(
+      (call): ScriptedReply =>
+        called(call, "create_mind")
+          ? { text: "Wrote “Tide notes”." }
+          : {
+              calls: [
+                { tool: "create_mind", input: { title: "Tide notes", content: SUMMARY_PAGE } },
+              ],
+            },
+    );
+    const { core, mind } = await setUp(model);
 
     const answer = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
 
-    expect(system).toContain("This request asks for a new page or note");
-    expect(shown.join("")).not.toContain("Summary: the paper");
-    expect(answer.text).toBe("It covers the paper.");
     const page = await madeBy(core, answer);
     await page.settled();
-    const request = changesIn(answer)[0]?.request ?? "";
-    expect(proposalRequestOf(page.doc, request)).toMatchObject({
+    expect(answer.text).toBe("Wrote “Tide notes”.");
+    expect(answer.steps?.unbackedClaims).toBeUndefined();
+    expect(proposalRequestOf(page.doc, changesIn(answer)[0]?.request ?? "")).toMatchObject({
       source: "answer-added",
       requested: "write",
     });
   });
 
-  // protects=an asked page whose reply both claims a change and writes nothing goes through the one list: the claim's check asks first, the write's asks next, and no more than the total of asks is made, the last reply flagged; fails_when=the model is asked a third time, or the claim isn't flagged; no_claim=none beyond protects.
-  test("a reply that trips both checks is asked twice at most, and flagged", async () => {
+  // protects=a piece written into the empty Mind in front says so on its change, for the panel's "Wrote it into" line; fails_when=the fill reads as an edit of the Mind; no_claim=none beyond protects.
+  test("a piece written into the empty Mind in front is marked as filling it", async () => {
+    const model = scriptedModel(
+      (call): ScriptedReply =>
+        called(call, "add_to_mind")
+          ? { text: "Done." }
+          : { calls: [{ tool: "add_to_mind", input: { content: SUMMARY_PAGE } }] },
+    );
+    const { core, mind } = await setUp(model);
+    const empty = await core.createMind({ title: "" });
+
+    const filled = await askAssistant(core, { text: "write a summary", mindId: empty.id });
+    const added = await askAssistant(core, { text: "add a summary", mindId: mind.id });
+
+    expect(changesIn(filled)[0]).toMatchObject({ mindId: empty.id, filled: true });
+    expect(changesIn(added)[0]).not.toHaveProperty("filled");
+  });
+});
+
+describe("A claim needs its command (#1559)", { timeout: 30_000 }, () => {
+  // protects=a reply that claims a write no call made is held back, the model is asked once more with the record of what its calls did, and the write it then makes stands with its reply; fails_when=the claim shows, the model isn't asked again, or the second reply is flagged; no_claim=that a real model then writes.
+  test("is asked for once more, and a write then made stands", async () => {
     const notes: string[] = [];
     const model = scriptedModel((call): ScriptedReply => {
       notes.push(asked(call));
-      return { text: "I've added a Summary section to “Q3 review”." };
+      if (!asked(call).includes(ASKED_AGAIN)) {
+        return { text: "I've added a Summary section to “Q3 review”." };
+      }
+      return called(call, "add_to_mind")
+        ? { text: "Added a summary to “Q3 review”." }
+        : { calls: [{ tool: "add_to_mind", input: { content: SUMMARY_PAGE } }] };
     });
     const { core, mind } = await setUp(model);
+    const shown: string[] = [];
+    core.on("answer.delta", (event) => shown.push(event.text));
 
-    const answer = await askAssistant(core, { text: "write a summary page", mindId: mind.id });
+    const answer = await askAssistant(core, { text: "add a summary", mindId: mind.id });
 
-    expect(model.doStreamCalls).toHaveLength(3);
-    expect(notes[1]).toContain("but no Tool did that");
-    expect(notes[2]).toContain(ASKED_TO_WRITE);
+    expect(notes[1]).toContain(ASKED_AGAIN);
+    expect(shown.join("")).not.toContain("I've added");
+    expect(answer.text).toBe("Added a summary to “Q3 review”.");
+    expect(answer.steps?.unbackedClaims).toBeUndefined();
+    expect(changesIn(answer)).toHaveLength(1);
+  });
+
+  // protects=still claiming after its one retry, the reply stays and the Answer records the claim, for the "Nothing was written" line under it, with no third ask; fails_when=the model is asked again, the reply is lost, or the claim isn't recorded; no_claim=how the line reads.
+  test("still claimed after the one retry, the reply stays and the claim is recorded", async () => {
+    const model = scriptedModel(
+      (): ScriptedReply => ({ text: "I've added a Summary section to “Q3 review”." }),
+    );
+    const { core, mind } = await setUp(model);
+
+    const answer = await askAssistant(core, { text: "add a summary", mindId: mind.id });
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(answer.status).toBe("done");
+    expect(answer.text).toBe("I've added a Summary section to “Q3 review”.");
     expect(answer.steps?.unbackedClaims).toEqual(["added"]);
     expect(changesIn(answer)).toEqual([]);
   });
 
-  // protects=a Question, or a request that can't be told, is answered in the reply with no instruction to write and nothing asked again; fails_when=the model is pushed to change a Mind; no_claim=none beyond protects.
-  test.each(["how was the quarter?", "Could you shorten my summary?"])(
-    "“%s” is answered in the reply, and nothing is asked again",
-    async (text) => {
-      let system = "";
-      const model = scriptedModel((call): ScriptedReply => {
-        system = call.system;
-        return { text: "The quarter was good." };
-      });
-      const { core, mind } = await setUp(model);
-
-      const answer = await askAssistant(core, { text, mindId: mind.id });
-
-      expect(answer.text).toBe("The quarter was good.");
-      expect(model.doStreamCalls).toHaveLength(1);
-      expect(system).not.toContain("This request asks");
-    },
-  );
-
-  // protects=a follow-up with no object is read as a change to what the conversation's last Answer wrote into a Mind, and as unclear with nothing written before; fails_when=the model is pushed to change a Mind with nothing written, or isn't told to after a write; no_claim=that a real model then edits.
-  test("“make it longer” asks for an edit after an Answer that changed a Mind, and nothing in a new conversation", async () => {
-    const systems: string[] = [];
+  // protects=a reply that names a fix its edit didn't make (the 2026-10-21 run's "Fix the typos in this") is asked for once more with the word left and its edit's record reading as applied, not waiting (#1559's review: told it waits, Haiku and Kimi told the User so), and the honest reply then stands; fails_when=the claim passes, the model isn't told which word, or the record says the edit waits; no_claim=that a real model then fixes it.
+  test("a fix the edit didn't make is asked about, by the word left", async () => {
+    const notes: string[] = [];
     const model = scriptedModel((call): ScriptedReply => {
-      if (asked(call).endsWith("make it longer")) systems.push(call.system);
-      if (!asked(call).endsWith("add a risks section")) return { text: "Which text?" };
-      return called(call, "add_to_mind")
-        ? { text: "Done." }
-        : {
-            calls: [
-              { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } },
-            ],
-          };
+      const passage = editPassage(call);
+      if (passage !== null) return { text: passage.replace("visted", "visited") };
+      notes.push(asked(call));
+      if (!called(call, "edit_mind")) {
+        return { calls: [{ tool: "edit_mind", input: { instruction: "Fix the typos" } }] };
+      }
+      return asked(call).includes("your edits left")
+        ? { text: "Fixed “visted” in “Trip notes”." }
+        : { text: "Fixed “visted” and “compleatly” in “Trip notes”." };
     });
-    const { core, mind } = await setUp(model);
+    const { core } = await setUp(model);
+    const trip = await core.createMind({ title: "Trip notes" });
+    const client = await connectToMind(core, trip.id);
+    writeMind(client, [note("We visted the harbour, and the tide went out compleatly.")]);
+    await client.settled();
 
-    await askAssistant(core, { text: "make it longer", mindId: mind.id });
-    const first = await askAssistant(core, { text: "add a risks section", mindId: mind.id });
-    await askAssistant(core, {
-      text: "make it longer",
-      mindId: mind.id,
-      conversationId: first.conversationId,
-    });
+    const answer = await askAssistant(core, { text: "Fix the typos in this", mindId: trip.id });
 
-    expect(systems).toHaveLength(2);
-    expect(systems[0]).not.toContain("This request asks");
-    expect(systems[1]).toContain("This request asks to change text in a Mind");
+    expect(notes.at(-1)).toContain("that you fixed “compleatly”, but your edits left it");
+    expect(notes.at(-1)).toContain("proposed 1 change, applied in the Mind at once");
+    expect(notes.at(-1)).not.toContain("waiting for the User");
+    expect(answer.text).toBe("Fixed “visted” in “Trip notes”.");
+    expect(answer.steps?.unbackedClaims).toBeUndefined();
   });
 
   // protects=a request a Tool refused (no Mind open) isn't asked for again: the refusal is the answer; fails_when=the model is asked to write after it was told it can't; no_claim=none beyond protects.
@@ -177,8 +218,8 @@ describe("A request for text in a Mind", { timeout: 30_000 }, () => {
 });
 
 describe("What each change's request records", { timeout: 30_000 }, () => {
-  // protects=the owner's two requests tag their changes as asked: the new page "write", the edit of it "edit", and a revision of the page's text, still waiting, "edit" too; fails_when=a tag is missing or wrong; no_claim=how #880 applies them.
-  test("“write a summary page” is tagged write, “make it longer” edit, as is a revision of its waiting text", async () => {
+  // protects=the owner's two requests tag their changes by what they are: the new page "write", the edit of it "edit", and a revision of the page's text, still waiting, "edit" too; fails_when=a tag is missing or wrong; no_claim=how #880 applies them.
+  test("a page made is tagged write, an edit of it edit, as is a revision of its waiting text", async () => {
     const model = scriptedModel((call): ScriptedReply => {
       const passage = editPassage(call);
       if (passage !== null) return { text: `${passage} It also covers neap tides.` };
@@ -234,7 +275,7 @@ describe("What each change's request records", { timeout: 30_000 }, () => {
   });
 });
 
-describe("What the model is told of each change", { timeout: 30_000 }, () => {
+describe("How each change is tagged, and what the model is told", { timeout: 30_000 }, () => {
   const results = (call: ModelCall) => call.results.map((each) => each.text);
 
   /** A model that makes `calls` once, keeping the results it read, and rewrites a passage as `rewrite` says. */
@@ -252,11 +293,11 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     return { model, read };
   }
 
-  // protects=a change the User asked for is told as applied, and one that would take out most of their own text as waiting for them, so the reply says which; fails_when=the held rewrite is told it applied; no_claim=that a real model then words it so.
+  // protects=an edit is told as applied, and one that would take out most of the User's own text as waiting for them, so the reply says which; fails_when=the held rewrite is told it applied; no_claim=that a real model then words it so.
   test.each([
     ["adds to the paragraph", (passage: string) => `${passage} It also covers neap tides.`, true],
     ["rewrites the paragraph", () => "Revenue fell in every region.", false],
-  ])("an asked edit that %s is told as applied: %s", async (_name, rewrite, applies) => {
+  ])("an edit that %s is told as applied: %s", async (_name, rewrite, applies) => {
     const { model, read } = editing(
       {
         calls: [
@@ -274,9 +315,9 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     expect(told).not.toContain(applies ? "waits there for them" : "applies in the Mind at once");
   });
 
-  // protects=a turn the User asked for applies in one Mind: a change the assistant also makes in another waits and is told so; fails_when=the second Mind's change is tagged or told as applied; no_claim=which Mind a real model changes first.
-  test("an asked turn's change in a second Mind isn't asked for, and waits", async () => {
-    const { model, read } = editing(
+  // protects=a change the assistant makes in a second Mind is tagged as the first is, so it applies and the panel names that Mind with Open and Undo; fails_when=the second Mind's change waits, untagged; no_claim=which Mind a real model changes first.
+  test("a change in a second Mind applies too", async () => {
+    const { model } = editing(
       {
         calls: [
           { tool: "edit_mind", input: { part: "The quarter was", instruction: "Tighten it" } },
@@ -301,14 +342,13 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     const page = await connectToMind(core, mind.id);
     await page.settled();
     expect(proposalRequestOf(page.doc, here?.request ?? "")).toMatchObject({ requested: "edit" });
-    expect(proposalRequestOf(plan.doc, there?.request ?? "")).not.toHaveProperty("requested");
-    expect(read[0]?.[0]).toContain("applies in the Mind at once");
-    expect(read[0]?.[1]).toContain("They wait in the Mind for the User");
+    expect(proposalRequestOf(plan.doc, there?.request ?? "")).toMatchObject({ requested: "edit" });
+    expect(there?.mindId).toBe(other.id);
   });
 
-  // protects=#1061's Chinese request to lengthen the summary is read as an edit, tagged so it applies at once, and told so; fails_when=it routes as unclear, isn't tagged, or is told it waits; no_claim=what a real model writes.
-  test("“把摘要写长一点。” is an edit the User asked for, and is told it applied", async () => {
-    const { model, read } = editing(
+  // protects=#1061's Chinese request to lengthen the summary, made with edit_mind, is tagged so it applies at once; fails_when=it isn't tagged; no_claim=what a real model writes.
+  test("“把摘要写长一点。” edited is tagged", async () => {
+    const { model } = editing(
       {
         calls: [{ tool: "edit_mind", input: { part: "The quarter was", instruction: "写长一点" } }],
       },
@@ -324,12 +364,11 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     expect(proposalRequestOf(page.doc, changed?.request ?? "")).toMatchObject({
       requested: "edit",
     });
-    expect(read[0]?.[0]).toContain("applies in the Mind at once");
   });
 
-  // protects=a request to write tags what it writes, not a rewrite of the User's own text the model also makes, which waits and is told so; fails_when=the rewrite is tagged or told it applied; no_claim=that a real model makes both calls.
-  test("“add a risks section” tags the section, and a rewrite of the User's text alongside it waits", async () => {
-    const { model, read } = editing(
+  // protects=a section added and a rewrite of the User's text made alongside it are each tagged by what they are, so both apply; fails_when=either waits untagged; no_claim=that a real model makes both calls.
+  test("a section added and a rewrite alongside it both apply", async () => {
+    const { model } = editing(
       {
         calls: [
           { tool: "add_to_mind", input: { content: "## Risks\n\nThe supplier is late." } },
@@ -346,45 +385,9 @@ describe("What the model is told of each change", { timeout: 30_000 }, () => {
     await page.settled();
     const [added, rewritten] = changesIn(answer);
     expect(proposalRequestOf(page.doc, added?.request ?? "")).toMatchObject({ requested: "write" });
-    expect(proposalRequestOf(page.doc, rewritten?.request ?? "")).not.toHaveProperty("requested");
-    expect(read[0]?.[0]).toContain("applies in the Mind at once");
-    expect(read[0]?.[1]).toContain("They wait in the Mind for the User");
-  });
-
-  // protects=text an unclear request wrote, still waiting, revised by a request the User asked for, still waits: what it revises wasn't asked for; fails_when=the revision is tagged; no_claim=none beyond protects.
-  test("a revision of an unclear request's waiting text isn't asked for", async () => {
-    const model = scriptedModel((call): ScriptedReply => {
-      const passage = editPassage(call);
-      if (passage !== null) return { text: `${passage} The supplier is late too.` };
-      if (call.results.length > 0) return { text: "Done." };
-      return asked(call).endsWith("Could you add a risks section?")
-        ? {
-            calls: [
-              { tool: "add_to_mind", input: { content: "## Risks\n\nThe courier is late." } },
-            ],
-          }
-        : {
-            calls: [{ tool: "edit_mind", input: { part: "Risks", instruction: "Make it longer" } }],
-          };
+    expect(proposalRequestOf(page.doc, rewritten?.request ?? "")).toMatchObject({
+      requested: "edit",
     });
-    const { core, mind } = await setUp(model);
-    const client = await connectToMind(core, mind.id);
-    const first = await askAssistant(core, {
-      text: "Could you add a risks section?",
-      mindId: mind.id,
-    });
-
-    const revising = await askAssistant(core, {
-      text: "make the risks section longer",
-      mindId: mind.id,
-      conversationId: first.conversationId,
-    });
-
-    await client.settled();
-    expect(changesIn(revising)[0]).toMatchObject({ revised: true });
-    expect(proposalRequestOf(client.doc, changesIn(revising)[0]?.request ?? "")).not.toHaveProperty(
-      "requested",
-    );
   });
 });
 
