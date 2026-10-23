@@ -3301,6 +3301,11 @@ export const zhCN = {
   "export.comment.sentence.unsupported": "无依据：未在“{scope}”中找到。",
   "export.comment.sentence.unsupported.more": "无依据：未在“{scope}”等 {total} 项中找到。",
   "export.comment.sentence.citedCaseUnchecked": "所引判决尚未核对：不在文档中。",
+  "export.comment.sentence.ownWorkings": "无依据：只有你自己的工作文件这样写。",
+  "export.comment.sentence.unsupported.citation":
+    "无依据：引用支持{covered}，但不支持{uncovered}的部分。",
+  "export.comment.sentence.unsupported.citations":
+    "无依据：引用支持{covered}，但不支持{uncovered}的部分。",
   "export.comment.sentence.unsupported.differs":
     "无依据：你的文档里是另一种说法（“{quote}”，{source}）",
   "export.comment.sentence.unsupported.covers":

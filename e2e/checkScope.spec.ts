@@ -77,7 +77,7 @@ test("a check looks in the Mind's chosen scope, and its card says where it looke
   // Not found where it looked: the line that says so names the scope, and only it does.
   await pointAndClick(window, marks.nth(1));
   await expect(card.getByTestId("claim-nothing")).toHaveText(
-    "I didn't find this in “Harbour times”.",
+    "I didn’t find this in “Harbour times”.",
   );
   await expect(card.getByTestId("claim-checked-in")).toHaveCount(0);
   await pointAndClick(window, card.getByTestId("claim-search-all"));

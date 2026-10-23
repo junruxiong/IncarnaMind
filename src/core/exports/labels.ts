@@ -59,6 +59,7 @@ export function exportLabels(language: Language): ExportLabels {
       if (sentence.check === "cited-case-unchecked") {
         return t("export.comment.sentence.citedCaseUnchecked");
       }
+      if (sentence.check === "own-workings") return t("export.comment.sentence.ownWorkings");
       if (sentence.check === "contradicted") {
         if (sentence.says)
           return t("export.comment.sentence.contradicted", { says: sentence.says });
@@ -69,6 +70,15 @@ export function exportLabels(language: Language): ExportLabels {
       if (sentence.nearest)
         return t("export.comment.sentence.unsupported.differs", sentence.nearest);
       if (sentence.covers) return t("export.comment.sentence.unsupported.covers", sentence.covers);
+      if (sentence.citations) {
+        const { count, ...part } = sentence.citations;
+        return t(
+          count === 1
+            ? "export.comment.sentence.unsupported.citation"
+            : "export.comment.sentence.unsupported.citations",
+          part,
+        );
+      }
       const { scope } = sentence;
       const name = scope
         ? (scope.name ?? t(`scope.chip.deleted.${scope.kind}`))

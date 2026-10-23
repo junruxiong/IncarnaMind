@@ -128,7 +128,7 @@ test("Find support on two sentences: one is supported and its Citation is added,
   const card = window.getByTestId("claim-card");
   await expect(card.getByTestId("claim-badge")).toHaveText("Unsupported");
   await expect(card.getByTestId("claim-nothing")).toHaveText(
-    "I didn't find this in “All Documents”.",
+    "I didn’t find this in “All Documents”.",
   );
   await window.keyboard.press("Escape");
   await expect(card).toBeHidden();

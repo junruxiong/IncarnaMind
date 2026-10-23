@@ -56,7 +56,7 @@ const WORDS = {
   en: {
     title: "This cites a court decision.",
     body: "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",
-    nothing: "I didn't find this in “All Documents”.",
+    nothing: "I didn’t find this in “All Documents”.",
     unchecked:
       "Not checked: the cited case isn’t in your Documents. Check it in your legal research service before you rely on it.",
     held: (document: string, location: string) =>

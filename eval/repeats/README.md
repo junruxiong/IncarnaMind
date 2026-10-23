@@ -11,9 +11,9 @@
    - **supported**, **contradicted**;
    - **partly**: unsupported, and the card says what the Documents support and what they don't, quoting the Passage the check read;
    - **differs**: unsupported, and the card quotes a line that says something different;
-   - **not found**: unsupported, and the card says "I didn't find this in “{scope}”";
+   - **absent**: unsupported, and the card says "I didn’t find this in “{scope}”";
    - **not checked**, with why.
-5. The report: per set and model, each sentence's outcomes and how many checks gave its most frequent verdict (partly, differs and not found are one verdict, unsupported), false Supported, not found on a sentence the Documents state, how many checks gave other verdicts than the check before, and every result that isn't the expected verdict in the check's own words. It goes into `eval/results/<start time>-repeats/` (`report.md`, `report.json`).
+5. The report: per set and model, each sentence's outcomes and how many checks gave its most frequent verdict (partly, differs and absent are one verdict, unsupported), false Supported, absent on a sentence the Documents state, the partly-supported card on a sentence whose topic the Documents don't hold, how many checks gave other verdicts than the check before, and every result that isn't the expected verdict in the check's own words. It goes into `eval/results/<start time>-repeats/` (`report.md`, `report.json`).
 
 The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core, so other sets can use it with their own Documents.
 
@@ -71,26 +71,28 @@ Every check of a Mind with its scope set was handed the agreement alone, as ever
 
 ### 2026-10-23: the card says where it looked, and a part covered needs the same claim
 
-Three versions on the same Documents, Library and search: `main` at bf47b4631 ("main"); the first partly-supported card for a sentence with no Citation ("first"); and this version ("now"), where the check's reply says in fields of its own whether a Passage is about the sentence's topic (`Topic: found` or `not found`) and whether the sentence names the Passage's party in general words (`Scope: same` or `wider`). A Supported reply with `Scope: wider` shows the partly-supported card; an Unsupported one with `Topic: not found` names no part covered, and its card says "I didn't find this in “{scope}”". Counts are of 10 checks; S supported, C contradicted, P the partly-supported card, N not found, D a line that says something different. `zh-control` didn't run on `main`.
+Three versions on the same Documents, Library and search: `main` at bf47b4631 ("main"); the first partly-supported card for a sentence with no Citation ("first"); and this version ("now"). Now, the check's reply says in fields of its own whether a Passage is about the sentence's topic (`Topic: found` or `not found`) and whether the sentence names the Passage's party in general words (`Scope: same` or `wider`); "Covered" and "Not covered" are asked for only when a Passage states part of what the sentence itself says, never for a neighbouring thing. A Supported reply with `Scope: wider` shows the partly-supported card; a sentence no Passage states says "I didn’t find this in “{scope}”". Haiku 5.5 ran twice now (run 1; run 2). Counts are of 10 checks; S supported, C contradicted, P the partly-supported card, A absent, D a line that says something different. `zh-control` didn't run on `main`.
 
-| Set · sentence | Haiku main | Haiku first | Haiku now | Sonnet main | Sonnet first | Sonnet now |
+| Set · sentence | Haiku main | Haiku first | Haiku now (1; 2) | Sonnet main | Sonnet first | Sonnet now |
 |---|---|---|---|---|---|---|
-| en · staff-home ("Staff…") | 10 S | 9 S, 1 N | 9 P, 1 S | 5 S, 5 N | 8 S, 2 P | 8 P, 2 S |
-| en · car allowance (absent) | 10 N | 9 N, 1 P | 10 N | 10 N | 10 N | 10 N |
-| en · holiday (wrong figure) | 10 C | 10 C | 10 C | 10 C | 10 C | 10 C |
-| en · near miss (Mondays and Fridays) | 5 D, 5 C | 4 D, 6 C | 5 D, 5 C | 10 N | 10 P | 10 P |
-| en-control · staff-home | not run | 10 S | 5 P, 4 S, 1 N | 8 S, 2 N | 9 S, 1 P | 10 P |
-| en-control · employees-home | not run | 10 S | 9 P, 1 not checked | 10 S | 10 S | 10 P |
-| zh · staff-home (员工…) | 9 S, 1 N | 9 S, 1 P | 9 P, 1 S | 9 S, 1 N | 10 S | 10 P |
-| zh · notice (paraphrase) | 10 S | 10 S | 8 S, 2 P | 10 S | 10 S | 10 S |
-| zh · car allowance (absent) | 10 N | 9 N, 1 P | 10 N | 10 N | 9 N, 1 P | 10 N |
-| zh · holiday (wrong figure) | 10 C | 10 C | 10 C | 10 C | 10 C | 10 C |
-| zh · near miss (每周一和周五) | 10 N | 10 P | 5 P, 5 C | 10 N | 10 P | 10 P |
-| zh-control · staff-home | not run | 9 S, 1 P | 10 P | not run | 8 S, 2 P | 10 P |
-| zh-control · employees-home | not run | 9 S, 1 D | 10 P | not run | 10 S | 10 P |
+| en · staff-home ("Staff…") | 10 S | 9 S, 1 A | 10 P; 10 P | 5 S, 5 A | 8 S, 2 P | 10 P |
+| en · own words | 10 S | 10 S | 8 S, 2 P; 10 S | 10 S | 10 S | 10 S |
+| en · car allowance (absent) | 10 A | 9 A, 1 P | 10 A; 10 A | 10 A | 10 A | 10 A |
+| en · holiday (wrong figure) | 10 C | 10 C | 10 C; 10 C | 10 C | 10 C | 10 C |
+| en · near miss (Mondays and Fridays) | 5 D, 5 C | 4 D, 6 C | 5 D, 5 C; 7 D, 3 C | 10 A | 10 P | 10 P |
+| en-control · staff-home | not run | 10 S | 10 P; 10 P | 8 S, 2 A | 9 S, 1 P | 10 P |
+| en-control · employees-home | not run | 10 S | 9 P, 1 S; 9 P, 1 not checked | 10 S | 10 S | 10 P |
+| zh · staff-home (员工…) | 9 S, 1 A | 9 S, 1 P | 10 P; 10 P | 9 S, 1 A | 10 S | 10 P |
+| zh · notice (paraphrase) | 10 S | 10 S | 10 S; 10 S | 10 S | 10 S | 10 S |
+| zh · car allowance (absent) | 10 A | 9 A, 1 P | 10 A; 10 A | 10 A | 9 A, 1 P | 10 A |
+| zh · holiday (wrong figure) | 10 C | 10 C | 10 C; 10 C | 10 C | 10 C | 10 C |
+| zh · near miss (每周一和周五) | 10 A | 10 P | 2 P, 8 C; 3 P, 7 C | 10 A | 10 P | 10 P |
+| zh-control · staff-home | not run | 9 S, 1 P | 10 P; 10 P | not run | 8 S, 2 P | 10 P |
+| zh-control · employees-home | not run | 9 S, 1 D | 10 P; 10 P | not run | 10 S | 10 P |
 
-Every other sentence (the English notice, the agreement's own words, the controls' paraphrase and name) was Supported in every check of every version. No check gave a false Supported.
+Every other sentence (the notice in English, the controls' paraphrase and name) was Supported in every check of every version. No check gave a false Supported.
 
-- **Not found, for a sentence the agreement states:** 9 checks on `main` (Sonnet 8, Haiku 1), 1 in the first version, 1 now (Haiku, English control).
-- **Misses now, all on Haiku 5.5:** the English control's "Staff…" gets the partly card in 5 of 10 checks; the Chinese notice paraphrase gets a partly card in 2 of 10, where it was Supported in every check; the near miss is Contradicted in 5 of 10 in English, as on `main`, and in 5 of 10 in Chinese, where it was never Contradicted before.
-- **Spend:** `main` $1.78 (with the diagnosis), the first version $2.26, now $2.28 (Haiku 5.5 $0.22, Sonnet 5.5 $2.06).
+- **The partly-supported card on the absent car allowance:** 0 of 40 checks on Haiku 5.5 and 0 of 20 on Sonnet 5.5 now, against 2 of 20 and 1 of 20 in the first version.
+- **Absent, for a sentence the agreement states:** 9 checks on `main` (Sonnet 8, Haiku 1), 1 in the first version, 0 now.
+- **Misses now, all on Haiku 5.5:** the near miss is Contradicted in 8 and 7 of 10 in Chinese (never on `main`, 5 of 10 in the version pushed before this one) and in 5 and 3 of 10 in English (5 on `main`); the agreement's own words get a partly card in 2 of 10 in one English run.
+- **Spend:** `main` $1.78 (with the diagnosis), the first version $2.26, a version in between $2.28, now $2.19 (Haiku 5.5 $0.23, Sonnet 5.5 $1.96).

@@ -21,7 +21,7 @@ export function failedSentences(
   context: SentenceCheckContext,
 ): Map<string, FailedSentence> {
   const failed = new Map<string, FailedSentence>();
-  for (const { check, sentence } of checkedSentences(fragment)) {
+  for (const { check, sentence, cited } of checkedSentences(fragment)) {
     const { id } = check;
     const shown = claimCheckShown(check, {
       text: sentence,
@@ -39,13 +39,25 @@ export function failedSentences(
             ? { shown: calculation.figure.shown, stated: calculation.stated }
             : null,
       });
+    } else if (shown.state === "unsupported" && check.citedCaseUnchecked) {
+      failed.set(id, { id, check: "cited-case-unchecked", unsupported: true });
+    } else if (
+      shown.state === "unsupported" &&
+      check.excluded.some((left) => left.reason === "own-workings")
+    ) {
+      failed.set(id, { id, check: "own-workings" });
     } else if (shown.state === "unsupported") {
       const { evidence } = check;
       const covers = evidence ? null : coveredPart(check.unsupported);
+      const why = check.unsupported;
       const looked = checkedScope(check.scope);
       failed.set(id, {
         id,
         check: "unsupported",
+        citations:
+          !evidence && cited.length > 0 && why?.covered && why.uncovered
+            ? { count: cited.length, covered: why.covered, uncovered: why.uncovered }
+            : null,
         scope: looked && scopeName(looked, context.scopeItemName),
         nearest: evidence?.quote
           ? { quote: evidence.quote, source: context.sourceOf(evidence) }
@@ -60,7 +72,7 @@ export function failedSentences(
     } else if (shown.state === "needs-recheck") {
       failed.set(id, { id, check: "needs-recheck", why: shown.why });
     } else if (shown.state === "supported" && check.citedCaseUnchecked) {
-      failed.set(id, { id, check: "cited-case-unchecked" });
+      failed.set(id, { id, check: "cited-case-unchecked", unsupported: false });
     }
   }
   return failed;

@@ -384,9 +384,16 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     ): Promise<ClaimCheckResult> => {
       const nearest = await nearestDifferent(request, session, signal);
       if (signal.aborted) return notChecked("stopped");
-      // A card that quotes the Passage covering part of the sentence never says nothing backs it.
+      // A card that quotes the Passage covering part of the sentence never says it found nothing.
+      // A sentence's own Citations, a court decision no Document holds, or only the User's own
+      // workings saying it take the card instead, so their check asks for no quote.
       const quoted =
-        nearest || !why.covered || !why.uncovered
+        nearest ||
+        !why.covered ||
+        !why.uncovered ||
+        (request.cited?.length ?? 0) > 0 ||
+        opinions.missing ||
+        workingsSayingIt().length > 0
           ? null
           : (found ??
             decidingCitation(session.finalCitation) ??

@@ -570,6 +570,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     state: "contradicted" | "unsupported",
     says: string | null,
     unsupported: UnsupportedReason | null = null,
+    more: Record<string, unknown> = {},
   ) => ({
     ...text(value),
     marks: [
@@ -591,10 +592,70 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
           versions: [],
           excluded: [],
           checkedAt: "2026-10-12T14:30:00.000Z",
+          ...more,
         },
       },
     ],
   });
+
+  test.each([
+    {
+      language: "en" as const,
+      cited:
+        "Unsupported: your Citation supports the moon phases, not the parts about the harbour.",
+      own: "Unsupported: only your own working file says this.",
+    },
+    {
+      language: "zh-CN" as const,
+      cited: "无依据：引用支持the moon phases，但不支持the harbour的部分。",
+      own: "无依据：只有你自己的工作文件这样写。",
+    },
+  ])(
+    "$language: a cited sentence's comment says what its Citation supports, and one only the User's workings say says so, as their cards do",
+    async ({ language, cited, own }) => {
+      const { core, mindId, client } = await setUp({
+        body:
+          paragraph("Spring tides rise in the harbour.") + paragraph("Margins widened in 2026."),
+      });
+      const tides = await tidesDocument(core);
+      await core.updateSettings({ user: { language } });
+      editMind(client, ([first, second]) => [
+        {
+          ...(first as JSONContent),
+          content: [
+            checked(
+              "Spring tides rise in the harbour",
+              "unsupported",
+              null,
+              { reason: null, covered: "the moon phases", uncovered: "the harbour" },
+              // The sentence as checked holds its Citation, as an inline node.
+              { text: "Spring tides rise in the harbour\uFFFC." },
+            ),
+            citation(tides),
+            text("."),
+          ],
+        },
+        {
+          ...(second as JSONContent),
+          content: [
+            checked("Margins widened in 2026.", "unsupported", null, null, {
+              excluded: [
+                { documentId: "workings", documentName: "Workings", reason: "own-workings" },
+              ],
+            }),
+          ],
+        },
+      ]);
+      await client.settled();
+
+      const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+      const comments = textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
+
+      expect(result.sentenceChecks).toMatchObject({ unsupported: 2, commented: true });
+      expect(comments).toContain(cited);
+      expect(comments).toContain(own);
+    },
+  );
 
   test("each gets a comment on its own words, written into its paragraph; the others stay as they were", async () => {
     const { core, bytes, mindId, client } = await setUp({
@@ -631,7 +692,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
     });
     expect([...comments.matchAll(/<w:comment /g)]).toHaveLength(2);
     expect(textOf(comments)).toContain("Contradicted: The report says £182.9m.");
-    expect(textOf(comments)).toContain("Unsupported: I didn't find this in “All Documents”.");
+    expect(textOf(comments)).toContain("Unsupported: I didn’t find this in “All Documents”.");
     const [first, second, third] = paragraphsIn(document);
     expect(first).toMatch(
       /<w:commentRangeStart w:id="(\d+)"\/>[\s\S]*Halden held cash of £192\.9m\.[\s\S]*<w:commentRangeEnd w:id="\1"\/>/,
@@ -663,7 +724,7 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
       covered: "home working two days a week",
       uncovered: "staff in general",
       covers: `Unsupported: your Documents support home working two days a week, not the parts about staff in general (“${CLAUSE}”, Employment Agreement, p. 1)`,
-      nothing: "Unsupported: I didn't find this in “All Documents”.",
+      nothing: "Unsupported: I didn’t find this in “All Documents”.",
     },
     {
       language: "zh-CN" as const,
@@ -705,8 +766,8 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
   test.each([
     {
       language: "en" as const,
-      one: "Unsupported: I didn't find this in “Okoro agreement”.",
-      two: "Unsupported: I didn't find this in “Okoro agreement” or 1 more.",
+      one: "Unsupported: I didn’t find this in “Okoro agreement”.",
+      two: "Unsupported: I didn’t find this in “Okoro agreement” or 1 more.",
     },
     {
       language: "zh-CN" as const,

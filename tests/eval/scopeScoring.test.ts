@@ -169,8 +169,8 @@ describe("the scope scoring", () => {
     const right = [{ document: "Agreement", text: "Entitled to 27 working days of paid\nholiday" }];
     const [summary] = summarise([
       row("unfiled-20", 1, "notice", "supported"),
-      row("unfiled-20", 1, "own-words", "not-found"),
-      row("unfiled-20", 1, "car", "not-found"),
+      row("unfiled-20", 1, "own-words", "absent"),
+      row("unfiled-20", 1, "car", "absent"),
       row("unfiled-20", 1, "holiday", "contradicted", right),
       row("unfiled-20", 2, "notice", "partly"),
       row("unfiled-20", 2, "own-words", "supported"),
@@ -192,7 +192,7 @@ describe("the scope scoring", () => {
   test("compare the placements in points of the false Unsupported rate", () => {
     const summaries = summarise([
       row("unfiled-5", 1, "notice", "supported"),
-      row("unfiled-5", 1, "own-words", "not-found"),
+      row("unfiled-5", 1, "own-words", "absent"),
       row("filed-5", 1, "notice", "supported"),
       row("filed-5", 1, "own-words", "supported"),
     ]);

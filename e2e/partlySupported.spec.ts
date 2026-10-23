@@ -46,7 +46,7 @@ const WORDS = {
   en: {
     covers:
       "Your Documents support home working two days a week, not the parts about staff in general.",
-    nothing: "I didn't find this in “All Documents”.",
+    nothing: "I didn’t find this in “All Documents”.",
     open: "Open the page",
   },
   "zh-CN": {

@@ -640,8 +640,8 @@ export const en = {
   "claim.calculated.inputs": "Worked out from",
   "claim.calculated.negative": "counted as negative",
   "claim.cited": "Cited in this sentence",
-  "claim.unsupported.notFound": "I didn't find this in “{scope}”.",
-  "claim.unsupported.notFound.more": "I didn't find this in “{scope}” or {count} more.",
+  "claim.unsupported.notFound": "I didn’t find this in “{scope}”.",
+  "claim.unsupported.notFound.more": "I didn’t find this in “{scope}” or {count} more.",
   "claim.checkedIn": "Checked against “{scope}”",
   "claim.checkedIn.more": "Checked against “{scope}” and {count} more",
   "claim.unsupported.differs": "Your Documents say something different:",
@@ -3413,10 +3413,15 @@ export const en = {
   "export.comment.sentence.contradicted.worked":
     "Contradicted: your Documents give {shown}, and the sentence says {stated}.",
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
-  "export.comment.sentence.unsupported": "Unsupported: I didn't find this in “{scope}”.",
+  "export.comment.sentence.unsupported": "Unsupported: I didn’t find this in “{scope}”.",
   "export.comment.sentence.unsupported.more":
-    "Unsupported: I didn't find this in “{scope}” or {count} more.",
+    "Unsupported: I didn’t find this in “{scope}” or {count} more.",
   "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
+  "export.comment.sentence.ownWorkings": "Unsupported: only your own working file says this.",
+  "export.comment.sentence.unsupported.citation":
+    "Unsupported: your Citation supports {covered}, not the parts about {uncovered}.",
+  "export.comment.sentence.unsupported.citations":
+    "Unsupported: your Citations support {covered}, not the parts about {uncovered}.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
   "export.comment.sentence.unsupported.covers":

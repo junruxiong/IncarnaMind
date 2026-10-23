@@ -74,7 +74,7 @@ const OUTCOMES: readonly Outcome[] = [
   "contradicted",
   "partly",
   "differs",
-  "not-found",
+  "absent",
   "not-checked",
   "no-mark",
 ];
@@ -144,7 +144,7 @@ const ABBREVIATIONS: Record<Outcome, string> = {
   contradicted: "C",
   partly: "P",
   differs: "D",
-  "not-found": "N",
+  absent: "N",
   "not-checked": "X",
   "no-mark": "X",
 };
