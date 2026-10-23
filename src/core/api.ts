@@ -2080,6 +2080,11 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
+  /**
+   * How many times each tip has shown on this device, by its id: a tip shows at most twice, and
+   * a closed or used one is counted as shown twice (docs/agents/interaction.md, rule 14).
+   */
+  tips: Record<string, number>;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
