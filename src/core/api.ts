@@ -6312,7 +6312,12 @@ export type DataFlowId = (typeof dataFlowIds)[number];
  * sorting Documents aren't in it: the User turns them on (Settings › Tagging) or
  * asks for them, and that is their consent (#1617).
  */
-export const CHOSEN_PROVIDER_FLOWS = ["chat", "checks", "suggestions", "edits"] as const satisfies readonly DataFlowId[];
+export const CHOSEN_PROVIDER_FLOWS = [
+  "chat",
+  "checks",
+  "suggestions",
+  "edits",
+] as const satisfies readonly DataFlowId[];
 
 export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
 

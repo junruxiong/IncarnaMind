@@ -204,7 +204,10 @@ export function createLibrary(options: {
    * Whether the model tagging or organizing would use runs on another computer:
    * the switch for doing it by itself is off for one until the User turns it on.
    */
-  usesCloud(settings: { classifier: LibraryClassifier; organizeWith: TaggingClassifier | null }): boolean;
+  usesCloud(settings: {
+    classifier: LibraryClassifier;
+    organizeWith: TaggingClassifier | null;
+  }): boolean;
   /**
    * The service that would read a scan's pages for this classifier if the User
    * allowed it, while they haven't; null when it reads them, or can't.
