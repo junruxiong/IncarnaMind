@@ -43,6 +43,15 @@ npm run eval:repeats
 
 **Cost and time:** ten checks of the four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5.
 
+## Scope of a check from a Mind
+
+`npm run eval:scope` checks a Mind that summarises one Document, in a Library of that Document and 5 or 20 other invented Documents, to see whether searching every Document, as a Mind in no Folder does, costs it verdicts. The four cases are `unfiled-5`, `filed-5`, `unfiled-20` and `filed-20`: the Mind either in no Folder or filed into the Folder that holds the agreement, with the other Documents outside it.
+
+- The Documents are the English agreement of `cases.ts` and the first 5 or all 20 of `scopeDocuments.ts`: two or three more employment agreements in the agreement's layout with other figures, policies an employer keeps, and Documents of other kinds. None states what a sentence says (`tests/eval/scopeScoring.test.ts`). There are no example Documents, so the number of others is exact.
+- The sentences are four of the `en` set, worded as there: the notice paraphrase and the agreement's own words, which it states, and the car allowance it doesn't mention and the holiday sentence with a wrong figure, which it doesn't state.
+- The report counts, per case and model, the faithful sentences that didn't come back Supported, the other sentences that did, and for every wrong check whether a Passage handed to the model held the clause that settles the sentence. The model's requests are watched for the Passages (`passagesHanded.ts`), and the Passages of each Library are kept in `passages-<case>.json`.
+- `INCARNAMIND_EVAL_SCOPE_CASES` picks cases by id, `INCARNAMIND_EVAL_SCOPE_BUDGET` stops the run past that many dollars (1), and `INCARNAMIND_EVAL_REPEATS` is the checks a case (10). Ten checks of one case cost about $0.04 on Claude Haiku 5.5.
+
 ## Results
 
 ### 2026-10-23: the card says where it looked, and a part covered needs the same claim

@@ -62,6 +62,7 @@ async function marksOf(core: Core, mindId: string) {
 
 export interface RepeatOptions {
   mind: string;
+  folderId?: string | null;
   sentences: readonly string[];
   repeats: number;
   model: ChatModelChoice;
@@ -71,7 +72,10 @@ export interface RepeatOptions {
 
 /** Makes the Mind, then checks it `repeats` times. */
 export async function repeatChecks(core: Core, options: RepeatOptions): Promise<RepeatResult[]> {
-  const { id: mindId } = await core.createMind({ title: options.mind });
+  const { id: mindId } = await core.createMind({
+    title: options.mind,
+    folderId: options.folderId ?? null,
+  });
   const client = await connectToMind(core, mindId);
   writeMind(
     client,
