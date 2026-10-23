@@ -20,14 +20,14 @@ import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useAppStore } from "../store";
-import { citedIn, cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
-import { alreadyCitedBy } from "./alreadyCited";
+import { cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
+import { alreadyCitedBy, citationsOf } from "./alreadyCited";
 import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { Popover } from "./Popover";
-import { UnsupportedCited } from "./UnsupportedCited";
+import { CitationChip, OpenCitation, UnsupportedCited } from "./UnsupportedCited";
 
 /** How long a pointer rests on a mark before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -176,7 +176,7 @@ export function ClaimMark({
           >
             <ClaimCard
               claim={claim}
-              cited={citedIn(editor, claim)}
+              cited={citationsOf(editor.state, claim)}
               fixes={offersFixes(editor, claim)}
               addable={plus}
               already={already}
@@ -355,7 +355,6 @@ function ClaimCard({
   const differs = state === "unsupported" && check.evidence !== null;
   const evidence = (decided && fromPassage) || differs ? check.evidence : null;
   const location = evidence ? citationLocation(evidence) : null;
-  // A Passage the sentence already cites shows as the Citation quotes it.
   const citedQuote = already?.attributes.quote ? already.attributes : evidence;
   const quote = useReadableQuote(citedQuote);
   const where = location ? formatLocation(location, t) : null;
@@ -441,16 +440,14 @@ function ClaimCard({
         </figure>
       )}
       {already && (
-        <div data-testid="claim-already-cited" className="claim-card-cited">
-          <span>{t("claim.alreadyCited")}</span>
-          <span
-            data-testid="claim-already-chip"
-            data-check={already.attributes.check}
-            className="citation-marker claim-card-cited-chip"
-          >
-            {already.number}
-          </span>
-        </div>
+        <OpenCitation
+          citation={already}
+          label={t("claim.alreadyCited.open", { number: already.number })}
+          onOpen={onOpen}
+        >
+          <span data-testid="claim-already-cited">{t("claim.alreadyCited")}</span>
+          <CitationChip citation={already} testId="claim-already-chip" />
+        </OpenCitation>
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {decisionMissing && (

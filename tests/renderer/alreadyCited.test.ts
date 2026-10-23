@@ -21,7 +21,7 @@ const attributes = (over: Partial<CitationAttributes>): CitationAttributes => ({
   passageId: null,
   documentId: "contract",
   documentName: "Contract",
-  contentHash: null,
+  contentHash: "v1",
   pageFrom: 2,
   pageTo: 2,
   location: null,
@@ -33,7 +33,6 @@ const attributes = (over: Partial<CitationAttributes>): CitationAttributes => ({
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 
-/** A paragraph of the first sentence, a Citation and the second sentence. */
 const state = (
   cited: Partial<CitationAttributes> | null,
   after: Partial<CitationAttributes> | null,
@@ -56,7 +55,6 @@ const state = (
     plugins: [citationNumbersPlugin()],
   });
 
-/** A check of the sentence that starts at `at` in the paragraph, as it is when it found `evidence`. */
 function claimOf(
   sentence: { from: number; to: number },
   evidence: Partial<CitationAttributes> | null,
@@ -88,6 +86,12 @@ describe("the Citation of a sentence that already cites what its check found", (
       const claim = claimOf(firstSentence(true), { quote });
       expect(alreadyCitedBy(held, claim)?.number).toBe(1);
     }
+  });
+
+  test("is none when the check found the same words on another page of the Document", () => {
+    const held = state({}, null);
+    const claim = claimOf(firstSentence(true), { quote: LINE, pageFrom: 9, pageTo: 9 });
+    expect(alreadyCitedBy(held, claim)).toBeNull();
   });
 
   test("is none when the check found another clause of the Document, or another Document", () => {

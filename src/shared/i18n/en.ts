@@ -635,6 +635,7 @@ export const en = {
   "claim.card.label": "Sentence check: {state}. {sentence}",
   "claim.addAsCitation": "Add as Citation",
   "claim.alreadyCited": "Already cited",
+  "claim.alreadyCited.open": "Already cited: open citation {number}",
   "claim.calculated.title": "Calculated from your Documents",
   "claim.calculated.stated": "The sentence says {stated}.",
   "claim.calculated.inputs": "Worked out from",

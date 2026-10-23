@@ -12,14 +12,9 @@ import { CLAIM_CHECK_MARK } from "../../core/api";
 import { checkAgain, useChecks } from "./checks";
 import { makeMine } from "./editor/aiText";
 import { citationsOf } from "./editor/alreadyCited";
-import type { NumberedCitation } from "./editor/citationNumbers";
 import { type ShownClaim, shownClaims } from "./editor/claimChecks";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { requestEdit, useEdits } from "./editWithAi";
-
-/** The Citations a check's sentence holds, with their numbers in the Mind. */
-export const citedIn = (editor: Editor, claim: ShownClaim): NumberedCitation[] =>
-  citationsOf(editor.state, claim);
 
 /**
  * Whether a check is of a cited sentence nothing backs: not one where the
@@ -33,7 +28,7 @@ export function offersFixes(editor: Editor, claim: ShownClaim): boolean {
     check.evidence === null &&
     !check.citedCaseUnchecked &&
     !check.excluded.some((left) => left.reason === "own-workings") &&
-    citedIn(editor, claim).length > 0
+    citationsOf(editor.state, claim).length > 0
   );
 }
 

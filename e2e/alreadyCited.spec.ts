@@ -54,7 +54,6 @@ const ALMANAC = buildPdf([
   { lines: ["Almanac", "Lighthouses guide ships past rocks near the coast."] },
 ]);
 
-/** The sentences of the note, one paragraph each, and the Citation each holds. */
 const CASES = [
   {
     name: "the same words",
@@ -120,7 +119,6 @@ const inside = async (inner: Locator, outer: Locator) => {
   );
 };
 
-/** Writes the note: each sentence with a Citation to the Document, as an AI-written summary has them. */
 async function writeNote(
   window: Page,
   notes: readonly {
@@ -204,17 +202,16 @@ test("Check this Mind on a note whose sentences cite their Passages: the ones th
     if (each.cited) await expect(marks(window).nth(index)).not.toHaveAttribute("data-addable");
     else await expect(marks(window).nth(index)).toHaveAttribute("data-addable", "true");
   }
-  // Nothing in the run added a Citation.
   for (const index of CASES.keys()) {
     await expect(lines.nth(index).getByTestId("citation")).toHaveCount(1);
   }
 
-  // Quoted more by the check: the card shows the Citation's own words, its number, and no Add.
   const card = window.getByTestId("claim-card");
   await openCard(window, marks(window).nth(1));
   await expect(card.getByTestId("claim-badge")).toHaveText("Supported");
   await expect(card.getByTestId("claim-already-cited")).toContainText("Already cited");
   await expect(card.getByTestId("claim-already-chip")).toHaveText("2");
+  await expect(card.getByRole("button", { name: "Already cited: open citation 2" })).toBeVisible();
   await expect(card.getByTestId("claim-quote")).toHaveText("Spring tides happen at new moon");
   await expect(card.getByTestId("claim-add-citation")).toHaveCount(0);
   await expect(card.getByTestId("claim-open")).toHaveClass(/citation-card-action--primary/);
@@ -223,21 +220,17 @@ test("Check this Mind on a note whose sentences cite their Passages: the ones th
   await window.keyboard.press("Escape");
   await expect(card).toBeHidden();
 
-  // Quoted less by the check: the Citation's longer words are shown.
   await openCard(window, marks(window).nth(2));
   await expect(card.getByTestId("claim-already-chip")).toHaveText("3");
   await expect(card.getByTestId("claim-quote")).toHaveText(`${HEADING} ${SHORTER_LINE}`);
   await expect(card.getByTestId("claim-add-citation")).toHaveCount(0);
   await window.keyboard.press("Escape");
 
-  // The same words: no Add either.
   await openCard(window, marks(window).nth(0));
   await expect(card.getByTestId("claim-already-chip")).toHaveText("1");
   await expect(card.getByTestId("claim-add-citation")).toHaveCount(0);
   await window.keyboard.press("Escape");
 
-  // A different clause of the same Document, and another Document: Add as Citation stays, and adds
-  // (its mark goes, as the Citation's own check stands for it).
   for (const index of [3, 4]) {
     await openCard(window, marks(window).and(window.locator("[data-addable]")).first());
     await expect(card.getByTestId("claim-already-cited")).toHaveCount(0);
@@ -303,6 +296,7 @@ test("In Chinese and a narrow window: a Citation whose quote differs in punctuat
   const card = await openCard(window, marks(window).nth(0));
   await expect(card.getByTestId("claim-already-cited")).toContainText("已引用");
   await expect(card.getByTestId("claim-already-chip")).toHaveText("1");
+  await expect(card.getByRole("button", { name: "已引用：打开引用 1" })).toBeVisible();
   await expect(card.getByTestId("claim-add-citation")).toHaveCount(0);
   expect(await inside(card.getByTestId("claim-open"), card)).toBe(true);
   await screenshot(window, "already-cited-zh-narrow");
