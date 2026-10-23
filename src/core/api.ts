@@ -8464,7 +8464,8 @@ export interface CoreApi {
    * Document's Passages and text, a Tag's links), keeping each one's id and when it was
    * deleted, so a later sync can pass the
    * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
-   * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
+   * touches the User's files; a copy the old layout made in the data folder (ADR-0010) goes
+   * with its Document. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
    */
   deletePermanently(refs: DeletedRef[]): Promise<void>;
 

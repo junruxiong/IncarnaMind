@@ -2549,6 +2549,7 @@ export function createCore(adapters: CoreAdapters): Core {
     // The app still opens; what is due goes at the next start.
     console.error("Deleting what waited 30 days in Recently deleted failed.", error);
   }
+  documents.dropPurged().catch((error: unknown) => console.error(error));
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
@@ -3568,10 +3569,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+      for (const deleted of documents.delete(id)) activity.documentDeleted(deleted);
     },
     deleteDocuments: async (ids) => {
-      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
+      for (const deleted of documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -4019,7 +4020,12 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await Promise.all([webPages.dropPurged(), sources.dropPurged(), wordImports.dropPurged()]);
+      await Promise.all([
+        webPages.dropPurged(),
+        sources.dropPurged(),
+        wordImports.dropPurged(),
+        documents.dropPurged(),
+      ]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
