@@ -40,6 +40,7 @@ import {
 } from "../../shared/locations";
 import { citesSource, type NamedSource } from "../../shared/namedSources";
 import { findQuote, lostLigatures, type MatchOptions } from "../../shared/quoteMatch";
+import { namesReferenceList } from "../../shared/referenceList";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
@@ -1295,12 +1296,34 @@ export function createCitationSession(
   };
 }
 
+const FOOTNOTE_DEFINITION = /^ {0,3}\[\^\d{1,4}\][:：]/;
+const MARKDOWN_HEADING = /^ {0,3}#{1,6}\s/;
+
 /**
- * Lines that are footnote definitions ("[^1]: …"): some models list their
- * sources this way at the end. The records are what counts, so these go.
+ * Lines that are footnote definitions ("[^1]: …", "[^1]：…"): some models
+ * list their sources this way at the end, under a heading such as
+ * "References" or "参考文献：". The records are what counts, so these go, and
+ * that heading with them: left behind, it headed whatever was added after it
+ * (#1483).
  */
 export function withoutFootnoteDefinitions(markdown: string): string {
-  return markdown.replace(/^ {0,3}\[\^\d{1,4}\]:.*(?:\n|$)/gm, "");
+  const lines = markdown.split("\n");
+  const headsDefinitionsOnly = (at: number) => {
+    let defined = false;
+    for (const line of lines.slice(at + 1)) {
+      if (MARKDOWN_HEADING.test(line)) break;
+      if (FOOTNOTE_DEFINITION.test(line)) defined = true;
+      else if (line.trim() !== "") return false;
+    }
+    return defined;
+  };
+  const goes = (line: string, at: number) =>
+    FOOTNOTE_DEFINITION.test(line) ||
+    (namesReferenceList(line.replace(/^ {0,3}#{1,6}\s+|\*\*|__/g, "")) && headsDefinitionsOnly(at));
+  // Each line goes with the line break after it.
+  return lines
+    .map((line, at) => (goes(line, at) ? "" : at < lines.length - 1 ? `${line}\n` : line))
+    .join("");
 }
 
 export function withoutDeadMarkers(markdown: string, backed: (marker: number) => boolean): string {

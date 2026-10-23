@@ -52,6 +52,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../../shared/proposals";
+import { namesReferenceList } from "../../../shared/referenceList";
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import {
   createElement,
@@ -445,6 +446,26 @@ function named(elements: readonly Y.XmlElement[], wanted: string): Y.XmlElement[
 
 const isHeading = (element: Y.XmlElement | undefined) => element?.nodeName === "heading";
 
+const isEmptyLine = (element: Y.XmlElement) =>
+  element.nodeName === "paragraph" && element.length === 0;
+
+/** A heading, or a line of its own, that heads a reference list: "References", "参考文献：". */
+const headsReferences = (element: Y.XmlElement) =>
+  (isHeading(element) || element.nodeName === "paragraph") &&
+  namesReferenceList(plainText(element));
+
+/**
+ * Where a Mind's own text ends among `order`, its Blocks in order: at the reference list that
+ * closes it, when its last heading heads one and there is text above it; else at its end. What
+ * the assistant adds goes above that list, never under its heading (#1483).
+ */
+function textEnd(order: readonly Y.XmlElement[]): number {
+  const last = order.findLastIndex((element) => isHeading(element) || headsReferences(element));
+  const list = order[last];
+  if (!list || !headsReferences(list)) return order.length;
+  return order.slice(0, last).some((element) => !isEmptyLine(element)) ? last : order.length;
+}
+
 // Fewer than this could start several paragraphs.
 const MIN_FIRST_WORDS = 3;
 const MIN_FIRST_CJK = 6;
@@ -467,9 +488,9 @@ function paragraphAt(
   asked: ParagraphAsked,
 ): Y.XmlElement | undefined {
   if (asked === null) return undefined;
-  const paragraphs = elements.filter(
-    (element) => element.nodeName === "paragraph" && plainText(element).trim() !== "",
-  );
+  const paragraphs = elements
+    .slice(0, textEnd(elements))
+    .filter((element) => element.nodeName === "paragraph" && plainText(element).trim() !== "");
   return asked === "last" ? paragraphs.at(-1) : paragraphs[asked];
 }
 
@@ -481,10 +502,10 @@ interface Stretch {
 
 /**
  * The stretch of a Mind `edit_mind` changes, whole: the section under the
- * heading `part` (to the next heading as high or higher), else the Blocks the
- * User selected, else all of it; of that, only the paragraph the User named
- * by its place (`asked`, counted in the selection or the whole Mind). Why
- * not, when there is nothing there to change.
+ * heading `part` (to the next heading as high or higher, or a reference
+ * list), else the Blocks the User selected, else all of it; of that, only the
+ * paragraph the User named by its place (`asked`, counted in the selection or
+ * the Mind's text). Why not, when there is nothing there to change.
  */
 function stretchOf(
   blocks: Y.XmlFragment,
@@ -505,9 +526,12 @@ function stretchOf(
     if (heading) {
       const start = all.indexOf(heading);
       const level = levelOf(heading);
+      const listed = headsReferences(heading);
       const end = all.findIndex(
         (element, index) =>
-          index > start && element.nodeName === "heading" && levelOf(element) <= level,
+          index > start &&
+          ((element.nodeName === "heading" && levelOf(element) <= level) ||
+            (!listed && headsReferences(element))),
       );
       chosen = all.slice(start, end < 0 ? all.length : end);
     } else {
@@ -552,17 +576,22 @@ function stretchOf(
 
 /**
  * Where `add_to_mind` puts its Blocks: after the last top-level Block of the
- * section under the heading `after` names, or after the paragraph it names;
- * by that Block's id, or null for the end of the Mind. Why not, when it
- * names none or several.
+ * section under the heading `after` names, or after the paragraph it names,
+ * or, with none named, at the end of the Mind's text (`textEnd`); by that
+ * Block's id, or null for the end of the Mind. A section ends where a
+ * reference list begins. Why not, when it names none or several.
  */
 function placeAfter(
   blocks: Y.XmlFragment,
   after: string | null,
   language: Language,
 ): { after: string | null } | { why: string; kind: "no-place" | "several-places" } {
-  if (after === null) return { after: null };
   const top = blocks.toArray().filter((each): each is Y.XmlElement => each instanceof Y.XmlElement);
+  if (after === null) {
+    const end = textEnd(top);
+    const last = top.slice(0, end).findLast((element) => !isEmptyLine(element));
+    return { after: end < top.length && last ? idOf(last) : null };
+  }
   const headings = top.filter((element) => isHeading(element));
   const texts = top.filter((element) => isHeading(element) || element.nodeName === "paragraph");
   const byHeading = namedBlocks(headings, top, after);
@@ -580,11 +609,13 @@ function placeAfter(
   }
   if (!isHeading(found)) return { after: idOf(found) };
   const level = levelOf(found);
+  const listed = headsReferences(found);
   let last = found;
   for (const element of top.slice(top.indexOf(found) + 1)) {
     if (isHeading(element) && levelOf(element) <= level) break;
+    if (!listed && headsReferences(element)) break;
     // A section's trailing empty lines stay after what is added.
-    if (!(element.nodeName === "paragraph" && element.length === 0)) last = element;
+    if (!isEmptyLine(element)) last = element;
   }
   return { after: idOf(last) };
 }
@@ -1588,7 +1619,7 @@ export function mindTools(options: MindToolsOptions): { tools: Tool[]; settle():
   const contentProperty = {
     type: "string",
     description:
-      'The text, in Markdown, cited as an Answer is: each source a marker like [^1], for a Citation you recorded with cite before this call, right after the words it backs, in a table\'s cells too. Never write a source as text: "[Tides, p. 3]" is how IncarnaMind shows you a Citation, and content with one is refused. A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.',
+      'The text, in Markdown, cited as an Answer is: each source a marker like [^1], for a Citation you recorded with cite before this call, right after the words it backs, in a table\'s cells too. Never write a source as text: "[Tides, p. 3]" is how IncarnaMind shows you a Citation, and content with one is refused. IncarnaMind lists the References at the end of the Mind itself, from the markers: write no References or 参考文献 heading, no list of sources and no footnote definitions ([^1]: …). A new section starts with its heading. A table has a heading row, a row of ---, then each row on a line of its own. Write it last, after the other fields.',
   };
 
   // Offered only when there is one: a model may otherwise reach for it with none.

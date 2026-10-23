@@ -8,6 +8,9 @@ import { ARXIV_ID, normalizeDoi } from "./references";
 
 const HEADING =
   /^(?:[\dIVX]+\.?\s*)?(?:references|reference list|bibliography|works cited|literature cited|literature|参考文献|参考资料|引用文献)\s*[:：]?$/i;
+/** A Block's text that heads a reference list, as a heading or a line of its own: "References", "参考文献：". */
+export const namesReferenceList = (text: string): boolean =>
+  HEADING.test(text.replace(/\s+/g, " ").trim());
 /** Paragraphs that end a list no heading closes. */
 const AFTER_LIST =
   /^(?:[\dA-Z]{1,3}\.?\s+)?(?:acknowledge?ments?|appendix|appendices|supplementary material|致谢|附录)/i;
