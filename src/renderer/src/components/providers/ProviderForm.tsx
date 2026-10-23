@@ -691,8 +691,14 @@ export function ProviderForm({
               className={primaryButtonClass}
             >
               {busy
-                ? t("providers.form.checking")
-                : t(local && !keyRequired ? "providers.form.save" : "providers.form.useKey")}
+                ? t(keyRequired ? "providers.form.checking" : "providers.form.connecting")
+                : t(
+                    keyRequired
+                      ? "providers.form.useKey"
+                      : local
+                        ? "providers.form.save"
+                        : "providers.form.connect",
+                  )}
             </button>
             {missing && (
               <span data-testid="provider-use-key-why" className={hintClass}>

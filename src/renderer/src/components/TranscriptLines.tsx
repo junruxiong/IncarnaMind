@@ -41,6 +41,15 @@ export function TranscriptLines({
         }
       : null;
 
+  const documentId = transcript.documentId;
+  const open: ProblemAction | undefined = documentId
+    ? {
+        label: t("meetings.transcript.open"),
+        testId: "meeting-transcript-open",
+        onClick: () => showTranscript(documentId, place?.groupId),
+      }
+    : undefined;
+
   let line: {
     text: string;
     action?: ProblemAction;
@@ -49,7 +58,14 @@ export function TranscriptLines({
   } | null = null;
   if (problem) {
     const message = problem.message;
-    if (problem.kind === "download") {
+    if (problem.kind === "speakers") {
+      line = {
+        text: t("meetings.transcript.speakersFailed"),
+        action: retry("meetings.transcript.retry"),
+        ...(open && { also: open }),
+        role: "alert",
+      };
+    } else if (problem.kind === "download") {
       line = {
         text: t("meetings.transcript.downloadFailed", { message }),
         action: retry("meetings.transcript.retry"),
@@ -93,18 +109,13 @@ export function TranscriptLines({
         : t("meetings.transcript.finishing"),
       role: "status",
     };
-  } else if (state === "saved" && transcript.documentId) {
-    const documentId = transcript.documentId;
+  } else if (state === "saved" && open) {
     line = {
       // The first save says where it went (D209).
       text: transcript.savedDefaulted
         ? t("meetings.transcript.savedIn", { folder: defaultFolderLabel(t) })
         : t("meetings.transcript.saved"),
-      action: {
-        label: t("meetings.transcript.open"),
-        testId: "meeting-transcript-open",
-        onClick: () => showTranscript(documentId, place?.groupId),
-      },
+      action: open,
       ...(transcript.savedDefaulted && {
         also: {
           label: t("export.changeFolder"),
