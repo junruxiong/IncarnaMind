@@ -174,7 +174,7 @@ export function report(
       "|---|---|---|---|---|---|---|---|---|---|",
       ...group.sentences.map(
         (each) =>
-          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes["absent"]} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
+          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes.absent} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
       ),
       "",
       `- False Supported: ${group.falseSupported}`,

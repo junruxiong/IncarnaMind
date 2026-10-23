@@ -52,6 +52,8 @@ export interface RepeatDocument {
   language: "en" | "zh-CN";
   file: string;
   pages: readonly PdfPage[];
+  /** The sets whose Library alone holds it, so the others' Library stays as it was; absent: every set's. */
+  onlyFor?: readonly string[];
 }
 
 export const DOCUMENTS: readonly RepeatDocument[] = [
@@ -92,11 +94,6 @@ export const DOCUMENTS: readonly RepeatDocument[] = [
           "The Employee must keep the Company's confidential information secret during and after employment.",
           "9. Governing law",
           "This agreement is governed by the laws of England and Wales.",
-          "10. Staff flat",
-          "The Company lets the flat at 14 Mill Lane to the Employee: the Company is the landlord and the Employee the tenant.",
-          "The Employee pays the Company a rent of 950 per month.",
-          "11. Laptop",
-          "At the end of employment the Company may sell the Employee's work laptop to the Employee for 450.",
           "Signed for the Company: ____________________  Date: ____________",
           "Signed by the Employee: ____________________  Date: ____________",
         ],
@@ -127,11 +124,42 @@ export const DOCUMENTS: readonly RepeatDocument[] = [
           "第七条　社会保险：甲方依法为乙方缴纳社会保险和住房公积金。",
           "第八条　保密：乙方在职期间及离职后均须对甲方的商业秘密保密。",
           "第九条　适用法律：本合同适用中华人民共和国法律。",
-          "第十条　员工宿舍：甲方将明川路14号2室出租给乙方，甲方为出租方，乙方为承租方。",
-          "乙方每月向甲方支付租金人民币一千五百元。",
-          "第十一条　设备：劳动合同终止时，甲方可按人民币三千元将乙方使用的笔记本电脑出售给乙方。",
           "甲方（盖章）：　　　　　　　　乙方（签字）：",
           "签订日期：　　　　年　　月　　日",
+        ],
+      },
+    ],
+  },
+  {
+    language: "en",
+    file: "Staff flat and laptop - T. Okoro.pdf",
+    onlyFor: ["en-conflicts"],
+    pages: [
+      {
+        lines: [
+          "STAFF FLAT AND LAPTOP AGREEMENT",
+          "Between Larkfield Provisions Ltd (the Company) and Tunde Okoro (the Employee).",
+          "1. Staff flat",
+          "The Company lets the flat at 14 Mill Lane to the Employee: the Company is the landlord and the Employee the tenant.",
+          "The Employee pays the Company a rent of 950 per month.",
+          "2. Laptop",
+          "At the end of employment the Company may sell the Employee's work laptop to the Employee for 450.",
+        ],
+      },
+    ],
+  },
+  {
+    language: "zh-CN",
+    file: "员工宿舍及设备协议 - 林晓.pdf",
+    onlyFor: ["zh-conflicts"],
+    pages: [
+      {
+        chineseLines: [
+          "员工宿舍及设备协议",
+          "甲方：明川食品有限公司　乙方：林晓",
+          "第一条　员工宿舍：甲方将明川路14号2室出租给乙方，甲方为出租方，乙方为承租方。",
+          "乙方每月向甲方支付租金人民币一千五百元。",
+          "第二条　设备：劳动合同终止时，甲方可按人民币三千元将乙方使用的笔记本电脑出售给乙方。",
         ],
       },
     ],
@@ -370,13 +398,16 @@ export const SETS: readonly RepeatSet[] = [
   },
 ];
 
-/** Writes a language's Documents into `folder`, as the files a User adds. */
-export async function writeDocuments(
-  folder: string,
-  language: RepeatDocument["language"],
-): Promise<EvalDocument[]> {
+/** The Documents a set's Library holds. */
+export const documentsOf = (set: RepeatSet): RepeatDocument[] =>
+  DOCUMENTS.filter(
+    (each) => each.language === set.language && (!each.onlyFor || each.onlyFor.includes(set.id)),
+  );
+
+/** Writes a set's Documents into `folder`, as the files a User adds. */
+export async function writeDocuments(folder: string, set: RepeatSet): Promise<EvalDocument[]> {
   const written: EvalDocument[] = [];
-  for (const document of DOCUMENTS.filter((each) => each.language === language)) {
+  for (const document of documentsOf(set)) {
     const path = join(folder, document.file);
     await writeFile(path, buildPdf(document.pages));
     written.push({ key: document.file, path });
