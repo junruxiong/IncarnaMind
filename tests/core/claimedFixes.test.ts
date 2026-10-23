@@ -80,4 +80,39 @@ describe("Counts a reply gives", () => {
     expect(unmadeFixes("修改了 3 处。", [TRIP], MADE)).toBeNull();
     expect(unmadeFixes("Changed 1 paragraph.", [TRIP], MADE)).toBeNull();
   });
+
+  // protects=Haiku's and Kimi's replies to "rewrite the second paragraph" (#1559's review), which name the paragraph they changed by its place, aren't read as a count of paragraphs or places; fails_when=an ordinal is taken for a count, and the model is asked again; no_claim=wordings no model gave.
+  test.each([
+    "已将第二段改写得更清楚。",
+    "我已修改了第三段。",
+    "已修改第 2 段的措辞。",
+    "已修改第12段。",
+    "已修正第二处错别字。",
+    "Changed the second paragraph.",
+    "Changed the 2nd paragraph to read more clearly.",
+    "Fixed the third typo in paragraph 3.",
+  ])("an ordinal is no count: “%s”", (reply) => {
+    expect(unmadeFixes(reply, [TRIP], MADE)).toBeNull();
+  });
+
+  // protects="the last paragraph" and "this paragraph" name one paragraph, also when the edit revised the assistant's own text and counted none; fails_when=they are read as one paragraph claimed; no_claim=none beyond protects.
+  test.each(["已修改最后一段。", "已将这一段改得更正式。"])(
+    "one named paragraph: “%s”",
+    (reply) => {
+      expect(unmadeFixes(reply, [TRIP], { places: 1, paragraphs: 0 })).toBeNull();
+    },
+  );
+
+  // protects=a count after the ordinal rule still counts, "前两段" and "these two paragraphs" among them; fails_when=the ordinal rule hides a real count; no_claim=none beyond protects.
+  test.each([
+    ["已修改前两段。", 2],
+    ["Changed these two paragraphs.", 2],
+    ["修改了 12 段。", 12],
+  ])("a count stays one: “%s”", (reply, claimed) => {
+    expect(unmadeFixes(reply, [TRIP], MADE)?.count).toEqual({
+      claimed,
+      made: 1,
+      of: "paragraphs",
+    });
+  });
 });

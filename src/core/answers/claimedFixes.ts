@@ -83,7 +83,10 @@ const NUMBER_WORDS: Readonly<Record<string, number>> = {
   九: 9,
   十: 10,
 };
-const NUMBER = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|[一二两三四五六七八九十])";
+// After 第 a number is an ordinal ("第二段", "第 12 处"), and "最后一段" or "这一段" names one
+// paragraph: neither is a count.
+const NUMBER =
+  "(?<!第\\s*)(?<![\\d一二两三四五六七八九十])(\\d+|\\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\\b|(?<![这那上下另每同后]\\s*)一|[二两三四五六七八九十])";
 const PLACES = new RegExp(
   `${NUMBER}\\s*(?:typos?|spelling (?:mistakes?|errors?)|mistakes?|errors?|changes|places|edits|fixes|corrections)\\b|${NUMBER}\\s*(?:处|个错别字|个错误|个拼写错误)`,
   "gi",
