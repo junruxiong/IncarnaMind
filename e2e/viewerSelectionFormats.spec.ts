@@ -176,7 +176,7 @@ test("a web page: a paragraph cites its section and paragraph, and its quote is 
   const quote = await addToNote(
     window,
     page.locator("p", { hasText: "Dutch East India Company" }),
-    "a ship of the Dutch East India Company brought the first green tea leaves",
+    "ship of the Dutch East India Company brought the first green tea leaves",
   );
 
   await expect(citedAt(quote)).toHaveAttribute("aria-label", /§ History, ¶\s2/);
