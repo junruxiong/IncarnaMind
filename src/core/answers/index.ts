@@ -1004,19 +1004,16 @@ export function createAnswers(options: AnswersOptions) {
     /** The one it read by a name that fits others too (#1512), looked at once, when the Answer ends. */
     let namedAtEnd: AnswerSteps["coverage"] | null;
     const covered = () => {
-      if (coverage || outside || finishedAt === null) return coverage;
+      if (coverage || outside || finishedAt === null || readByName.length === 0) return coverage;
       if (namedAtEnd === undefined) {
         const titles = new Map(options.documents.names().map((each) => [each.id, each.title]));
-        namedAtEnd =
-          readByName.length === 0
-            ? null
-            : namedCoverage(
-                context.question,
-                readByName,
-                options.documents
-                  .searchableBySize(documentIds)
-                  .map((each) => ({ ...each, title: titles.get(each.id) })),
-              );
+        namedAtEnd = namedCoverage(
+          context.question,
+          readByName,
+          options.documents
+            .searchableBySize(documentIds)
+            .map((each) => ({ ...each, title: titles.get(each.id) })),
+        );
       }
       return namedAtEnd;
     };

@@ -121,15 +121,13 @@ const ANY_DOCUMENT = /^(?:documents?|docs?|files?|pdfs?|文档|文件)$/;
 
 const compact = (text: string) => text.replaceAll(" ", "");
 
-/** Whether a Document's name or title has a word of `keywordTerms`; a Chinese one may sit inside a longer word. */
-function namedBy(document: TitledDocument, term: string): boolean {
-  return [document.name, document.title].some((field) => {
-    if (!field) return false;
-    const words = keywordText(field);
-    if (HAN.test(term)) return compact(words).includes(compact(term));
-    return words.split(" ").some((word) => word === term || word === `${term}'s`);
-  });
-}
+/** Whether a name or title, as `keywordText` gives it, has a word of `keywordTerms`; a Chinese one may sit inside a longer word. */
+const has = (fields: readonly string[], term: string) =>
+  fields.some((words) =>
+    HAN.test(term)
+      ? compact(words).includes(compact(term))
+      : words.split(" ").some((word) => word === term || word === `${term}'s`),
+  );
 
 /** A word that can name a Document on its own: not a number, a letter or a single character. */
 const canName = (term: string) =>
@@ -149,6 +147,17 @@ export function namedCoverage(
   const terms = keywordTerms(question).filter(
     (term) => compact(term).length > 1 && !ANY_DOCUMENT.test(term),
   );
+  const words = new Map<string, string[]>();
+  const namedBy = (document: TitledDocument, term: string) => {
+    let fields = words.get(document.id);
+    if (!fields) {
+      fields = [document.name, document.title].flatMap((field) =>
+        field ? [keywordText(field)] : [],
+      );
+      words.set(document.id, fields);
+    }
+    return has(fields, term);
+  };
   for (const id of read) {
     const document = documents.find((each) => each.id === id);
     if (!document) continue;
