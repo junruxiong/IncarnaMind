@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type * as Y from "yjs";
-import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
+import type { ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
 import { checkedScope, coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
@@ -22,13 +22,14 @@ import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
 import { useScopeName } from "../scopeDocuments";
 import { useAppStore } from "../store";
-import { citedIn, cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
+import { cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
+import { alreadyCitedBy, citationsOf } from "./alreadyCited";
 import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
 import { ClaimMarkIcon, type ClaimMarkState } from "./icons";
 import { Popover } from "./Popover";
-import { UnsupportedCited } from "./UnsupportedCited";
+import { CitationChip, OpenCitation, UnsupportedCited } from "./UnsupportedCited";
 
 /** How long a pointer rests on a mark before its card shows, and how long it may leave before it goes. */
 const SHOW_MS = 120;
@@ -43,22 +44,6 @@ const TONE: Record<ClaimMarkState, string> = {
   "not-checked": "cant-check",
   "needs-recheck": "checking",
 };
-
-/** Whether the sentence already cites the Passage its check found. */
-function citesEvidence(editor: Editor, claim: ShownClaim): boolean {
-  const evidence = claim.check.evidence;
-  if (!evidence) return false;
-  let cited = false;
-  editor.state.doc.nodesBetween(claim.sentence.from, claim.sentence.to, (node) => {
-    if (node.type.name !== CITATION_NODE) return true;
-    const attributes = node.attrs as CitationAttributes;
-    if (attributes.documentId === evidence.documentId && attributes.quote === evidence.quote) {
-      cited = true;
-    }
-    return false;
-  });
-  return cited;
-}
 
 /** The words of the sentence a check is about. */
 const sentenceOf = (editor: Editor, claim: ShownClaim) =>
@@ -78,9 +63,10 @@ function searchTheWeb(mindId: string, sentence: string): void {
 /**
  * A sentence check's mark in the margin (#96), level with the sentence's
  * first line: a quiet tick with "+" when the Passage found can become its
- * Citation, an amber "!", an outlined red "≠", a grey ring when it wasn't
- * checked, ↻ when it needs a re-check. Hovering or focusing it shows its
- * card, and clicking keeps the card until it is dismissed; Esc closes it.
+ * Citation (a plain tick when the sentence already cites it), an amber "!",
+ * an outlined red "≠", a grey ring when it wasn't checked, ↻ when it needs a
+ * re-check. Hovering or focusing it shows its card, and clicking keeps the
+ * card until it is dismissed; Esc closes it.
  */
 export function ClaimMark({
   claim,
@@ -109,7 +95,8 @@ export function ClaimMark({
   const timer = useRef<number | undefined>(undefined);
   const open = pinned || peeking;
   // A figure worked out has inputs, not one Passage to cite.
-  const plus = state === "supported" && !claim.check.calculation && !citesEvidence(editor, claim);
+  const already = state === "supported" ? alreadyCitedBy(editor.state, claim) : null;
+  const plus = state === "supported" && !claim.check.calculation && !already;
   const added = useAddedDocuments((store) => store.byMind[mindId]?.[claim.check.id]?.length ?? 0);
 
   const hold = useCallback((source: string, on: boolean) => {
@@ -192,9 +179,10 @@ export function ClaimMark({
             <ClaimCard
               claim={claim}
               verified={verificationOf(doc)?.documentId ?? null}
-              cited={citedIn(editor, claim)}
+              cited={citationsOf(editor.state, claim)}
               fixes={offersFixes(editor, claim)}
               addable={plus}
+              already={already}
               added={added}
               onAdd={() => {
                 addAsCitation(editor, claim);
@@ -310,7 +298,8 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
 /**
  * A sentence check's card: its state; for a Passage found, the Document and
  * Location with the quote washed in the state's colour, and Add as Citation
- * when it isn't cited yet; for a contradiction, what the Document says; for a
+ * when it isn't cited yet, or "Already cited" with the Citation's own words
+ * and number when the sentence has one on those words; for a contradiction, what the Document says; for a
  * figure worked out, its working and inputs; for nothing found, where it
  * looked, with Search all Documents, or, for a court decision no Document
  * holds, that it can't be checked here, with Remove the mark only; for a
@@ -328,6 +317,7 @@ function ClaimCard({
   cited,
   fixes,
   addable,
+  already,
   added,
   onAdd,
   onCheckAgain,
@@ -346,6 +336,7 @@ function ClaimCard({
   cited: readonly NumberedCitation[];
   fixes: boolean;
   addable: boolean;
+  already: NumberedCitation | null;
   added: number;
   onAdd(): void;
   onCheckAgain(allDocuments?: boolean): void;
@@ -380,7 +371,8 @@ function ClaimCard({
       : null;
   const evidence = (decided && fromPassage) || differs ? check.evidence : (covers?.quoted ?? null);
   const location = evidence ? citationLocation(evidence) : null;
-  const quote = useReadableQuote(evidence);
+  const citedQuote = already?.attributes.quote ? already.attributes : evidence;
+  const quote = useReadableQuote(citedQuote);
   const where = location ? formatLocation(location, t) : null;
   const decisionUnchecked = decided && check.citedCaseUnchecked;
   const decisionHeld =
@@ -457,7 +449,7 @@ function ClaimCard({
           </p>
         )}
       </div>
-      {evidence?.quote && (
+      {citedQuote?.quote && (
         <figure className="citation-card-quote">
           <figcaption className="sr-only">{t("citation.quote")}</figcaption>
           <blockquote>
@@ -466,6 +458,16 @@ function ClaimCard({
             </span>
           </blockquote>
         </figure>
+      )}
+      {already && (
+        <OpenCitation
+          citation={already}
+          label={t("claim.alreadyCited.open", { number: already.number })}
+          onOpen={onOpen}
+        >
+          <span data-testid="claim-already-cited">{t("claim.alreadyCited")}</span>
+          <CitationChip citation={already} testId="claim-already-chip" />
+        </OpenCitation>
       )}
       {calculation && <Working calculation={calculation} onOpen={onOpen} />}
       {decisionMissing && (
