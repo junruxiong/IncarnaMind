@@ -312,10 +312,6 @@ describe("Background work in the timing records (#1624)", () => {
     const filed = () => ({ text: JSON.stringify({ groupId: folderId, tags: [] }) });
     const model = scriptedModel(filed, { generate: filed });
     const { core, dataDir } = await cloudCore(model);
-    const [service] = (await core.listChatProviders()).flatMap((each) => each.service ?? []);
-    for (const flow of ["tagging", "classification"] as const) {
-      if (service) await core.allowDataFlow(flow, service.id);
-    }
     folderId = (await core.createLibraryGroup({ name: "Tides", description: "The sea" })).id;
     const [provider] = await core.listChatProviders();
     await core.saveLibrarySettings({
@@ -325,6 +321,10 @@ describe("Background work in the timing records (#1624)", () => {
       },
       automatic: false,
     });
+    const [service] = (await core.listChatProviders()).flatMap((each) => each.service ?? []);
+    for (const flow of ["tagging", "classification"] as const) {
+      if (service) await core.allowDataFlow(flow, service.id);
+    }
     const sources = await createTempDataFolder();
     const [moon] = await addAndProcess(core, [
       await writeSourceFile(
