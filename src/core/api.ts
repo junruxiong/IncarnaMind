@@ -2097,6 +2097,11 @@ export interface DeviceSettings {
    * shown on this device: it shows at most twice (docs/agents/interaction.md, rule 14).
    */
   suggestionOffers: number;
+  /**
+   * How many times each tip has shown on this device, by its id: a tip shows at most twice, and
+   * a closed or used one is counted as shown twice (docs/agents/interaction.md, rule 14).
+   */
+  tips: Record<string, number>;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
   /**
@@ -5679,6 +5684,12 @@ export interface AskInConversationInput {
   mindId?: string | null;
   /** Where the User is in that Mind; ignored with no Mind. */
   focus?: MindFocus | null;
+  /**
+   * The Documents open on screen, by id, the focused group's first: what "this document"
+   * means (#1334). Read for this Answer only, never kept with the Question; those outside
+   * its Search scope are left out.
+   */
+  onScreen?: string[] | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */
@@ -5696,6 +5707,8 @@ export interface ConversationAnswerInput {
    * is written from every Document ("Search all Documents", #748).
    */
   clearScope?: boolean;
+  /** Regenerating: the Documents open on screen now, as `AskInConversationInput.onScreen`. */
+  onScreen?: string[] | null;
 }
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
