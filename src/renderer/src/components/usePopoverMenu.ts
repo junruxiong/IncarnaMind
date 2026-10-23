@@ -16,6 +16,8 @@ const GAP_PX = 4;
 const EDGE_PX = 8;
 /** The top band's height, which a menu over the window buttons stays below. */
 const BAND_PX = 44;
+/** Less room than this beside a row, and a scrolling menu would show too little to use. */
+const MIN_BESIDE_ROW_PX = 120;
 /** Menu items of every kind: plain, radio and checkbox. */
 const ITEMS = '[role^="menuitem"]';
 
@@ -92,17 +94,32 @@ function place(
     Math.min(anchor.left - (atPoint ? 1 : 0), window.innerWidth - width - EDGE_PX),
   );
   const below = anchor.bottom + gap;
-  const wanted =
-    below + height > window.innerHeight - EDGE_PX
-      ? Math.max(EDGE_PX, anchor.top - gap - height)
-      : below;
-  // Neither below nor above fits: the menu sits as high as the window lets all of it show, but
-  // not over the window buttons, which a menu that reaches them would cover (#1517).
+  // The window buttons are covered by a menu that reaches them, so it stays under the band (#1517).
   const buttons = windowButtonsReach();
   const overButtons = left < buttons.left || left + width > window.innerWidth - buttons.right;
   const floor = overButtons ? BAND_PX : EDGE_PX;
-  const top = Math.max(floor, Math.min(wanted, window.innerHeight - EDGE_PX - height));
-  const room = window.innerHeight - EDGE_PX - top;
+  const roomBelow = window.innerHeight - EDGE_PX - below;
+  const roomAbove = anchor.top - gap - floor;
+  // A menu a key opened from a row that fits neither side stays beside the row, on the side with
+  // more room, and scrolls there; it would cover the row anywhere else (#1517).
+  const besideRow =
+    point !== null &&
+    point.above < point.y &&
+    height > roomBelow &&
+    height > roomAbove &&
+    Math.max(roomBelow, roomAbove) >= MIN_BESIDE_ROW_PX;
+  let top: number;
+  let room: number;
+  if (besideRow) {
+    const downward = roomBelow >= roomAbove;
+    top = downward ? below : floor;
+    room = downward ? roomBelow : roomAbove;
+  } else {
+    const wanted = height > roomBelow ? Math.max(EDGE_PX, anchor.top - gap - height) : below;
+    // Neither below nor above fits: the menu sits as high as the window lets all of it show.
+    top = Math.max(floor, Math.min(wanted, window.innerHeight - EDGE_PX - height));
+    room = window.innerHeight - EDGE_PX - top;
+  }
   if (height > room) menu.style.maxHeight = `${room}px`;
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;

@@ -691,6 +691,85 @@ test("the context-menu key opens a Library row's and a tab's menu beside it, wit
   await app.close();
 });
 
+/**
+ * Opens the menu of `row` with the context-menu key and checks it stays beside the row, inside the
+ * window and under `floor`, with every item reachable: the last one, by keyboard, ends up inside the menu.
+ */
+async function expectBesideRow(
+  window: Page,
+  row: Locator,
+  main: Locator,
+  menu: Locator,
+  floor: number,
+) {
+  await main.scrollIntoViewIfNeeded();
+  await main.focus();
+  await window.keyboard.press("Shift+F10");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  await motionSettled(window);
+  const height = await window.evaluate(() => globalThis.innerHeight);
+  const rowBox = await boxOf(row);
+  const box = await boxOf(menu);
+  expect(box.y).toBeGreaterThanOrEqual(floor);
+  expect(box.y + box.height).toBeLessThanOrEqual(height);
+  const above = box.y + box.height <= rowBox.y + 2;
+  const below = box.y >= rowBox.y + rowBox.height - 2;
+  expect(above || below).toBe(true);
+  await window.keyboard.press("End");
+  const last = menu.locator('[role^="menuitem"]').last();
+  await expect(last).toBeFocused();
+  const lastBox = await boxOf(last);
+  const scrolled = await boxOf(menu);
+  expect(lastBox.y).toBeGreaterThanOrEqual(scrolled.y - 1);
+  expect(lastBox.y + lastBox.height).toBeLessThanOrEqual(scrolled.y + scrolled.height + 1);
+  await window.keyboard.press("Escape");
+  await expect(main).toBeFocused();
+}
+
+test("at the default window height and the smallest, the context-menu key opens a row's menu beside the row, scrolling when the room is short, and clear of the window buttons", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await window.evaluate(() => {
+    document.documentElement.dataset.titleBar = "inset";
+    delete document.documentElement.dataset.fullScreen;
+  });
+  const sizes = [
+    [1600, 660],
+    [900, 560],
+  ] as const;
+  const row = window.getByTestId("document-list-item").first();
+  const main = row.getByTestId("open-document");
+  const sidebarMenu = row.getByTestId("document-file-actions");
+  const BAND = 44;
+
+  for (const [width, height] of sizes) {
+    await setWindowSize(app, window, width, height);
+    await expectBesideRow(window, row, main, sidebarMenu, BAND);
+  }
+  // The row low in the sidebar: the menu goes above it.
+  await (await coreOf(window)).evaluate(async (core) => {
+    for (let index = 1; index <= 14; index++) await core.createMind({ title: `Notes ${index}` });
+  });
+  await expect(window.getByTestId("mind-row")).toHaveCount(14);
+  for (const [width, height] of sizes) {
+    await setWindowSize(app, window, width, height);
+    await expectBesideRow(window, row, main, sidebarMenu, BAND);
+  }
+
+  await window.getByTestId("open-library").click();
+  const libraryRow = window.getByTestId("library").locator("[data-document-id]").first();
+  const libraryMain = libraryRow.locator("[data-row-main]");
+  const libraryMenu = window.getByTestId("document-file-actions").filter({ visible: true });
+  for (const [width, height] of sizes) {
+    await setWindowSize(app, window, width, height);
+    await expectBesideRow(window, libraryRow, libraryMain, libraryMenu, 8);
+  }
+  await app.close();
+});
+
 test("a Document's Tags…, a Folder's Edit description and a Tag's Rename and Delete start the flows the app already has", async () => {
   await writeFile(join(sources, "Tides.pdf"), TIDES);
   const { app, window } = await launchApp(dataDir);
