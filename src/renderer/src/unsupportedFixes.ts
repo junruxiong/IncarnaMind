@@ -1,7 +1,7 @@
 /**
  * The fixes for a sentence found unsupported, from its card and ⌘K. With a
  * Citation (#1111): Cut the unsupported part, an Edit with AI that applies at
- * once with Undo. With none (#1554): Cut it, which takes the whole sentence
+ * once with Undo. With none: Cut it, which takes the whole sentence
  * out with no model. Either: Search all Documents, its check again in every
  * Document, while it searched less than all; and Keep as my view, which makes
  * the sentence the User's own, as Mark as mine does, and keeps its check from

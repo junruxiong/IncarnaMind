@@ -340,7 +340,7 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * those words; for a contradiction, what the Document says; for a figure
  * worked out, its working and inputs; for nothing found, where it looked, with
  * Search all Documents, Cut it (the whole sentence, never in a Verify Mind) and
- * Keep as my view (#1554), or, for a court decision no Document holds, that it
+ * Keep as my view, or, for a court decision no Document holds, that it
  * can't be checked here, with Remove the mark only; for a sentence with a
  * Citation, the part the Citation doesn't cover, with its quote, and Cut the
  * unsupported part, Search all Documents and Keep as my view (#1111); for one

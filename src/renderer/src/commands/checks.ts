@@ -117,7 +117,6 @@ export const checkCommands: readonly Command[] = [
     label: "claim.cutSentence",
     keywords: ["claim.cutSentence.keywords"],
     group: "main",
-    // Applied as one step of the Mind's Undo.
     reversible: true,
     when: () => withCuttable() !== null,
     run() {
