@@ -25,7 +25,7 @@ An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs,
 |---|---|
 | `en`, `zh` | The three sentences of #1608 (notice as a paraphrase; holiday with a wrong figure; "Staff" for "the Employee"), the agreement's own words, a car allowance it doesn't mention, and a near miss that names days it doesn't |
 | `en-control`, `zh-control` | The home-working clause four ways: a paraphrase about the same Employee, the Employee by name, "Staff" (员工) and "Employees" (职工) |
-| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped and a duty for a permission ("must" for "may"), in Chinese who pays the social insurance swapped |
+| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped; in both, a duty for a permission and the reverse ("must" for "may", 须 for 可) in several sentences, and more parties reversed (who keeps whose secrets, who may pay in lieu of notice, who pays the social insurance, who may call whom in) |
 
 ## Running it
 
@@ -44,9 +44,51 @@ npm run eval:repeats
 
 **Cost and time:** ten checks of the first four Minds take about 5 minutes and $0.10 on Claude Haiku 5.5, and about 9 minutes and $2.20 on Claude Sonnet 5.5. The two conflict Minds add about 9 minutes and $0.25 on Haiku 5.5, and roughly $4 on Sonnet 5.5 (from the other sets' ratio, not measured), so run them there with fewer checks.
 
-**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today, as #1668: "must" for "may"; employer and employee reversed (English); who pays the social insurance and who pays the rent reversed, landlord and tenant reversed, and the negation the claims leave out (Chinese).
+**The conflicts:** a change to a verdict's instructions or to a judgement is measured against the conflicts it loses, not only the near misses it fixes. The report gives "Genuine conflicts Contradicted: n of m", and counts a conflict Supported as a false Supported. A sentence the check misses today is marked with its issue (`knownMiss` in `cases.ts`), stays in its set, and is listed with its counts under a heading of its own, "Known misses (#…)", outside every other count; take the mark off once the issue is fixed. Marked today: the Chinese negation the claims leave out (#1682).
 
 ## Results
+
+### 2026-10-23: who does what for whom, and must or may (#1668)
+
+On the same Documents, Library and search as below. "Before" is the version below as first measured (8d28d4dad); "after" is this version, whose changes are:
+
+- The check's reply has a field of its own, `Roles`, after `Scope` and `Topic`: who does it, for or to whom, and each side's own obligation or permission word copied as written (须, 可, must and may are given as examples, never matched by the app), then `same` or `differs`. A Supported reply whose roles differ gets the partly-supported card, with its own parts or, when it named none, "I didn't find this".
+- A contradiction the first confirmation calls "same" gets the partly-supported card, never Supported: in one word it called the parties the other way round the same.
+- A reply that repeats its verdict line at the end keeps the fields above it, and a corrected `Roles` line counts.
+
+Checks of sentences that turn a permission into a duty or the reverse, or reverse the parties (they are now members of `en-conflicts` and `zh-conflicts`), 20 a sentence; S Supported, C Contradicted, P partly supported, D a line that says something different, A absent, N not checked:
+
+| Sentence | Haiku 5.5 before | after | Sonnet 5.5 before | after | Kimi K2.6 before | after |
+|---|---|---|---|---|---|---|
+| The Company must pay salary in lieu of notice instead of… | 14 S, 6 C | 8 C, 12 D | 20 C | 20 C | 20 S | 20 C |
+| The Company must pay salary in lieu of notice. | 1 S, 18 C, 1 P | 20 C | | | | |
+| The Employee must work from home two days a week. | 19 C, 1 D | 18 C, 1 D, 1 P | | | | |
+| Up to 5 unused holiday days must be carried over… | 10 S, 9 C, 1 D | 1 S, 18 C, 1 D | | | | |
+| The Employee may keep the Company's confidential information secret… | 13 S, 7 C | 20 C | 20 C | | 20 S | 20 P |
+| The Director of People reports to the Employee. | 20 C | 20 C | | | | |
+| The Company must keep the Employee's confidential information secret… | 1 S, 18 C, 1 P | 20 C | | | | |
+| The Employee may pay salary in lieu of notice instead of… | 4 S, 10 C, 6 D | 15 C, 5 D | | 20 C | | |
+| 乙方每周须在家工作两天。 | 15 C, 5 P | 14 C, 4 D, 2 P | | 20 C | | |
+| 乙方每周必须居家办公两天。 | 17 C, 3 P | 17 C, 3 P | | | | |
+| 乙方在职期间及离职后均可对甲方的商业秘密保密。 | 18 S, 1 C, 1 P | 2 S, 11 C, 7 P | not a claim | | 20 S | |
+| 乙方依法为甲方缴纳社会保险和住房公积金。 | 20 S | 2 C, 18 P | 20 C | 20 C | 20 C | |
+| 社会保险和住房公积金由乙方为甲方缴纳。 | 20 S | 6 C, 14 P | | | | |
+| 人力资源总监向乙方汇报。 | 2 S, 3 C, 15 P | 2 S, 16 C, 2 P | | | 20 C | |
+| 甲方每月向乙方支付租金人民币一千五百元。 | 5 S, 5 C (10 checks) | 2 S, 16 C, 2 D | | | | |
+| 甲方须对乙方的商业秘密保密。 | 7 S, 13 A | 6 P, 14 A | | | | |
+| 乙方可提前24小时通知甲方在居家工作日到岗。 | 20 C | 20 C | | | | |
+
+On Haiku 5.5 the English rows come from a Mind of these sentences alone, and the Chinese rows after from the whole `zh-conflicts` Mind, where the claims request names the reporting line (in a Mind of the key sentences alone it often doesn't).
+
+- **Still open (#1708):** the reversed reporting line is Supported in about 1 of 4 checks on Haiku 5.5, unchanged from before (2 of 20 in the run above, 11 of 40 in a reviewer's runs on this code, 5 of 10 before): this change doesn't fix it. How often the claims request names it varies from run to run, so 20 checks can give 2 or 7. The reversed rent payer and 均可 for 须 are Supported in up to 1 of 10, and "Employees…" in 2 to 3 of 20 (about 1 in 20 before). The `Roles` field comes after the verdict line, so when the verdict has already misread the sentence, the field follows it: "乙方 reports to 人力资源总监 / 乙方 reports to 人力资源总监, same" for "人力资源总监向乙方汇报". Other wordings of the field moved these between 0 and 2 of 20, within the noise of 20 checks.
+
+- **The two causes:** a duty for a permission was Supported by the check's own verdict, written first: Haiku 5.5 then named the difference in the lines after it ("Not covered: an obligation to pay (the Agreement says may, not must)"). The Chinese parties reversed were Contradicted by the verdict in every check and Supported by the first confirmation's "same".
+- **The other sets, after:** Haiku 5.5, 10 checks of `en` and 40 of `zh`, 20 of `en-control` and `zh-control`. The notice, the own words and the named and same-subject paraphrases were Supported in every check, "The Employee can work from home for two days each week." and "乙方每周有两天可以在家办公。" in 20 of 20. "Staff…", 员工 and 职工 got the partly-supported card in 19 of 20 each in the control Minds and in every check in `en` and `zh`. "Employees…" got it in 17 of 20, and was Supported in 2, its reply's `Scope` saying "same", as in a run below. The car allowance was "I didn't find this" in every check. The holiday was Contradicted in 10 of 10 in English and 39 of 40 in Chinese: in the one miss the verdict was unsupported and the nearest line was judged different (#1708). Before the last reading fix, 职工 was Supported in 2 of 10 by replies that ended by repeating their verdict line. Sonnet 5.5, 2 checks of the four sets: every sentence as expected.
+- **The conflict sets, after:** Haiku 5.5, 10 checks: Supported only "must pay salary in lieu of notice instead of…" (2 of 10; 1 read with this version's reader, its `Roles` line corrected) and "must be carried over" (1 of 10). In Chinese, 20 checks: the reversed rent payer and 均可 for 须, 2 of 20 each, and the reversed reporting line 2 of 20 in this run but about 1 in 4 across runs, as before (still open, above); every other sentence 0. The Chinese negation and the Chinese seven days' notice were left unmarked, both from the one claims request of the run (#1682). Sonnet 5.5, 1 check: all 47 Contradicted.
+- **Wordings tried** (Haiku 5.5, the sentences above 20 times and the four other sets 10 times): the generic instruction, without the four example words, left a duty for a permission Supported in up to 8 to 10 of 20 checks, against at most 1 or 2 with them. Placed after the reply's sentence instead of before it, the field copied the Passage's word for both sides. Placed before the verdict, it decided the verdict well but swayed `Scope` ("职工" Supported in 3 to 6 of 10), and leading a Supported reply into the contradiction's judgements made the notice and "Staff" Contradicted in a few checks. Words other than the four are measured only as far as 需 in the notice (#1708).
+- **Not checked:** a reply that writes its fields beside `cite` with no marker loses them as a preamble (#1673): 0 to 7 of 320 checks a wording on the sentences above with the field before the reply's sentence, 0 to 1 after it, none in the other sets.
+- **Cost and time:** the field adds about 30 to 50 output tokens a check on Haiku 5.5 (the verdict's reply, median 258 tokens before and 285 after), about 34 on Sonnet 5.5 (102 to 136) and 24 to 31 on Kimi K2.6 (47 to 78), and no request; the check's time moved within its spread from run to run (Haiku 3.0 to 3.3 s a sentence; Sonnet 6.2 to 7.0 s), about 0.2 s at Haiku's speed.
+- **Spend:** $9.09 in all: Haiku 5.5 $4.79 (the measurement, nine wordings and the final runs), the judgement trials $0.05, Sonnet 5.5 $3.66, Kimi K2.6 $0.59.
 
 ### 2026-10-23: a contradiction needs a second, strict judgement (#1647)
 
