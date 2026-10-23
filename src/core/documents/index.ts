@@ -2735,7 +2735,7 @@ export function createDocuments(options: DocumentsOptions) {
         rows.map(async (row) => {
           const copy = join(dataDir, ...row.relative_path.split("/"));
           if (copy === legacyFolder || !isInside(legacyFolder, copy)) return;
-          await rm(copy, { force: true }).catch(reportError);
+          await rm(copy, { force: true });
         }),
       );
     },
