@@ -4358,6 +4358,8 @@ export const en = {
   "meetings.transcript.saveFailed": "The transcript couldn’t be saved: {message}",
   "meetings.transcript.notSaved":
     "The transcript wasn’t saved: no folder was chosen for new files.",
+  "meetings.transcript.speakersFailed":
+    "Transcript saved, but its speakers couldn’t be told apart.",
   "meetings.transcript.retry": "Try again",
   "meetings.transcript.save": "Save it",
   "meetings.fill.section.summary": "Summary",
@@ -4394,7 +4396,6 @@ export const en = {
   "transcript.speaker.them": "Them",
   "transcript.speaker.unknown": "Speaker ?",
   "transcript.speaker.numbered": "Speaker {n}",
-  "transcript.speaker.themNumbered": "Them {n}",
   "transcript.recording": "Recording…",
   "transcript.lines.one": "{count} line",
   "transcript.lines.other": "{count} lines",
