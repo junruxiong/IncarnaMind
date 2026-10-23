@@ -270,6 +270,12 @@ export interface ModelFacts {
    * evaluation, #441). Unset: neither, and its Answers are as before.
    */
   calculates: boolean;
+  /**
+   * The languages of the sentences whose check starts with the search of the sentence, made for
+   * the model as its own first step: those where it was measured to give the same verdicts
+   * (#1635). Unset: its checks search as it asks.
+   */
+  checkSearchFirst: readonly ("en" | "zh-CN")[];
 }
 
 /** A model in the catalog: its facts, any of which its sources may not give. */

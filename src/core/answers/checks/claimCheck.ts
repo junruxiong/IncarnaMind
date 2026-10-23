@@ -40,9 +40,15 @@ import type {
   UnsupportedReason,
 } from "../../api";
 import type { Evidence, EvidenceScope } from "../../documents/evidence";
+import { detectLanguage } from "../../documents/textLanguage";
 import type { Language } from "../../language";
-import { calculates, givesStructuredOutput } from "../../providers/capabilities";
+import {
+  calculates,
+  givesStructuredOutput,
+  searchesCheckFirst,
+} from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
+import { DOCUMENT_TOOLS } from "../../tools";
 import {
   answerLanguage,
   type CalculationSession,
@@ -301,6 +307,19 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         opinions.documentIds.has(evidence.documentId ?? ""),
     });
 
+    // Only on the models and languages measured to keep the verdicts (#1635): after a search of the
+    // sentence's own words, Claude Haiku 5.5 took "Staff" for "the Employee" more often. A Claude
+    // account's requests weren't measured. Documents in another language are searched in theirs,
+    // which only the model can do.
+    const written = detectLanguage(request.claim, 1);
+    const language = written === "English" ? "en" : written === "Chinese" ? "zh-CN" : null;
+    const searchesFirst =
+      language !== null &&
+      model.provider.kind !== "claude-account" &&
+      searchesCheckFirst(model.capabilities, language) &&
+      deps.documents
+        .searchableLanguages(scope.documentIds)
+        .every((each) => each.language === written);
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
@@ -313,6 +332,9 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       documents: tools,
       tools: [],
       toolSet: "check",
+      ...(searchesFirst && {
+        primed: [{ tool: DOCUMENT_TOOLS.search, input: { query: request.claim.trim() } }],
+      }),
       thirdParty: request.thirdParty ?? [],
       support: model.support,
       structuredOutput: givesStructuredOutput(model.capabilities),

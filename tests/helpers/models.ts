@@ -232,8 +232,8 @@ export interface ModelCall {
   system: string;
   /** The rest of the prompt's text: each message's, a blank line apart. */
   prompt: string;
-  /** The results of the Tool calls so far, oldest first: their Tool's name and text. */
-  results: { tool: string; text: string }[];
+  /** The results of the Tool calls so far, oldest first: their call's id, Tool's name and text. */
+  results: { id: string; tool: string; text: string }[];
   options: CallOptions;
 }
 
@@ -293,7 +293,7 @@ function resultsOf(options: CallOptions): ModelCall["results"] {
           : output.type === "json" || output.type === "error-json"
             ? JSON.stringify(output.value)
             : "";
-      results.push({ tool: part.toolName, text });
+      results.push({ id: part.toolCallId, tool: part.toolName, text });
     }
   }
   return results;

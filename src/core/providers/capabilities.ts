@@ -18,6 +18,7 @@
  * what is known here for the rest of the session (see ../answers).
  */
 import type { CitationSupport } from "../api";
+import type { Language } from "../language";
 import type { ModelFacts } from "./catalog";
 import type { ContextWindow } from "./models";
 
@@ -73,6 +74,9 @@ export function startingSupport({ facts }: ModelCapabilities): CitationSupport |
 
 /** Whether an Answer offers the model the `calculate` Tool and its steer: only when a source says so. */
 export const calculates = ({ facts }: ModelCapabilities): boolean => facts.calculates === true;
+
+export const searchesCheckFirst = ({ facts }: ModelCapabilities, language: Language): boolean =>
+  facts.checkSearchFirst?.includes(language) ?? false;
 
 /** False when the model is known to give no structured output: an Answer then doesn't try it. */
 export const givesStructuredOutput = ({ facts }: ModelCapabilities): boolean | undefined =>

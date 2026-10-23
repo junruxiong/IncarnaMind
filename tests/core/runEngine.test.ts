@@ -226,6 +226,45 @@ const writtenReply = [
   sse("message_stop", {}),
 ].join("");
 
+/** An Anthropic reply that calls `search_documents` for "high water", as call `id`. */
+const searchReply = (id: string) =>
+  [
+    sse("message_start", {
+      message: {
+        id: "msg_search",
+        type: "message",
+        role: "assistant",
+        content: [],
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    }),
+    sse("content_block_start", {
+      index: 0,
+      content_block: { type: "tool_use", id, name: "search_documents", input: {} },
+    }),
+    sse("content_block_delta", {
+      index: 0,
+      delta: { type: "input_json_delta", partial_json: JSON.stringify(SEARCH.input) },
+    }),
+    sse("content_block_stop", { index: 0 }),
+    sse("message_delta", { delta: { stop_reason: "tool_use" }, usage: { output_tokens: 9 } }),
+    sse("message_stop", {}),
+  ].join("");
+
+/** The request bodies an Anthropic model is sent, answered from `replies` in turn. */
+function anthropicServer(replies: readonly string[]) {
+  const bodies: Record<string, unknown>[] = [];
+  const model = createAnthropic({
+    apiKey: "test-key",
+    fetch: async (_url: unknown, init?: { body?: unknown }) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      const reply = replies[bodies.length - 1] ?? writtenReply;
+      return new Response(reply, { headers: { "content-type": "text/event-stream" } });
+    },
+  })("claude-haiku-5-5");
+  return { model, bodies };
+}
+
 describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
   test("a Tool call, its result, then text; a step's Tool events come before its end", async () => {
     const search = testTool("search_documents");
@@ -1008,6 +1047,132 @@ describe.each(ENGINES)("A Run engine: $name", ({ create }) => {
       "error-text",
       "error-text",
     ]);
+  });
+
+  // protects=a Run may start with Tool calls already made, as its model's first step would make them (#1635): gated and called as a model's, their events and a step's end first, the model's first request reading them, the finished history holding them, and the step counted; fails_when=a primed call skips the gate, isn't in the model's history or the finished messages, or the model gets a step more than maxSteps allows; no_claim=what the model would have searched for, which the caller chooses.
+  test("calls a Run starts with are its first step, gated, called and read as the model's own", async () => {
+    const search = testTool("search_documents");
+    const gate = scriptedGate();
+    const model = stepsModel([], "High water is at six.");
+    const primed = [{ id: "primed_1", ...SEARCH }];
+
+    const run = await collect(
+      create(),
+      request(model, { tools: [search], gate: gate.gate, primed, maxSteps: 2 }),
+    );
+
+    expect(gate.asked).toEqual(primed);
+    expect(search.calls.map((call) => call.input)).toEqual([SEARCH.input]);
+    expect(run.events.slice(0, 3).map((event) => event.type)).toEqual([
+      "tool-call",
+      "tool-result",
+      "step-finished",
+    ]);
+    expect(resultsSent(model, 0)).toEqual([
+      {
+        tool: "search_documents",
+        type: "text",
+        text: 'search_documents found {"query":"high water"}',
+      },
+    ]);
+    // Two steps: the calls made, then one model call, which must write.
+    expect(model.doStreamCalls.map((call) => call.toolChoice?.type)).toEqual(["none"]);
+    expect(run.finished?.slice(0, 2)).toEqual([
+      { role: "assistant", text: "", toolCalls: primed },
+      {
+        role: "tool",
+        id: "primed_1",
+        tool: "search_documents",
+        result: 'search_documents found {"query":"high water"}',
+        ok: true,
+      },
+    ]);
+  });
+
+  // protects=a call the Run starts with that fails reads to the model as a failed call of its own, and the Run goes on (#1635); fails_when=the failure ends the Run, or reaches the model as a success; no_claim=what the model then does.
+  test("a call a Run starts with that fails reads as the model's own failed call", async () => {
+    const failing: RunTool = {
+      ...testTool("search_documents"),
+      async call() {
+        throw new Error("The search broke.");
+      },
+    };
+    const model = stepsModel([], "High water is at six.");
+
+    const run = await collect(
+      create(),
+      request(model, { tools: [failing], primed: [{ id: "primed_1", ...SEARCH }], maxSteps: 3 }),
+    );
+
+    expect(run.events.find((event) => event.type === "tool-result")).toEqual({
+      type: "tool-result",
+      id: "primed_1",
+      ok: false,
+    });
+    expect(JSON.stringify(model.doStreamCalls[0]?.prompt)).toContain("The search broke.");
+    expect(run.text).toBe("High water is at six.");
+  });
+
+  // protects=a Stop while the calls a Run starts with run ends the Run there, with no model call and no "finished" (#1635); fails_when=the model is asked anyway, or the Run says it finished; no_claim=what the caller marks, which the checks' tests cover.
+  test("stopped during the calls it starts with, a Run asks the model nothing", async () => {
+    const controller = new AbortController();
+    const slow = testTool("search_documents", { delayMs: 10_000 });
+    const stopping: RunTool = {
+      ...slow,
+      call(input, context) {
+        const searching = slow.call(input, context);
+        controller.abort();
+        return searching;
+      },
+    };
+    const model = stepsModel([], "High water is at six.");
+
+    const run = await collect(
+      create(),
+      request(model, {
+        tools: [stopping],
+        primed: [{ id: "primed_1", ...SEARCH }],
+        maxSteps: 3,
+        signal: controller.signal,
+      }),
+    );
+
+    expect(slow.calls.map((call) => call.aborted)).toEqual([true]);
+    expect(model.doStreamCalls).toHaveLength(0);
+    expect(run.finished).toBeNull();
+  });
+
+  // protects=the model can't tell a call the Run started with from one it made: its first request after them is, byte for byte on Anthropic's wire, the request it would get after making the same call itself, but for the call's id (#1635); fails_when=the primed call or its result reads differently, in place, shape or text; no_claim=other providers' wire formats, which the AI SDK builds from the same messages.
+  test("the first request after the calls a Run starts with is the one after the model's own", async () => {
+    const own = anthropicServer([searchReply("toolu_own")]);
+    await collect(
+      create(),
+      request(
+        scriptedModel(() => ({ text: "" })),
+        {
+          model: own.model,
+          tools: [testTool("search_documents")],
+        },
+      ),
+    );
+    const primed = anthropicServer([]);
+    await collect(
+      create(),
+      request(
+        scriptedModel(() => ({ text: "" })),
+        {
+          model: primed.model,
+          tools: [testTool("search_documents")],
+          primed: [{ id: "toolu_primed", ...SEARCH }],
+        },
+      ),
+    );
+
+    const sameIds = (body: unknown) =>
+      JSON.stringify(body).replaceAll(/toolu_(own|primed)/g, "toolu_id");
+    expect(own.bodies).toHaveLength(2);
+    expect(primed.bodies).toHaveLength(1);
+    expect(sameIds(primed.bodies[0])).toBe(sameIds(own.bodies[1]));
   });
 });
 

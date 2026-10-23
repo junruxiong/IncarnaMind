@@ -176,6 +176,78 @@ describe("The language of a check's sentence", () => {
   });
 });
 
+describe("A check that starts with the search of its sentence (#1635)", () => {
+  const CHAO = { name: "潮汐.md", contents: "# 潮汐\n\n大潮出现在新月和满月的时候。" };
+  const ZH = "大潮出现在新月和满月时。";
+  const ZH_PLANS: Record<string, Plan> = {
+    [ZH]: {
+      verdict: "supported",
+      quote: "大潮出现在新月和满月的时候",
+      says: "潮汐说大潮在新月和满月时出现。",
+    },
+  };
+
+  const FR = "Les grandes marées arrivent avec la nouvelle lune et la pleine lune.";
+  const MAREES = {
+    name: "Marées.md",
+    contents: [
+      "# Marées",
+      "",
+      "Les grandes marées arrivent avec la nouvelle lune et la pleine lune.",
+      "",
+      "Elles sont plus fortes dans les ports de la côte, et cette marée est une des plus hautes pour une ville sur la mer.",
+    ].join("\n"),
+  };
+  const SHORT = "Staff may work from home two days a week.";
+  const SENTENCES = {
+    en: { claim: SUPPORTED, plans: PLANS },
+    short: { claim: SHORT, plans: { [SHORT]: { verdict: "unsupported" } } as Record<string, Plan> },
+    zh: { claim: ZH, plans: ZH_PLANS },
+    fr: {
+      claim: FR,
+      plans: { [FR]: { verdict: "supported", quote: "Les grandes marées arrivent" } } as Record<
+        string,
+        Plan
+      >,
+    },
+  };
+  const DOCUMENTS = { en: TIDES, zh: CHAO, fr: MAREES };
+
+  // protects=a check starts with the search of its sentence only on a model, and in a sentence's detected language, where that was measured to keep the verdicts, with Documents in that language, and the model then searches no more for it; fails_when=an unlisted model or language starts with it, a listed one doesn't, or the model is asked to search again; no_claim=the verdicts, which the repeated-checks evaluation measures.
+  test.each([
+    ["anthropic", "claude-sonnet-5-5", "zh", "zh", true],
+    ["anthropic", "claude-sonnet-5-5", "en", "en", false],
+    ["anthropic", "claude-sonnet-5-5", "zh", "en", false],
+    ["anthropic", "claude-haiku-5-5", "zh", "zh", false],
+    ["anthropic", "claude-opus-5-5", "en", "en", false],
+    ["kimi", "kimi-k2.6", "en", "en", true],
+    ["kimi", "kimi-k2.6", "zh", "zh", false],
+    ["kimi", "kimi-k2.6", "fr", "fr", false],
+    ["kimi", "kimi-k2.6", "short", "fr", false],
+  ] as const)(
+    "%s %s, a sentence in %s, Documents in %s: starts with its search, %s",
+    async (kind, modelId, sentence, documents, starts) => {
+      const calls: ModelCall[] = [];
+      const { claim, plans } = SENTENCES[sentence];
+      const { core } = await setUpWithDocuments(checkingModelOf(plans, calls), [
+        DOCUMENTS[documents],
+      ]);
+      const provider = await core.saveChatProvider({ kind, modelId, apiKey: "sk-test" });
+      if (provider.service) await core.allowDataFlow("checks", provider.service.id);
+
+      await core.checkClaim({ claim, model: { providerId: provider.id, modelId } });
+
+      const checks = calls.filter(isCheckRun);
+      expect(checks.length).toBeGreaterThan(0);
+      expect(checks[0]?.results.map((each) => each.id)).toEqual(starts ? ["primed_1"] : []);
+      const searches = checks.flatMap((call) =>
+        call.results.filter((each) => each.tool === "search_documents"),
+      );
+      expect(new Set(searches.map((each) => each.id)).size).toBe(1);
+    },
+  );
+});
+
 describe("Find support", () => {
   test("marks each sentence the selection touches with what its check found", async () => {
     const { core, client, check, tides } = await mindWith([SUPPORTED, CONTRADICTED, UNSUPPORTED]);
