@@ -467,9 +467,10 @@ function withoutRunningLines(part: SelectedPart, unit: PageText, matching: Match
   return part.text;
 }
 
+// Two places are enough to refuse: counting more would read the rest of the Document again for each.
 function placesOf(text: string, quote: string, options: MatchOptions): TextRange[][] {
   const places: TextRange[][] = [];
-  for (let from = 0; from < text.length; ) {
+  for (let from = 0; from < text.length && places.length < 2; ) {
     const found = findQuote(text.slice(from), quote, options);
     const first = found?.[0];
     if (!found || !first) break;
@@ -504,6 +505,7 @@ export function citeSelection(
   const { units, matching, inRange } = version;
   const refused = (check: CheckResult, range: PageRange, quote = all): CitedSelection => ({
     ...version.result(check, range, quote),
+    ...(range.pageFrom === null && { location: null }),
     quote,
   });
   const citeIn = (range: PageRange, text: string): CitedSelection => {
@@ -554,7 +556,8 @@ export function citeSelection(
   const first = kept[0];
   const last = kept.at(-1);
   if (!first || !last) return refused(NOT_ON_PAGES, selected);
-  const range = { pageFrom: first.unit, pageTo: last.unit };
+  const pages = kept.map((part) => part.unit);
+  const range = { pageFrom: Math.min(...pages), pageTo: Math.max(...pages) };
   const text = kept.map((part) => part.text).join("\n");
   const covered = inRange(range);
   const [start, end] = [covered[0], covered.at(-1)];

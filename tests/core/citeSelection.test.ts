@@ -227,6 +227,37 @@ describe("citeSelection", () => {
     expect(twice).toMatchObject({ check: "not-found", pageFrom: null, pageTo: null });
   });
 
+  test("words a long text file has on every line are refused at once, with no Location", async () => {
+    const core = startCore(await createTempDataFolder());
+    const lines = Array.from(
+      { length: 30_000 },
+      (_, index) => `${index} The gauge was read again.`,
+    );
+    const document = await addPaper(core, Buffer.from(lines.join("\n")), "Gauge log.txt");
+
+    const cited = await core.citeSelection({
+      documentId: document.id,
+      parts: [{ unit: null, text: "The gauge was read again." }],
+    });
+
+    expect(cited).toMatchObject({ check: "not-found", pageFrom: null, location: null });
+  });
+
+  test("parts given out of order still cite their pages in order", async () => {
+    const core = startCore(await createTempDataFolder());
+    const document = await addPaper(core);
+
+    const cited = await core.citeSelection({
+      documentId: document.id,
+      parts: [
+        { unit: 4, text: "Smaller chains recovered less," },
+        { unit: 3, text: "at floating rates, as Table 3 shows." },
+      ],
+    });
+
+    expect(cited).toMatchObject({ pageFrom: 3, pageTo: 4 });
+  });
+
   test("a selection that names its Unit for some parts and not others isn't looked for elsewhere", async () => {
     const core = startCore(await createTempDataFolder());
     const document = await addPaper(core);
