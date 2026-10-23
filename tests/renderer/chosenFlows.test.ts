@@ -14,13 +14,13 @@ const t =
 
 const FULL = {
   en: [
-    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in or name, matching passages with their Document names and pages, up to 50 Document names, and a live Meeting’s Transcript",
     "each sentence you check",
     "the paragraph you pause on, for writing suggestions",
     "the text you ask the assistant to change",
   ],
   "zh-CN": [
-    "你的问题、你所在的 Mind、相关段落及其文档名称和页码，以及范围内其他文档的名称",
+    "你的问题、你所在或点名的 Mind、相关段落及其文档名称和页码、最多 50 个文档的名称，以及正在录制的会议的实时转写稿",
     "你核对的每一句话",
     "写作建议时你停下的那一段",
     "你让助手修改的文字",
@@ -29,7 +29,7 @@ const FULL = {
 
 /** The kinds of data each item of the line names, so a kind a flow starts sending fails until one does. */
 const NAMED_BY: Record<string, readonly DataKind[]> = {
-  chat: ["blocks", "passages"],
+  chat: ["blocks", "passages", "document-names", "other-minds", "live-transcript"],
   checks: ["verified-document"],
   suggestions: ["writing", "writing-passages"],
   edits: ["selection"],

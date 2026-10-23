@@ -1913,7 +1913,7 @@ export const en = {
   "providers.form.save": "Use this service",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
-    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in or name, matching passages with their Document names and pages, up to 50 Document names, and a live Meeting’s Transcript",
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
@@ -2162,6 +2162,9 @@ export const en = {
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks": "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
+  "consent.data.document-names": "The names of up to 50 of your Documents",
+  "consent.data.other-minds": "Part of another Mind, when a Question names it",
+  "consent.data.live-transcript": "The live Transcript while a Meeting records",
   "consent.data.passages":
     "passages from your Documents that match the Question, with their Documents’ names and pages",
   "consent.data.tool-results": "Results of Connectors and Skill scripts an Answer uses",
@@ -2344,9 +2347,6 @@ export const en = {
   "privacy.flows.stopped": "Stopped allowing {service}",
   "privacy.flows.stopFlow": "Stop allowing {flow}",
   "privacy.flows.allowFlow": "Allow {flow}",
-  "privacy.flows.chatMore": "Chat sends more than its line names.",
-  "privacy.flows.chatMore.details":
-    "Up to 50 Document names, another Mind a Question names, and the live Transcript while a Meeting records.",
   "privacy.flows.stoppedFlow": "Stopped allowing {flow} for {service}",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro": "These services receive nothing of yours.",

@@ -6221,6 +6221,9 @@ export const dataKinds = [
   "references",
   "connector-search",
   "meeting-audio",
+  "document-names",
+  "other-minds",
+  "live-transcript",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];

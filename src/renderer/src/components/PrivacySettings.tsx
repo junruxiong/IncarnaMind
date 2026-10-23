@@ -120,18 +120,7 @@ export function PrivacySettings() {
           {t("privacy.flows.intro")}
         </DetailsLine>
         {inUse.length > 0 ? (
-          <>
-            <PrivacyServices flows={inUse} />
-            {inUse.some((flow) => flow.id === "chat") && (
-              <DetailsLine
-                testId="privacy-chat-more"
-                className={`mt-2 ${rowStatusClass}`}
-                details={t("privacy.flows.chatMore.details")}
-              >
-                {t("privacy.flows.chatMore")}
-              </DetailsLine>
-            )}
-          </>
+          <PrivacyServices flows={inUse} />
         ) : (
           flows && (
             <p
