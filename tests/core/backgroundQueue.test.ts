@@ -12,6 +12,7 @@ import { migrate, openDatabase } from "../../src/core/storage";
 import { createTags } from "../../src/core/tags";
 import type { TagClassifier } from "../../src/core/tags/classify";
 import { createTagger } from "../../src/core/tags/tagger";
+import { type FlowTag, flowNow, inFlow } from "../../src/core/timing/flows";
 import {
   createTempDataFolder,
   nextEvent,
@@ -87,6 +88,22 @@ function queueFor(errors?: unknown[]) {
 }
 
 describe("The background model queue", () => {
+  // protects=a job that starts as an Answer ends runs in no flow, so its requests aren't timed as that Answer's (#1624 review: tagging showed under the Answer's flow); fails_when=the job runs in the flow that let it start; no_claim=the timing records, which tests/core/aiTimings.test.ts covers.
+  test("a job that starts as an Answer ends isn't that Answer's", async () => {
+    const queue = createBackgroundQueue({ reportError: () => {} });
+    const seen: (FlowTag | null)[] = [];
+    queue.setAnswering(true);
+    queue.add({
+      kind: "tagging",
+      run: async () => {
+        seen.push(flowNow());
+      },
+    });
+    inFlow("question", () => queue.setAnswering(false));
+    await settle();
+    expect(seen).toEqual([null]);
+  });
+
   test("jobs run one at a time, in the order queued, whatever their kind", async () => {
     const log: string[] = [];
     const queue = queueFor();

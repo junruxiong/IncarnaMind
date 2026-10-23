@@ -1359,17 +1359,10 @@ export function createChat(options: {
       checkCanChat(profile, modelId);
       // The calls that don't write the Answer (tagging, classifying, an Answer's search query)
       // skip thinking where they can.
+      const reasoning = thinking ?? (flow === "chat" ? "summary" : "off");
       const model = watchedPlan(
         provider.kind,
-        createModel(
-          await specFor(
-            provider,
-            apiKey,
-            modelId,
-            profile,
-            thinking ?? (flow === "chat" ? "summary" : "off"),
-          ),
-        ),
+        createModel(await specFor(provider, apiKey, modelId, profile, reasoning)),
         modelId,
       );
       const row: ProviderRow = {
@@ -1386,10 +1379,10 @@ export function createChat(options: {
       const capabilities = capabilitiesOf(row, modelId, profile ? ollamaFacts(profile) : undefined);
       // The gate goes outside the meter, so a request it stops reserves nothing.
       const gated = gate.model(
-        meter.wrap(
-          model,
-          meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
-        ),
+        meter.wrap(model, {
+          ...meteredModel(provider, provider.id, modelId, flow, capabilities, profile),
+          reasoning,
+        }),
         flow,
         provider.service,
       );

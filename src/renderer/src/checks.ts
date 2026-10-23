@@ -18,6 +18,7 @@ import {
   type ProviderError,
 } from "../../core/api";
 import { core } from "./core";
+import { alreadyCitedBy } from "./editor/alreadyCited";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
 import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
@@ -26,7 +27,12 @@ import { modelInUseOf } from "./modelInUse";
 
 /** Why a check gave no marks, or what it left out, for the check badge's card. */
 export type CheckProblem =
-  | Exclude<CheckSentencesResult, { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" }>
+  | Exclude<
+      CheckSentencesResult,
+      { kind: "checked" } | { kind: "cancelled" } | { kind: "waiting" } | { kind: "no-documents" }
+    >
+  /** `checkAll`: the same check in every Document, when the Mind's own scope is what held none. */
+  | (Extract<CheckSentencesResult, { kind: "no-documents" }> & { checkAll?: () => void })
   | LeftOut
   /** Worded when shown, so it reads in the interface language (#627). */
   | { kind: "failed"; error: unknown; retry?: () => void }
@@ -64,6 +70,8 @@ interface ChecksState {
   smallModel: Readonly<Record<string, true>>;
   /** By tab, else by Mind: its check badge's card is open (#909). A Mind beside itself has a card in each. */
   cardOpen: Readonly<Record<string, true>>;
+  /** By tab, else by Mind: the id of the sentence check whose card the User keeps open. */
+  openClaim: Readonly<Record<string, string>>;
 }
 
 export const useChecks = create<ChecksState>()(() => ({
@@ -71,6 +79,7 @@ export const useChecks = create<ChecksState>()(() => ({
   problems: {},
   smallModel: {},
   cardOpen: {},
+  openClaim: {},
 }));
 
 function setFor<K extends keyof ChecksState>(
@@ -100,9 +109,20 @@ export const setCheckSmallModel = (mindId: string, small: boolean) =>
 export const setCheckCardOpen = (place: string, open: boolean) =>
   setFor("cardOpen", place, open ? true : null);
 
+export const setOpenClaim = (place: string, id: string | null) => setFor("openClaim", place, id);
+
+/** Only if `id` is still the open one: a card that closes late must not close its successor. */
+export function closeOpenClaim(place: string, id: string): void {
+  if (useChecks.getState().openClaim[place] === id) setOpenClaim(place, null);
+}
+
 /** Says why a check of a Mind gave no marks, in its check badge's card. */
 export const setCheckProblem = (mindId: string, problem: CheckProblem) =>
   setFor("problems", mindId, problem);
+
+/** Nothing to check against in the scope the User set for the Mind: offers `checkAll`, never runs it. */
+export const withCheckAll = (problem: CheckProblem, checkAll: () => void): CheckProblem =>
+  problem.kind === "no-documents" && problem.chosen ? { ...problem, checkAll } : problem;
 
 /**
  * Checks the sentences the selection (or `ranges`) touches, each whole and
@@ -183,7 +203,18 @@ export async function checkSentences(
     result.kind !== "cancelled" &&
     result.kind !== "waiting"
   ) {
-    setFor("problems", mindId, result);
+    setFor(
+      "problems",
+      mindId,
+      withCheckAll(
+        result,
+        () =>
+          void checkSentences(editor, mindId, doc, action, {
+            ranges: stretches.map((each) => each.range),
+            allDocuments: true,
+          }),
+      ),
+    );
   }
   if (result.kind === "checked") setFor("smallModel", mindId, result.smallModel ? true : null);
 }
@@ -250,14 +281,15 @@ const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hang
 /**
  * Adds the Passage a check found as the sentence's Citation, at its end,
  * before its closing punctuation, and takes the check's mark off: the
- * Citation's own check stands for it now. One step for ⌘Z.
+ * Citation's own check stands for it now. One step for ⌘Z. A sentence that
+ * already cites those words gets no second Citation.
  */
 export function addAsCitation(editor: Editor, claim: ShownClaim): boolean {
   const evidence = claim.check.evidence;
   const { state } = editor;
   const type = state.schema.nodes[CITATION_NODE];
   const mark = state.schema.marks[CLAIM_CHECK_MARK];
-  if (!evidence || !type || !mark) return false;
+  if (!evidence || !type || !mark || alreadyCitedBy(state, claim)) return false;
   const words = state.doc.textBetween(claim.sentence.from, claim.sentence.to, "\n", "￼");
   const closing = CLOSING.exec(words)?.[0].length ?? 0;
   const at = claim.sentence.to - closing;

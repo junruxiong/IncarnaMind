@@ -27,6 +27,7 @@ import type { AnswerSearchTuning } from "./documents/searchTuning";
 import type { WatchFolder } from "./documents/watcher";
 import type { FetchLimits, PageFetch } from "./documents/web/fetch";
 import type { PictureLimits } from "./documents/web/pictures";
+import type { ModelCopies } from "./embedding/modelSources";
 import type { ChatGptPlanEndpoints } from "./providers/chatgpt/plan";
 import type { AnthropicOAuthConfig } from "./providers/claudeAccount/config";
 import type { CopilotProfile } from "./providers/copilot/config";
@@ -731,6 +732,36 @@ export interface EngineSwitch {
   reason: EngineSwitchReason;
 }
 
+/** The speaker models' downloaded files (#138), absolute paths, as the core hands them to a `SpeakerSeparator`. */
+export interface SpeakerModelFiles {
+  /** Finds where each voice speaks: pyannote's segmentation model. */
+  segmentation: string;
+  /** Tells voices apart: a speaker embedding model. */
+  embedding: string;
+  threads: number;
+}
+
+/** Where one voice speaks, in the Meeting's time. Voices are numbered from 0 in the order first heard. */
+export interface VoiceTurn {
+  startMs: number;
+  endMs: number;
+  voice: number;
+}
+
+/**
+ * Tells the voices in one source's recording apart after the call (#138), off the core's
+ * thread and at low priority: the desktop app runs it in a utility process of its own
+ * (src/main/speakerSeparator.ts); tests pass a fake. `parts` are the source's WAV files
+ * (16-bit PCM, mono, `MEETING_SAMPLE_RATE`), each with where it starts in the Meeting's time.
+ * Rejects if the models can't load or the audio can't be read.
+ */
+export interface SpeakerSeparator {
+  separate(request: {
+    parts: readonly { path: string; offsetMs: number }[];
+    model: SpeakerModelFiles;
+  }): Promise<VoiceTurn[]>;
+}
+
 /**
  * Draws an SVG document as a PNG, for a picture in an export (a chart in a
  * Word file, #436). The desktop app draws it in a hidden window that loads
@@ -878,6 +909,18 @@ export interface CoreAdapters {
    * pinned Hugging Face revision; tests give no files for a fake that needs none.
    */
   rerankingModelSource?: EmbeddingModelSource;
+  /**
+   * How the built-in models' files are fetched from their sources (#1578). The desktop app's
+   * `fetch` follows the system proxy, and `proxy` says what it is for Hugging Face, so a change
+   * runs the sources' probe again. Defaults to Node's `fetch` and the copies the app ships with;
+   * tests give their own copies, a shorter stall, and a `fetch` that reaches no real host.
+   */
+  modelDownloads?: {
+    fetch?: typeof fetch;
+    proxy?(): Promise<string>;
+    copies?: ModelCopies;
+    stallMs?: number;
+  };
   /** Defaults to the system clock. Tests may pass a fake one. */
   now?: () => Date;
   /**
@@ -1043,6 +1086,13 @@ export interface CoreAdapters {
    * that aren't about transcripts): Meetings record without a Transcript.
    */
   transcriber?: Transcriber;
+  /**
+   * Tells a Meeting's speakers apart after the call (see `SpeakerSeparator`). Absent (tests
+   * that aren't about it): lines keep the labels of where they came from.
+   */
+  speakerSeparator?: SpeakerSeparator;
+  /** Where the speaker models are downloaded from. Defaults to the pinned Hugging Face revisions. */
+  speakerModelSource?: { segmentation: EmbeddingModelSource; embedding: EmbeddingModelSource };
   /**
    * Where the speech-to-text model and Silero VAD are downloaded from.
    * Defaults to the pinned Hugging Face revisions; tests give no files for a

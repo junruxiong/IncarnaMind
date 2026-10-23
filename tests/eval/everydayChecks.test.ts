@@ -20,7 +20,7 @@ import { judgeClaims, verdictIn } from "../../eval/everyday/judge";
 import { languageRates, rowRates } from "../../eval/everyday/rates";
 import { ASKED_AGAIN } from "../../eval/everyday/reasks";
 import type { AnswerToolCall } from "../../src/core";
-import { askAgainNote, askToWriteNote } from "../../src/core/answers/claimedChanges";
+import { askAgainNote } from "../../src/core/answers/claimedChanges";
 import { scriptedModel } from "../helpers/models";
 
 const PAPERS = [
@@ -170,6 +170,27 @@ describe("The everyday request guards", () => {
     expect(failures([3])).toEqual([]);
   });
 
+  // protects=a translation written into a Mind must use the field's term for a thing, here 大潮 for "spring tides", and fails on the near one, 春潮 (#1635); fails_when=either passes unnoticed; no_claim=other terms.
+  test("a translation that doesn't use the term asked for fails, naming the one it used", () => {
+    const failures = (writtenInMinds: string[]) =>
+      requestFailures(
+        outcome({
+          expected: {
+            write: true,
+            cite: false,
+            coverAll: false,
+            terms: [{ want: "大潮", not: ["春潮"] }],
+          },
+          answer: { text: "", citations: [], toolCalls: [created], steps: null },
+          writtenInMinds,
+        }),
+      );
+    expect(failures(["导游说每月有两次大潮。"])).toEqual([]);
+    expect(failures(["导游说每月有两次春潮。"])).toEqual([
+      { kind: "term", want: "大潮", found: ["春潮"] },
+    ]);
+  });
+
   // protects=a Mind written with a source as text fails, naming it, and one with none passes (#1075); fails_when=bracketed sources in a Mind go unnoticed; no_claim=how the sources are found (tests/shared/namedSources.test.ts).
   test("a Mind holding a source written as text fails", () => {
     const kinds = (sourcesAsText: string[]) =>
@@ -199,11 +220,11 @@ describe("The everyday request guards", () => {
     expect(failures).toEqual([{ kind: "no-citations" }]);
   });
 
-  // protects=a Question answered by cited text written into a Mind has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
-  test("a Question answered in a Mind, cited there, has its Citations", () => {
+  // protects=a request that may go either way, answered by cited text written into a Mind, has its Citations; fails_when=it fails for none in the reply; no_claim=whether it should have written.
+  test("a request either way, answered in a Mind and cited there, has its Citations", () => {
     const failures = requestFailures(
       outcome({
-        expected: { write: false, cite: true, coverAll: false },
+        expected: { write: false, cite: true, coverAll: false, either: true },
         answer: {
           text: "The summaries are ready.",
           citations: [],
@@ -213,6 +234,30 @@ describe("The everyday request guards", () => {
       }),
     );
     expect(failures).toEqual([]);
+  });
+
+  // protects=a Question that changes a Mind fails, and a piece that lands elsewhere than its case says fails (#1559); fails_when=either passes; no_claim=none beyond protects.
+  test("a Question that changes a Mind, and a piece in the wrong place, fail", () => {
+    const answer = { text: "Done.", citations: [], toolCalls: [created], steps: null };
+    expect(
+      requestFailures(
+        outcome({ expected: { write: false, cite: false, coverAll: false }, answer }),
+      ),
+    ).toEqual([{ kind: "changed-unasked" }]);
+    expect(
+      requestFailures(
+        outcome({
+          expected: { write: true, cite: false, coverAll: false, into: "asked-from" },
+          answer,
+          askedFrom: "page",
+        }),
+      ),
+    ).toEqual([{ kind: "wrong-place", wanted: "asked-from" }]);
+    expect(
+      requestFailures(
+        outcome({ expected: { write: true, cite: false, coverAll: false, into: "new" }, answer }),
+      ),
+    ).toEqual([]);
   });
 
   // protects=a Document in scope counts as covered only when cited or named as left out, not merely named; fails_when=a name alone passes; no_claim=none beyond protects.
@@ -501,9 +546,8 @@ describe("An earlier try the User never saw", () => {
     expect(says("我上一条回复说引文已经换了，这是错的。", false)).toEqual([]);
   });
 
-  // protects=the mark the evaluation counts the app's asks by is in both notes the app asks with; fails_when=a note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.
-  test("both notes the app asks again with carry the mark the evaluation watches for", () => {
-    expect(askToWriteNote([], () => null)).toContain(ASKED_AGAIN);
+  // protects=the mark the evaluation counts the app's asks by is in the note the app asks with; fails_when=the note is reworded and the evaluation stops counting its asks; no_claim=none beyond protects.
+  test("the note the app asks again with carries the mark the evaluation watches for", () => {
     expect(askAgainNote(["added"], [], () => null)).toContain(ASKED_AGAIN);
   });
 });

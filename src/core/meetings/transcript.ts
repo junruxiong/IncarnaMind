@@ -7,7 +7,8 @@
  * sound, "Speaker ?". The Transcript is a Document from its first line, in the
  * data folder's "Transcripts" while the Meeting records, indexed again as
  * lines come; at Stop it is finished and saved as a WebVTT file in the Output
- * location, and the Document follows it there.
+ * location, and the Document follows it there. Then, while the audio is kept,
+ * the speaker pass (./speakerPass, #138) tells voices apart and relabels it.
  *
  * Its audio stays on disk, so nothing is lost when live text can't keep up:
  * - while the model downloads or starts, the audio waits, and what waited
@@ -39,11 +40,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isTheirs,
-  roomVoice,
+  numberedVoice,
   SPEAKER_ME,
   SPEAKER_THEM,
   SPEAKER_UNKNOWN,
-  theirVoice,
 } from "../../shared/speakers";
 import type {
   CloudLoss,
@@ -59,6 +59,7 @@ import type {
   Document,
   MeetingTranscript,
   SavedFile,
+  TranscriptionModelStatus,
   TranscriptProblem,
   TranscriptState,
 } from "../api";
@@ -79,6 +80,7 @@ import type { TranscriptionModel } from "../transcription/model";
 import type { AudioPart } from "./audioFiles";
 import { echoedBy, isEcho, repeats } from "./echoLines";
 import type { CaptureHealthRecords } from "./health";
+import { isCall, type SpeakerPass, sourceToSeparate } from "./speakerPass";
 import { createTracks, type TrackedAudio, type Tracks } from "./tracks";
 
 /** Live text this far behind the audio has fallen behind. */
@@ -127,6 +129,8 @@ interface Saved {
   empty?: boolean;
   /** The number each speaker a cloud service told apart has, by stream and its own label. */
   voices?: Record<string, number>;
+  /** The speaker pass (#138): it runs after the save, again after a quit cut it short. */
+  speakers?: "due" | "done" | "failed";
 }
 
 interface LiveStream {
@@ -203,10 +207,13 @@ interface State extends Saved {
   /** Streams reading audio back from disk, and live streams ending. */
   catchUps: Map<string, Reading>;
   restarts: number[];
+  /** The other side's lines from the one voice a cloud service heard so far, while it is "Them". */
+  firstVoice: Set<Cue>;
   lastSwitch: (Pick<EngineSwitch, "from" | "to" | "reason"> & { atMs: number }) | null;
   fellBack: MeetingTranscript["fellBack"];
   probe: { audioMs: number; decodeMs: number; recorded: boolean };
   written: boolean;
+  separating: boolean;
   lastIndexed: number;
   indexTimer: ReturnType<typeof setTimeout> | null;
   partialTimer: ReturnType<typeof setTimeout> | null;
@@ -241,7 +248,13 @@ export interface TranscriptsOptions {
   recordSpeed(modelId: string, ratio: number): void;
   /** Each Meeting's capture health (#161): how fast live text came, restarts, falling behind, switches. */
   health: CaptureHealthRecords;
-  /** The Meeting's Transcript is finished: saved, its Document in its place, or with no lines (#142). */
+  /** Tells speakers apart after the call (#138). Absent: lines keep the labels of where they came from. */
+  speakers?: SpeakerPass;
+  decoded?(modelId: string, decodeMs: number, audioSeconds: number): void;
+  /**
+   * The Meeting's Transcript is finished (#142): saved, its Document in its place and its
+   * speakers told apart (#138), or with no lines.
+   */
   saved?(meetingId: string): void;
   /** The cloud service the User chose for meeting audio (#141). Absent: always this computer. */
   cloud?: Pick<CloudTranscription, "start" | "sending" | "refuse">;
@@ -335,10 +348,12 @@ export function createTranscripts(options: TranscriptsOptions) {
       ending: null,
       catchUps: new Map(),
       restarts: [],
+      firstVoice: new Set(),
       lastSwitch: null,
       fellBack: null,
       probe: { audioMs: 0, decodeMs: 0, recorded: false },
       written: cues.length > 0,
+      separating: false,
       lastIndexed: 0,
       indexTimer: null,
       partialTimer: null,
@@ -367,6 +382,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       ...(state.savedDefaulted && { savedDefaulted: true }),
       ...(state.state === "empty" && { empty: true }),
       ...(state.voices && { voices: state.voices }),
+      ...(state.speakers && { speakers: state.speakers }),
     };
     try {
       writeWhole(jsonPath(state.meetingId), JSON.stringify(saved));
@@ -477,9 +493,11 @@ export function createTranscripts(options: TranscriptsOptions) {
     return null;
   }
 
-  // In a call the microphone is the User's: its lines stay "Me", so echo removal still applies.
-  // The other side's voices are "Them 1", "Them 2"; a room's are "Speaker 1", "Speaker 2", never
-  // taken for the other side. Labels are per stream: a new session's "1" is a new person.
+  // The words of DESIGN.md › Speakers, as the speaker pass (./speakerPass) writes them after
+  // the call. In a call the microphone is the User's: its lines stay "Me", so echo removal still
+  // applies. The other side is "Them" while one voice speaks; once a second does, the first's
+  // lines become "Speaker 1". A room's voices are "Speaker 1, 2…". Labels are per stream: a new
+  // session's "1" is a new person.
   function voiceOf(
     state: State,
     stream: string,
@@ -492,10 +510,14 @@ export function createTranscripts(options: TranscriptsOptions) {
     state.voices = voices;
     const key = `${stream}:${label}`;
     const side = `:${source}:`;
-    const number =
-      voices[key] ?? Object.keys(voices).filter((each) => each.includes(side)).length + 1;
+    const before = Object.keys(voices).filter((each) => each.includes(side)).length;
+    const number = voices[key] ?? before + 1;
     voices[key] = number;
-    return source === "system" ? theirVoice(number) : roomVoice(number);
+    if (source !== "system") return numberedVoice(number);
+    if (number === 1 && before <= 1) return SPEAKER_THEM;
+    for (const cue of state.firstVoice) cue.speaker = numberedVoice(1);
+    state.firstVoice.clear();
+    return numberedVoice(number);
   }
 
   function addCue(state: State, cue: Cue): void {
@@ -516,7 +538,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     return state.cues.some((each) => {
       const shared = Math.min(each.endMs, cue.endMs) - Math.max(each.startMs, cue.startMs);
       return (
-        isTheirs(each.speaker) === isTheirs(cue.speaker) &&
+        (each.speaker === SPEAKER_ME) === (cue.speaker === SPEAKER_ME) &&
         shared > length / 2 &&
         repeats(cue.text, [each.text])
       );
@@ -554,7 +576,10 @@ export function createTranscripts(options: TranscriptsOptions) {
       state.partials.delete(segment.stream);
     }
     const cue = { startMs, endMs: baseMs + segment.endMs, text: segment.text, speaker };
-    if (segment.text && (live || !alreadySaid(state, cue))) addCue(state, cue);
+    if (segment.text && (live || !alreadySaid(state, cue))) {
+      addCue(state, cue);
+      if (segment.speaker && speaker === SPEAKER_THEM) state.firstVoice.add(cue);
+    }
     if (segment.failed) {
       health.add(state.meetingId, {
         kind: "notTranscribed",
@@ -570,6 +595,11 @@ export function createTranscripts(options: TranscriptsOptions) {
 
   /** The speed probe: how long decoding takes for the audio it decodes, kept for the next Meeting's choice of model. */
   function probe(state: State, segment: SpeechSegment): void {
+    options.decoded?.(
+      model.definition.id,
+      segment.decodeMs,
+      (segment.endMs - segment.startMs) / 1000,
+    );
     state.probe.audioMs += segment.endMs - segment.startMs;
     state.probe.decodeMs += segment.decodeMs;
     health.decoded(state.meetingId, segment.endMs - segment.startMs, segment.decodeMs);
@@ -1137,6 +1167,7 @@ export function createTranscripts(options: TranscriptsOptions) {
         options.changed();
       }
     }
+    if (state.speakers === "due") separate(state);
   }
 
   async function save(state: State): Promise<void> {
@@ -1156,7 +1187,95 @@ export function createTranscripts(options: TranscriptsOptions) {
     state.state = "saved";
     state.problem = null;
     log.info("transcript.saved", { meetingId: state.meetingId, lines: state.cues.length });
+    if (options.speakers) state.speakers = "due";
+    else options.saved?.(state.meetingId);
+  }
+
+  // Voices a cloud service told apart as they spoke stand: the pass leaves that side.
+  const toldApart = (state: State) => {
+    const side = `:${sourceToSeparate(isCall(state.cues))}:`;
+    return Object.keys(state.voices ?? {}).some((key) => key.includes(side));
+  };
+
+  // A quit during the pass leaves it due, for the next start. Whatever else ends it, the notes
+  // go ahead with the labels the Transcript has, so a failed pass never holds them up.
+  function separate(state: State): void {
+    const pass = options.speakers;
+    if (!pass || state.separating || closed) return;
+    if (!state.savedPath || options.audioDeleted(state.meetingId) || toldApart(state)) {
+      settle(state, "done");
+      return;
+    }
+    state.separating = true;
+    options.changed();
+    const saved = transcriptOf(state);
+    const current = () => !closed && states.get(state.meetingId) === state;
+    pass
+      .run(state.meetingId, [...state.cues])
+      .then(
+        (cues) => {
+          if (current() && cues?.some((cue, at) => cue.speaker !== state.cues[at]?.speaker)) {
+            relabel(state, cues, saved);
+          }
+          return "done" as const;
+        },
+        (error: unknown) => {
+          log.error("speakers.failed", { meetingId: state.meetingId, message: messageOf(error) });
+          return "failed" as const;
+        },
+      )
+      .then((outcome) => {
+        state.separating = false;
+        if (current()) settle(state, outcome);
+      })
+      .catch((error: unknown) => {
+        log.error("speakers.settleFailed", {
+          meetingId: state.meetingId,
+          message: messageOf(error),
+        });
+      });
+  }
+
+  function settle(state: State, outcome: "done" | "failed"): void {
+    state.speakers = outcome;
+    persist(state);
+    options.changed();
     options.saved?.(state.meetingId);
+  }
+
+  function modelProblem(state: State, status: TranscriptionModelStatus): TranscriptProblem | null {
+    if (status.state !== "failed") return null;
+    if (state.state !== "preparing" && state.state !== "finishing") return null;
+    return {
+      kind: status.error?.kind === "load" ? "engine" : "download",
+      message: status.error?.message ?? "",
+    };
+  }
+
+  const speakersProblem = (state: State): TranscriptProblem | null =>
+    state.speakers === "failed" ? { kind: "speakers", message: "" } : null;
+
+  function relabel(state: State, cues: Cue[], saved: string): void {
+    const path = state.savedPath;
+    if (!path) return;
+    try {
+      // The User's own copy now: it is written over only as it was saved.
+      if (readFileSync(path, "utf8") !== saved) {
+        log.warn("speakers.fileChanged", { meetingId: state.meetingId });
+        return;
+      }
+      state.cues = cues;
+      writeWhole(path, transcriptOf(state));
+    } catch (error) {
+      log.error("speakers.writeFailed", { meetingId: state.meetingId, message: messageOf(error) });
+      return;
+    }
+    documents.check(path).catch((error: unknown) => {
+      log.error("transcript.indexFailed", {
+        meetingId: state.meetingId,
+        message: messageOf(error),
+      });
+    });
   }
 
   function finishStreams(state: State, live: Live, endMs: number): void {
@@ -1270,8 +1389,8 @@ export function createTranscripts(options: TranscriptsOptions) {
       return cue ? { text: cue.text, speaker: cue.speaker } : null;
     },
 
-    /** The Meeting's Transcript, as the window shows it. */
-    of(meetingId: string): MeetingTranscript {
+    /** The Meeting's Transcript, as the window shows it. `audioKept`: its audio is still on this computer. */
+    of(meetingId: string, audioKept: boolean): MeetingTranscript {
       const state = load(meetingId);
       const status = model.status();
       return {
@@ -1293,14 +1412,11 @@ export function createTranscripts(options: TranscriptsOptions) {
         fellBack: state.fellBack,
         savedPath: state.savedPath,
         savedDefaulted: state.savedDefaulted === true,
+        separating: state.speakers === "due",
         problem:
           state.problem ??
-          (status.state === "failed" && (state.state === "preparing" || state.state === "finishing")
-            ? {
-                kind: status.error?.kind === "load" ? "engine" : "download",
-                message: status.error?.message ?? "",
-              }
-            : null),
+          modelProblem(state, status) ??
+          (audioKept ? speakersProblem(state) : null),
       };
     },
 
@@ -1344,6 +1460,7 @@ export function createTranscripts(options: TranscriptsOptions) {
       state.fellBack = null;
       state.problem = state.problem?.kind === "engine" ? state.problem : null;
       state.state = "preparing";
+      options.speakers?.prepare();
       if (options.cloud) choose(state, live, options.cloud);
       else startEngine(state);
       options.changed();
@@ -1420,6 +1537,7 @@ export function createTranscripts(options: TranscriptsOptions) {
     /** A stopped Meeting whose Transcript wasn't finished, when IncarnaMind started: it is finished now. */
     resume(meetingId: string): void {
       const state = load(meetingId);
+      if (state.speakers === "due") separate(state);
       if (state.savedPath || state.state === "empty") return;
       if (state.cues.length === 0 && state.pending.length === 0) return;
       state.state = "finishing";
@@ -1428,6 +1546,12 @@ export function createTranscripts(options: TranscriptsOptions) {
 
     retry(meetingId: string): void {
       const state = load(meetingId);
+      if (state.speakers === "failed") {
+        state.speakers = "due";
+        persist(state);
+        separate(state);
+        return;
+      }
       const status = model.status();
       if (status.state === "failed") model.retry();
       state.problem = null;

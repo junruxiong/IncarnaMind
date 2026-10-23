@@ -4,9 +4,12 @@
  * checks (see ./read), on this computer; the host decides where the bytes go, and nothing is sent.
  */
 import type * as Y from "yjs";
+import { checkedScope } from "../../shared/claimChecks";
+import type { MessageKey } from "../../shared/i18n";
 import { mindName } from "../../shared/naming";
 import type { PrintPaper } from "../../shared/printDocument";
 import { readableQuoteText } from "../../shared/readableQuote";
+import { SCOPE_KINDS, type ScopeKind, scopeIds } from "../../shared/searchScope";
 import type { Printer } from "../adapters";
 import {
   CHECK_RECORD_FORMATS,
@@ -37,14 +40,20 @@ export interface CheckRecordDependencies {
   keptCitationTexts(): readonly KeptCitationText[];
   /** A Citation's quote as its Document's text reads it, or null when the Document or the quote isn't there. */
   readableQuote(attributes: Partial<CitationAttributes>): string | null;
-  /** A Folder's name; null for one that isn't there. */
-  folderName(folderId: string): string | null;
+  /** A Folder's, Tag's or Document's name; null for one that isn't there. */
+  scopeItemName(kind: ScopeKind, id: string): string | null;
   localMode(): boolean;
   language(): Language;
   printer: Printer | null;
   paper(): PrintPaper;
   now(): string;
 }
+
+const GONE: Record<ScopeKind, MessageKey> = {
+  folder: "checkRecord.summary.folderGone",
+  tag: "scope.chip.deleted.tag",
+  document: "scope.chip.deleted.document",
+};
 
 export interface CheckRecord {
   mind: string;
@@ -95,12 +104,13 @@ export function createCheckRecord(deps: CheckRecordDependencies) {
     const models = new Map<string, number>();
     for (const { check } of sentences) {
       if (!check) continue;
-      const { folderId, widened } = check.scope;
-      searched.add(
-        widened || folderId === null
-          ? t("checkRecord.summary.allDocuments")
-          : (deps.folderName(folderId) ?? t("checkRecord.summary.folderGone")),
-      );
+      const looked = checkedScope(check.scope);
+      const names = looked
+        ? SCOPE_KINDS.flatMap((kind) =>
+            scopeIds(looked, kind).map((id) => deps.scopeItemName(kind, id) ?? t(GONE[kind])),
+          )
+        : [t("checkRecord.summary.allDocuments")];
+      for (const name of names) searched.add(name);
       const label = check.model ? modelLabel(check.model, t) : t("checkRecord.notRecorded");
       models.set(label, (models.get(label) ?? 0) + 1);
     }

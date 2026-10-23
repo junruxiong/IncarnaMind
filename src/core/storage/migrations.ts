@@ -1828,6 +1828,39 @@ export const migrations: readonly Migration[] = [
           AND json_extract(value, '$.automatic') = 1;
     `,
   },
+  {
+    version: 104,
+    description: "How long each AI request and local step took, by flow (#1624)",
+    // This computer's own measurements, never synced: times in milliseconds from started_at,
+    // tokens, and names, never text. Rows past 30 days are deleted at start rather than marked
+    // with deleted_at: nothing else reads them, and a kept row would only grow the database.
+    sql: `
+      CREATE TABLE ai_timings (
+        id TEXT PRIMARY KEY NOT NULL,
+        kind TEXT NOT NULL,
+        flow TEXT,
+        step TEXT,
+        data_flow TEXT,
+        provider_kind TEXT,
+        model_id TEXT NOT NULL,
+        reasoning TEXT,
+        started_at TEXT NOT NULL,
+        first_byte_ms INTEGER,
+        first_reasoning_ms INTEGER,
+        first_text_ms INTEGER,
+        first_tool_ms INTEGER,
+        end_ms INTEGER NOT NULL,
+        input_tokens INTEGER,
+        cached_input_tokens INTEGER,
+        output_tokens INTEGER,
+        units REAL,
+        outcome TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX ai_timings_by_started_at ON ai_timings (started_at);
+    `,
+  },
 ];
 
 /**

@@ -4,6 +4,7 @@ import { isHelpKeys } from "../shared/meetingHelp";
 import { DEFAULT_MIND_STYLE, isMindStyle } from "../shared/mindStyle";
 import {
   type ChatModelChoice,
+  CITATION_PLACES,
   type DeviceSettings,
   EXPORT_FORMATS,
   type ExportPreferences,
@@ -11,7 +12,9 @@ import {
   MARK_AI_TEXT_CHOICES,
   MAX_MONTHLY_CAP,
   type MarkAiTextChoice,
+  MODEL_SOURCE_CHOICES,
   MOTION_PREFERENCES,
+  type ModelSourceChoice,
   type MonthlyCap,
   type MotionPreference,
   type SandboxLevel,
@@ -103,7 +106,9 @@ const SHARE_PAGE_DEFAULTS: SharePagePreferences = {
  */
 const isExportPreferences = (value: unknown): value is ExportPreferences => {
   if (!isRecord(value)) return false;
-  const later = ["html", "share-page", "theirChanges"].filter((key) => Object.hasOwn(value, key));
+  const later = ["html", "share-page", "theirChanges", "citationPlace"].filter((key) =>
+    Object.hasOwn(value, key),
+  );
   return (
     hasOnly(value, ["format", "docx", "pdf", ...later]) &&
     EXPORT_FORMATS.some((format) => format === value.format) &&
@@ -113,7 +118,9 @@ const isExportPreferences = (value: unknown): value is ExportPreferences => {
     (!Object.hasOwn(value, "share-page") || isSharePageOption(value["share-page"])) &&
     (!Object.hasOwn(value, "theirChanges") ||
       value.theirChanges === "shown" ||
-      value.theirChanges === "accepted")
+      value.theirChanges === "accepted") &&
+    (!Object.hasOwn(value, "citationPlace") ||
+      CITATION_PLACES.some((place) => place === value.citationPlace))
   );
 };
 
@@ -222,6 +229,7 @@ const deviceScope: Scope<DeviceSettings> = {
     suggestionOffers: 0,
     meetingSystemAudio: true,
     transcriptionRoute: null,
+    modelSource: "auto",
     meetingNoticeAccepted: false,
     meetingPanel: true,
     meetingPanelHidden: true,
@@ -243,6 +251,8 @@ const deviceScope: Scope<DeviceSettings> = {
     meetingSystemAudio: isBoolean,
     transcriptionRoute: (value): value is TranscriptionRoute | null =>
       value === null || TRANSCRIPTION_ROUTES.some((route) => route === value),
+    modelSource: (value): value is ModelSourceChoice =>
+      MODEL_SOURCE_CHOICES.some((choice) => choice === value),
     meetingNoticeAccepted: isBoolean,
     meetingPanel: isBoolean,
     meetingPanelHidden: isBoolean,

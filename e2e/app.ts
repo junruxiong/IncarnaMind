@@ -14,6 +14,7 @@ import {
 } from "@playwright/test";
 import type { Editor } from "@tiptap/core";
 import * as Y from "yjs";
+import type { EmbeddingModelSource } from "../src/core/adapters";
 import {
   type AssistantPlace,
   CHOSEN_PROVIDER_FLOWS,
@@ -153,6 +154,15 @@ export interface LaunchOptions {
   /** How many scans are read at once (#1502), whatever the computer. A test build honours it. */
   scansAtOnce?: number;
   /**
+   * The search model's files at a stand-in, and IncarnaMind's copies at others (#1578): a
+   * `{ source, copies }` the core's model downloads take instead. Needs a test build.
+   */
+  modelDownloads?: {
+    source: EmbeddingModelSource;
+    copies: Record<string, { url: string }>;
+    speech?: { model: EmbeddingModelSource; vad: EmbeddingModelSource };
+  };
+  /**
    * The scripted Task that asks for approval and writes files (src/main/scriptedTask.ts),
    * started with `startScriptedTask`. Needs a test build.
    */
@@ -181,6 +191,11 @@ export interface LaunchOptions {
    * with it, the app is left asking.
    */
   askToMarkAiText?: boolean;
+  /**
+   * The first Word or PDF export of a Mind with Citations asks where they go. Without this, a
+   * launch answers it "Footnotes" if nobody has; with it, the app is left asking.
+   */
+  askCitationPlace?: boolean;
 }
 
 /**
@@ -240,6 +255,7 @@ export async function launchApp(
     transcriber,
     scans,
     scansAtOnce,
+    modelDownloads,
     web,
     lookLimit,
     scriptedTasks = false,
@@ -247,6 +263,7 @@ export async function launchApp(
     sandboxed = false,
     sandboxNotice,
     askToMarkAiText = false,
+    askCitationPlace = false,
   }: LaunchOptions = {},
 ): Promise<RunningApp> {
   const env: Record<string, string> = {};
@@ -277,6 +294,7 @@ export async function launchApp(
   delete env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS;
   delete env.INCARNAMIND_TEST_SCANS;
   delete env.INCARNAMIND_TEST_SCANS_AT_ONCE;
+  delete env.INCARNAMIND_TEST_MODEL_DOWNLOADS;
   delete env.INCARNAMIND_TEST_WEB;
   delete env.INCARNAMIND_TEST_LOOK_LIMIT;
   delete env.INCARNAMIND_TEST_TASKS;
@@ -311,6 +329,7 @@ export async function launchApp(
   if (copilot) env.INCARNAMIND_TEST_COPILOT = copilot;
   if (scans) env.INCARNAMIND_TEST_SCANS = scans;
   if (scansAtOnce) env.INCARNAMIND_TEST_SCANS_AT_ONCE = String(scansAtOnce);
+  if (modelDownloads) env.INCARNAMIND_TEST_MODEL_DOWNLOADS = JSON.stringify(modelDownloads);
   if (web) env.INCARNAMIND_TEST_WEB = String(web);
   if (lookLimit) env.INCARNAMIND_TEST_LOOK_LIMIT = String(lookLimit);
   if (scriptedTasks) env.INCARNAMIND_TEST_TASKS = "1";
@@ -347,18 +366,34 @@ export async function launchApp(
       message: `the window is ${WINDOW_SIZE.width} × ${WINDOW_SIZE.height}: is the screen too short for it?`,
     });
   }
-  if (!askToMarkAiText) await answerMarkAiText(window);
+  await answerExportQuestions(window, !askToMarkAiText, !askCitationPlace);
   return { app, window };
 }
 
-async function answerMarkAiText(window: Page): Promise<void> {
-  await window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    const { exportOptions } = (await bridge.getSettings()).user;
-    if (exportOptions.docx.markAiText !== null) return;
-    const docx = { ...exportOptions.docx, markAiText: "mark" as const };
-    await bridge.updateSettings({ user: { exportOptions: { ...exportOptions, docx } } });
-  });
+async function answerExportQuestions(
+  window: Page,
+  markAiText: boolean,
+  citationPlace: boolean,
+): Promise<void> {
+  await window.evaluate(
+    async ([mark, place]) => {
+      const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+      const { exportOptions } = (await bridge.getSettings()).user;
+      const docx =
+        mark && exportOptions.docx.markAiText === null
+          ? { ...exportOptions.docx, markAiText: "mark" as const }
+          : exportOptions.docx;
+      const citations =
+        place && exportOptions.citationPlace === undefined
+          ? { citationPlace: "footnotes" as const }
+          : {};
+      if (docx === exportOptions.docx && Object.keys(citations).length === 0) return;
+      await bridge.updateSettings({
+        user: { exportOptions: { ...exportOptions, docx, ...citations } },
+      });
+    },
+    [markAiText, citationPlace],
+  );
 }
 
 /**
@@ -924,6 +959,14 @@ export async function savedPath(window: Page, name: string): Promise<string> {
   const done = window.getByTestId("export-result").getByTestId("export-done");
   await expect(done).toContainText(`Saved “${name}” in `, { timeout: 30_000 });
   return (await done.getAttribute("title")) ?? "";
+}
+
+export async function examplesMenu(window: Page): Promise<Locator> {
+  const row = window.getByTestId("not-in-a-folder");
+  await pointAndClick(window, row.getByTestId("examples-menu"));
+  const menu = row.getByTestId("examples-actions");
+  await expect(menu).toBeVisible();
+  return menu;
 }
 
 /**
@@ -2189,24 +2232,20 @@ export async function setSidebarWidth(window: Page, width: number): Promise<void
 
 /**
  * Sizes the assistant as a person does from the keyboard: on its resize line, ← widens and →
- * narrows, 10px a press and 50px with Shift. It presses until the width is `width`, which must
- * be a whole number of presses away, and focuses the line before each press, so a press that
- * lands elsewhere is made again rather than counted.
+ * narrows, 10px a press and 50px with Shift. It presses them all without waiting, so `width` must
+ * be a whole number of presses away.
  */
 export async function sizeAssistant(window: Page, width: number): Promise<void> {
   const assistant = window.getByTestId("assistant");
   const widthNow = () => assistant.evaluate((el) => Math.round(el.getBoundingClientRect().width));
-  for (let presses = 0; presses < 80; presses++) {
-    const now = await widthNow();
-    if (now === width) return;
-    const key = width > now ? "ArrowLeft" : "ArrowRight";
-    await window.getByTestId("assistant-resize").focus();
-    await window.keyboard.press(Math.abs(width - now) >= 50 ? `Shift+${key}` : key);
-    await expect
-      .poll(widthNow, { timeout: 2000 })
-      .not.toBe(now)
-      .catch(() => undefined);
+  const now = await widthNow();
+  const key = width > now ? "ArrowLeft" : "ArrowRight";
+  const distance = Math.abs(width - now);
+  await window.getByTestId("assistant-resize").focus();
+  for (let press = 0; press < Math.floor(distance / 50); press++) {
+    await window.keyboard.press(`Shift+${key}`);
   }
+  for (let press = 0; press < (distance % 50) / 10; press++) await window.keyboard.press(key);
   await expect.poll(widthNow).toBe(width);
 }
 
@@ -2254,12 +2293,14 @@ export const assistantAnswers = (window: Page) =>
 /**
  * Asks a Question as a person does: ⌘J, the words, Enter. It is asked in the
  * assistant's conversation (#201); resolves with its Answer there once it is
- * written (the scripted model's, with `fakeChat`).
+ * written (the scripted model's, with `fakeChat`). The scripted model streams a word every
+ * 60 ms, so a wide table takes about 7 s on a quiet computer, and a loaded runner took more than
+ * twice the old 15 s ceiling (#1651).
  */
 export async function askInAssistant(
   window: Page,
   question: string,
-  { timeout = 15_000 }: { timeout?: number } = {},
+  { timeout = 45_000 }: { timeout?: number } = {},
 ): Promise<Locator> {
   const answers = assistantAnswers(window);
   const before = await answers.count();

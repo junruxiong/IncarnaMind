@@ -3,6 +3,7 @@ import type { Language } from "../core/language";
 import { type EditMenuState, FILES_CHANNELS, type MenuCommand } from "../shared/bridge";
 import { MENU_COMMANDS } from "../shared/commands";
 import { type MessageKey, translate } from "../shared/i18n";
+import { systemDialogOpen } from "./systemDialogs";
 
 /** The window the menu acts on: the one in front, or else the only one. */
 function front(): BrowserWindow | null {
@@ -10,8 +11,9 @@ function front(): BrowserWindow | null {
   return window && !window.isDestroyed() ? window : null;
 }
 
-/** Asks the window in front to run a menu item's command (see `files.onMenuCommand`). */
+/** Asks the window in front to run a menu item's command (see `files.onMenuCommand`); none while a system dialog has the keys. */
 function send(command: MenuCommand): void {
+  if (systemDialogOpen()) return;
   front()?.webContents.send(FILES_CHANNELS.menuCommand, command);
 }
 

@@ -6,7 +6,7 @@ import * as Y from "yjs";
 import { cleanApiKey } from "../shared/apiKey";
 import { isCitationStyleId, withRecentStyle } from "../shared/citationStyles";
 import type { DrawnPage } from "../shared/citedPage";
-import { optionsFor } from "../shared/exportOptions";
+import { hasCitationPlace, optionsFor } from "../shared/exportOptions";
 import { translate } from "../shared/i18n";
 import { organizeModelOf, supportsLibraryImages } from "../shared/libraryModels";
 import { holdsOnlyItsTitle } from "../shared/madeMind";
@@ -38,7 +38,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
-import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
+import { hasSearchScope, holdsText, mindSearchScope, type ScopeKind } from "../shared/searchScope";
 import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -80,6 +80,7 @@ import {
   type MeetingHelpKind,
   type Mind,
   type MindCitationStyle,
+  type NetworkTrafficId,
   NOT_IN_A_FOLDER_ID,
   type OwnFileKind,
   type ProviderError,
@@ -118,8 +119,13 @@ import { readPageSetup } from "./documents/formats/docxPages";
 import { createOwnFiles } from "./documents/ownFiles";
 import { createPdfPasswords } from "./documents/pdfPasswords";
 import { createVersionRetention, type VersionRetention } from "./documents/retention";
-import { BUILT_IN_TEXT_RECOGNITION_MODEL, createTextRecognitionModel } from "./documents/scan";
+import {
+  BUILT_IN_TEXT_RECOGNITION_MODEL,
+  createTextRecognitionModel,
+  type TextRecognitionModel,
+} from "./documents/scan";
 import type { WindowedPassage } from "./documents/search";
+import type { Reranker } from "./documents/searchTool";
 import { tunedSearch } from "./documents/searchTuning";
 import { LANGUAGE_SAMPLE, writtenInChinese } from "./documents/textLanguage";
 import { findUnreadDocuments } from "./documents/unread";
@@ -129,6 +135,7 @@ import { createWebPages } from "./documents/web";
 import { createEdits, editText } from "./edits";
 import { BUILT_IN_EMBEDDING_MODEL, createEmbeddingModel } from "./embedding";
 import { createActiveEmbedding } from "./embedding/active";
+import { createModelSources, MODEL_COPIES } from "./embedding/modelSources";
 import {
   FileWriteCancelledError,
   InvalidInputError,
@@ -143,6 +150,7 @@ import { type AnyEventListener, createEventHub } from "./events";
 import { createExamples } from "./examples";
 import { createLocalExecutor } from "./execution";
 import { createExports, type ExportsDependencies } from "./exports";
+import { citationPlaceQuestion } from "./exports/citationPlaceQuestion";
 import { createComparisonExport } from "./exports/comparisonExport";
 import { exportLabels } from "./exports/labels";
 import { markAiTextQuestion } from "./exports/markAiTextQuestion";
@@ -171,6 +179,7 @@ import { createMeetings } from "./meetings";
 import { listParts, meetingFolder } from "./meetings/audioFiles";
 import { createMeetingFill } from "./meetings/fill";
 import { createCaptureHealth } from "./meetings/health";
+import { createSpeakerPass } from "./meetings/speakerPass";
 import { createTranscripts } from "./meetings/transcript";
 import { accessFor, isKnownKind } from "./mindAccess";
 import { createMindContent } from "./mindContent";
@@ -244,6 +253,8 @@ import { chatClassifier } from "./tags/classify";
 import { createJevTagging, decisionModelTagger } from "./tags/jev";
 import { createRateLimitPause } from "./tags/rateLimit";
 import { createTagger, TAGGING_FLOW_SENDS } from "./tags/tagger";
+import { inFlow } from "./timing/flows";
+import { createTimings } from "./timing/timings";
 import type { CommandsHost, MarkingSettled } from "./tools/commands/run";
 import { createCommandSteps } from "./tools/commands/steps";
 import { createWebSearch, WEB_SEARCH_SENDS } from "./tools/web";
@@ -255,6 +266,7 @@ import {
   QWEN3_ASR_0_6B,
   TRANSCRIPTION_SPEED,
 } from "./transcription/model";
+import { createSpeakerModel } from "./transcription/speakerModel";
 import { createUnsavedChanges } from "./unsavedChanges";
 import { createUsageData } from "./usageData";
 import { addedCounts, trackUsage } from "./usageTracking";
@@ -408,6 +420,12 @@ function parseQuoted(input: unknown): ScannedQuoteInput {
   };
 }
 
+const STILL_PROCESSING: ReadonlySet<DocumentStatus> = new Set([
+  "queued",
+  "waiting-for-model",
+  "embedding",
+]);
+
 export function createCore(adapters: CoreAdapters): Core {
   const { dataDir } = adapters.paths;
   mkdirSync(dataDir, { recursive: true });
@@ -421,6 +439,12 @@ export function createCore(adapters: CoreAdapters): Core {
   }
 
   const now = () => (adapters.now?.() ?? new Date()).toISOString();
+  const timings = createTimings({
+    db,
+    now: () => adapters.now?.() ?? new Date(),
+    log: adapters.log ?? silentLogger,
+  });
+  timings.prune();
   const systemPaper = () =>
     paperFor(systemRegion(adapters.systemRegion?.(), adapters.systemLanguages()));
   try {
@@ -556,9 +580,22 @@ export function createCore(adapters: CoreAdapters): Core {
   const consent = createConsent(db, events, now);
   /** Aborts work still running (model downloads, a ChatGPT sign-in, provider requests) when the core closes. */
   const lifetime = new AbortController();
+  const downloads = adapters.modelDownloads;
+  const modelCopies = downloads?.copies ?? MODEL_COPIES;
+  const modelSources = createModelSources({
+    fetch: downloads?.fetch ?? fetch,
+    now: () => (adapters.now?.() ?? new Date()).getTime(),
+    language: () => settings.get().language,
+    choice: () => settings.get().device.modelSource,
+    ...(downloads?.proxy && { proxy: downloads.proxy }),
+    copies: modelCopies,
+    ...(downloads?.stallMs !== undefined && { stallMs: downloads.stallMs }),
+    log: adapters.log ?? silentLogger,
+  });
   const embeddingModel = createEmbeddingModel({
     definition: BUILT_IN_EMBEDDING_MODEL,
     source: adapters.embeddingModelSource,
+    sources: modelSources,
     dataDir,
     embedder: adapters.embedder,
     emitStatus: (status) => events.emit("embeddingModel.status", status),
@@ -568,11 +605,43 @@ export function createCore(adapters: CoreAdapters): Core {
     ? createTextRecognitionModel({
         definition: BUILT_IN_TEXT_RECOGNITION_MODEL,
         source: adapters.textRecognitionModelSource,
+        sources: modelSources,
         dataDir,
         recognizer: adapters.textRecognizer,
         emitStatus: (status) => events.emit("textRecognitionModel.status", status),
       })
     : undefined;
+  // A Document waiting for its password counts as indexing until it is read.
+  const indexingSince = new Map<string, number>();
+  const timeIndexing = (document: Document) => {
+    const since = indexingSince.get(document.id);
+    if (document.status === "extracting") {
+      if (since === undefined) indexingSince.set(document.id, performance.now());
+      return;
+    }
+    if (since === undefined || STILL_PROCESSING.has(document.status)) return;
+    indexingSince.delete(document.id);
+    if (document.status !== "ready") return;
+    timings.step("index-document", document.kind, performance.now() - since, document.pageCount);
+  };
+  const timedRecognition = (model: TextRecognitionModel): TextRecognitionModel => ({
+    get reader() {
+      return model.reader;
+    },
+    status: () => model.status(),
+    retry: () => model.retry(),
+    onReady: (listener) => model.onReady(listener),
+    read: (picture, page) =>
+      timings.local(
+        "ocr-page",
+        model.reader,
+        () => model.read(picture, page),
+        (lines) => lines.length,
+      ),
+    readFile: (file, page) =>
+      timings.local("ocr-page", model.reader, () => model.readFile(file, page)),
+    close: () => model.close(),
+  });
   /** What `getTextRecognitionModel` says in a copy that has no recognizer: nothing to download. */
   const textRecognitionUnavailable: EmbeddingModelStatus = {
     name: BUILT_IN_TEXT_RECOGNITION_MODEL.name,
@@ -631,11 +700,12 @@ export function createCore(adapters: CoreAdapters): Core {
       now,
       log: adapters.log ?? silentLogger,
       model: embedding.model,
-      textRecognition: textRecognitionModel,
+      textRecognition: textRecognitionModel && timedRecognition(textRecognitionModel),
       ...(adapters.scansAtOnce !== undefined && { scansAtOnce: adapters.scansAtOnce }),
       pdfPassword: (id) => pdfPasswords.of(id),
       folders,
       emitStatus: (document) => {
+        timeIndexing(document);
         events.emit("document.status", document);
         libraryDocumentChanged(document.id);
         batches.changed([document.id]);
@@ -832,6 +902,7 @@ export function createCore(adapters: CoreAdapters): Core {
   const rerankingModel = createRerankingModel({
     definition: BUILT_IN_RERANKING_MODEL,
     source: adapters.rerankingModelSource,
+    sources: modelSources,
     dataDir,
     crossEncoder: adapters.crossEncoder,
     emitStatus: () => reportRerank(),
@@ -945,6 +1016,7 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     now: () => adapters.now?.() ?? new Date(),
     cap: () => settings.get().user.monthlyCap,
+    timings,
   });
   // Nothing is in flight yet: what is still reserved was left by a crash.
   meter.settleOpen();
@@ -1107,6 +1179,15 @@ export function createCore(adapters: CoreAdapters): Core {
   });
   sources.dropPurged().catch((error: unknown) => console.error(error));
   /** The User's Documents searched as an Answer searches them: the search Tool, reranked as the User chose unless `rerank` is false. */
+  const timedRerank = (reranker: Reranker | undefined): Reranker | undefined =>
+    reranker &&
+    ((query, candidates, signal) =>
+      timings.local(
+        "rerank",
+        rerank.usesBuiltIn() ? BUILT_IN_RERANKING_MODEL.name : "rerank service",
+        () => reranker(query, candidates, signal),
+        () => candidates.length,
+      ));
   const searchDocuments = (
     query: string,
     documentIds: readonly string[] | null,
@@ -1115,7 +1196,7 @@ export function createCore(adapters: CoreAdapters): Core {
   ) => {
     const options = {
       signal,
-      rerank: reranking ? (adapters.reranker ?? rerank.active()) : undefined,
+      rerank: reranking ? timedRerank(adapters.reranker ?? rerank.active()) : undefined,
       documentIds: documentIds ?? undefined,
       ...(parameters && { parameters }),
     };
@@ -1144,6 +1225,13 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     return hasSearchScope(searched) ? searched : null;
   };
+  // A scope's Folder is a Library Folder, or one of a Linked folder's (the "@" picker offers both).
+  const scopeItemName = (kind: ScopeKind, id: string): string | null =>
+    kind === "folder"
+      ? ([...library.folders(), ...folders.list()].find((folder) => folder.id === id)?.name ?? null)
+      : kind === "tag"
+        ? (tags.list().find((tag) => tag.id === id)?.name ?? null)
+        : (documents.getMany([id])[0]?.name ?? null);
   // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
   // its Documents are in: a Linked folder filed into it whole names the Linked folder.
   const foldersOnDisk = (folderIds: readonly string[]) => {
@@ -1197,7 +1285,10 @@ export function createCore(adapters: CoreAdapters): Core {
     db,
     leaveOutOwnFiles: () => settings.get().user.leaveOutOwnFiles,
     search: (query, options) =>
-      documents.searchTool(query, { ...options, rerank: adapters.reranker ?? rerank.active() }),
+      documents.searchTool(query, {
+        ...options,
+        rerank: timedRerank(adapters.reranker ?? rerank.active()),
+      }),
   });
 
   // Web search through the Answer's model's provider (#128): asked for once per provider, as
@@ -1274,6 +1365,26 @@ export function createCore(adapters: CoreAdapters): Core {
         }
       }
       if (!options) throw new InvalidInputError({ key: "error.commands.markAiTextAsk" });
+      if (
+        hasCitationPlace(format) &&
+        settings.get().user.exportOptions.citationPlace === undefined
+      ) {
+        const { numbered, citations, citedDocuments } = mindExports.preview(mindId, { format });
+        if (numbered && citations > 0 && marking.asking) {
+          const ask = citationPlaceQuestion(settings.get().language, {
+            citations,
+            documents: citedDocuments,
+          });
+          const choice = ask.choiceOf(await marking.asking(ask.question));
+          if (choice === null)
+            throw new InvalidInputError({ key: "error.commands.citationPlaceClosed" });
+          const preferences = settings.get().user.exportOptions;
+          await api?.updateSettings({
+            user: { exportOptions: { ...preferences, citationPlace: choice } },
+          });
+          options = { ...options, citationPlace: choice };
+        }
+      }
       const { fileName, data, word } = await mindExports.export(mindId, options);
       // The window shows first what a Word file can't keep (#105); the assistant can't.
       if (word && word.notKept.length > 0) {
@@ -1309,12 +1420,12 @@ export function createCore(adapters: CoreAdapters): Core {
     prepareModel: (choice, thinking) => chat.prepareModel(choice, "chat", thinking),
     async prepareQuickModel(answers, prepared) {
       const quick = chat.quickTasksModel(answers);
-      if (!quick || (quick.providerId === answers.providerId && quick.modelId === answers.modelId))
-        return prepared.model;
       // An Answer on this computer keeps its small calls there too.
-      if (prepared.provider.service === null && chat.describeModel(quick)?.service !== null)
-        return prepared.model;
-      return (await chat.prepareModel(quick, "chat", "off")).model;
+      const stayHere =
+        !quick ||
+        (prepared.provider.service === null && chat.describeModel(quick)?.service !== null);
+      // Even the Answers model is prepared again: as the Answer's it thinks, and that fills a small call.
+      return (await chat.prepareModel(stayHere ? answers : quick, "chat", "off")).model;
     },
     documents: {
       searchableCount: (documentIds) => documents.searchableCount(documentIds ?? undefined),
@@ -1870,6 +1981,11 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     requireMind: (mindId) => writableMind(mindId).id,
     recheck: (input) => recheckCitation(documents, input),
+    askedScope: ({ from }) =>
+      from.artifactKind === "conversation"
+        ? conversations.askedScope(from.artifactId, from.anchor.messageId)
+        : null,
+    mindFolder: (mindId) => minds.get(mindId).folderId,
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
   });
@@ -1911,8 +2027,7 @@ export function createCore(adapters: CoreAdapters): Core {
           })
         : null,
     language: () => settings.get().language,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     citationStyle: (mindId) => {
       const { style, textLanguage } = mindStyleAndText(mindId);
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
@@ -1958,8 +2073,7 @@ export function createCore(adapters: CoreAdapters): Core {
             quote,
           })
         : null,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     localMode: () => embedding.localOnly(),
     language: () => settings.get().language,
     printer: adapters.printer ?? null,
@@ -2475,6 +2589,7 @@ export function createCore(adapters: CoreAdapters): Core {
     // The app still opens; what is due goes at the next start.
     console.error("Deleting what waited 30 days in Recently deleted failed.", error);
   }
+  documents.dropPurged().catch((error: unknown) => console.error(error));
 
   /**
    * What tagging may use changed (a model, a key, local mode): Automatic picks
@@ -2663,6 +2778,33 @@ export function createCore(adapters: CoreAdapters): Core {
     },
     listed: () => transcriber !== undefined && transcriptionSource.files.length > 0,
   });
+  // Any built-in model may come from these instead, and the probe asks ModelScope (#1578).
+  const otherSources: { id: NetworkTrafficId; service: ExternalService }[] = [
+    {
+      id: "model-source-modelscope",
+      service: {
+        id: modelCopies.modelscope
+          ? new URL(modelCopies.modelscope.url).origin
+          : "https://www.modelscope.cn",
+        name: "ModelScope",
+      },
+    },
+    {
+      id: "model-source-hf-mirror",
+      service: { id: "https://hf-mirror.com", name: "hf-mirror.com" },
+    },
+    ...(modelCopies.r2
+      ? [
+          {
+            id: "model-source-copy" as const,
+            service: { id: new URL(modelCopies.r2.url).origin, name: "IncarnaMind" },
+          },
+        ]
+      : []),
+  ];
+  for (const { id, service } of otherSources) {
+    privacy.traffic.register({ id, service, listed: () => modelSource.files.length > 0 });
+  }
   privacy.traffic.register({ id: "ollama-pull", service: OLLAMA_REGISTRY });
   const chatGptSignIn = new URL(
     adapters.chatGptPlan?.authorizeUrl ?? CHATGPT_PLAN_ENDPOINTS.authorizeUrl,
@@ -2847,6 +2989,7 @@ export function createCore(adapters: CoreAdapters): Core {
     createTranscriptionModel({
       dataDir,
       transcriber,
+      sources: modelSources,
       ...(adapters.transcriptionModelSource && { source: adapters.transcriptionModelSource }),
       speed: () => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
@@ -2869,6 +3012,23 @@ export function createCore(adapters: CoreAdapters): Core {
       return transcriptionModel.vadFile();
     },
   });
+  const speakerModel =
+    adapters.speakerSeparator &&
+    createSpeakerModel({
+      dataDir,
+      sources: modelSources,
+      ...(adapters.speakerModelSource && { source: adapters.speakerModelSource }),
+      log: adapters.log ?? silentLogger,
+    });
+  const speakerPass =
+    adapters.speakerSeparator &&
+    speakerModel &&
+    createSpeakerPass({
+      separator: adapters.speakerSeparator,
+      model: speakerModel,
+      partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
+      log: adapters.log ?? silentLogger,
+    });
   const transcripts =
     transcriber &&
     transcriptionModel &&
@@ -2877,6 +3037,7 @@ export function createCore(adapters: CoreAdapters): Core {
       transcriber,
       model: transcriptionModel,
       cloud: cloudTranscription,
+      ...(speakerPass && { speakers: speakerPass }),
       documents: {
         add: (id, name, file) => documents.addSnapshot(id, name, file, () => {}, "transcript"),
         file: (documentId, folderId) => library.assign(documentId, folderId),
@@ -2907,6 +3068,8 @@ export function createCore(adapters: CoreAdapters): Core {
       partsOf: (meetingId) => listParts(meetingFolder(dataDir, meetingId)),
       audioDeleted: (meetingId) =>
         listMeetings?.().find((each) => each.id === meetingId)?.audio.deletedAt != null,
+      decoded: (modelId, decodeMs, audioSeconds) =>
+        timings.step("transcribe", modelId, decodeMs, audioSeconds),
       recordSpeed: (modelId, ratio) => {
         const value = settings.readDeviceValue(TRANSCRIPTION_SPEED);
         settings.writeDeviceValue(TRANSCRIPTION_SPEED, {
@@ -3482,10 +3645,10 @@ export function createCore(adapters: CoreAdapters): Core {
       return renamed;
     },
     deleteDocument: async (id) => {
-      for (const deleted of await documents.delete(id)) activity.documentDeleted(deleted);
+      for (const deleted of documents.delete(id)) activity.documentDeleted(deleted);
     },
     deleteDocuments: async (ids) => {
-      for (const deleted of await documents.delete(ids)) activity.documentDeleted(deleted);
+      for (const deleted of documents.delete(ids)) activity.documentDeleted(deleted);
     },
     retryDocument: async (id) => documents.retry(id),
     unlockDocument: async (input) => {
@@ -3677,8 +3840,9 @@ export function createCore(adapters: CoreAdapters): Core {
       if (!metered) throw new InvalidInputError("There is no model to estimate for.");
       return meter.estimate(metered, items, searches, each);
     },
-    compareDocuments: (input) => comparisons.compareDocuments(input),
-    fillComparisonTable: (input) => comparisons.fillComparisonTable(input),
+    compareDocuments: (input) => inFlow("comparison", () => comparisons.compareDocuments(input)),
+    fillComparisonTable: (input) =>
+      inFlow("comparison", () => comparisons.fillComparisonTable(input)),
     stopComparisonTable: (input) => comparisons.stop(input),
     listFillingComparisons: async () => comparisons.filling(),
     listTasks: async () => tasks.list(),
@@ -3690,31 +3854,32 @@ export function createCore(adapters: CoreAdapters): Core {
     tellTask: async (taskId, text) => tasks.tell(taskId, text),
     untellTask: async (taskId, messageId) => tasks.untell(taskId, messageId),
     getResearchPlan: async (taskId) => research.planView(taskId),
-    planResearch: (input) => research.plan(input),
-    startResearch: (input) => research.start(input),
+    planResearch: (input) => inFlow("research", () => research.plan(input)),
+    startResearch: (input) => inFlow("research", () => research.start(input)),
 
     askQuestion: async (input) => answers.ask(input),
     regenerateAnswer: async (input) =>
       answers.regenerate(input, (mindId) => checkpoints.save(mindId, "regenerate")),
     stopAnswer: async (input) => answers.stop(input),
-    suggestNext: (request) => suggestions.suggest(request),
+    suggestNext: (request) => inFlow("suggestion", () => suggestions.suggest(request)),
     cancelSuggestion: async (requestId) => suggestions.cancel(requestId),
     acceptSuggestion: async (input) => suggestions.accept(input),
     getSuggestionStatus: () => suggestions.status(),
     editWithAi: (input) => edits.editWithAi(input),
     regenerateProposal: (input) => edits.regenerateProposal(input),
     cancelEdit: async (requestId) => edits.cancel(requestId),
-    checkSentences: (input) => checks.checkSentences(input),
+    checkSentences: (input) => inFlow(input.action, () => checks.checkSentences(input)),
     cancelCheck: async (requestId) => checks.cancel(requestId),
-    checkClaim: (input) => checks.checkClaim(input),
-    verifyDocument: (input) => checks.verifyDocument(input),
-    findClaims: (input) => checks.findClaims(input),
-    verifyClaims: (input) => checks.verifyClaims(input),
+    checkClaim: (input) => inFlow("check-claim", () => checks.checkClaim(input)),
+    verifyDocument: (input) => inFlow("verify", () => checks.verifyDocument(input)),
+    findClaims: (input) => inFlow("verify", () => checks.findClaims(input)),
+    verifyClaims: (input) => inFlow("verify", () => checks.verifyClaims(input)),
     planContradictionCheck: (mindId) => checks.planContradictionCheck(mindId),
-    checkContradictions: (input) => checks.checkContradictions(input),
+    checkContradictions: (input) =>
+      inFlow("contradictions", () => checks.checkContradictions(input)),
     planMindCheck: (mindId, mode, allDocuments) => checks.planMindCheck(mindId, mode, allDocuments),
-    findMindClaims: (input) => checks.findMindClaims(input),
-    checkMind: (input) => checks.checkMind(input),
+    findMindClaims: (input) => inFlow("check-mind", () => checks.findMindClaims(input)),
+    checkMind: (input) => inFlow("check-mind", () => checks.checkMind(input)),
     documentsAddedSinceChecks: async (mindId) => checks.documentsAddedSinceChecks(mindId),
 
     getSecretStorage: async () => secrets.status(),
@@ -3933,7 +4098,12 @@ export function createCore(adapters: CoreAdapters): Core {
     listDeleted: async () => recentlyDeleted.list(),
     deletePermanently: async (refs) => {
       recentlyDeleted.deletePermanently(refs);
-      await Promise.all([webPages.dropPurged(), sources.dropPurged(), wordImports.dropPurged()]);
+      await Promise.all([
+        webPages.dropPurged(),
+        sources.dropPurged(),
+        wordImports.dropPurged(),
+        documents.dropPurged(),
+      ]);
     },
     acceptAssignments: async (ids) => library.accept(ids),
     rejectAssignments: async (ids) => library.reject(ids),
@@ -4140,7 +4310,7 @@ export function createCore(adapters: CoreAdapters): Core {
       if (result.ok) skillsChanged();
       return result;
     },
-    draftSkillFromMind: (input) => skillDrafts.draft(input),
+    draftSkillFromMind: (input) => inFlow("skill-draft", () => skillDrafts.draft(input)),
     cancelSkillDraft: async (requestId) => skillDrafts.cancel(requestId),
     listRemovedBuiltInSkills: async () => skills.removedBuiltIns(),
     restoreBuiltInSkills: async () => {
@@ -4178,6 +4348,8 @@ export function createCore(adapters: CoreAdapters): Core {
         fileName,
         fromWord: _,
         theirChanges: _waiting,
+        citedDocuments: _cited,
+        numbered: _numbered,
         data,
         word,
         ...counts
@@ -4372,6 +4544,7 @@ export function createCore(adapters: CoreAdapters): Core {
       // What a Meeting has captured is saved before anything else stops.
       meetings.close();
       transcripts?.close();
+      speakerModel?.close();
       // Notes being filled in are left as they were: the next start says so.
       meetingFill.close();
       // Outside agents can't reach the core while it closes.

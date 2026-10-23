@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type {
   ChatProvider,
   ConnectionTestResult,
@@ -17,7 +18,6 @@ import {
   fieldAccepts,
   fieldUrl,
   isPreset,
-  KEY_PROVIDERS,
   keyProviderGroups,
   kindOfCatalogId,
   untestedForCitations,
@@ -60,9 +60,6 @@ type CatalogId = string;
  * for a server. The User can type any model their account has.
  */
 const suggestedModel = (kind: CatalogId): string => catalogProvider(kind)?.roles.answers ?? "";
-
-const isSuggestion = (model: string) =>
-  KEY_PROVIDERS.some((kind) => suggestedModel(kind) === model);
 
 /** The providers shown as one row of choices, in the order the interface's language puts first; the rest are under "More…". */
 const ROW: Readonly<Record<Language, readonly CatalogId[]>> = {
@@ -119,7 +116,8 @@ const sameServer = (
 
 /**
  * Pick a provider, paste a key (and a URL for an OpenAI-compatible server),
- * choose a model, test the connection, and use it. No provider is preselected.
+ * keep the model its line names or Change it, test the connection,
+ * and use it. No provider is preselected.
  */
 export function ProviderForm({
   providers,
@@ -172,6 +170,8 @@ export function ProviderForm({
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
   const [notChecked, setNotChecked] = useState(false);
+  // The region a result is about: the form may be on another by the time a slow test answers.
+  const [testedRegion, setTestedRegion] = useState<string | null>(null);
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
@@ -188,12 +188,18 @@ export function ProviderForm({
   const keyField = useRef<HTMLInputElement>(null);
   const modelPicker = useRef<HTMLSelectElement>(null);
   const modelText = useRef<HTMLInputElement>(null);
+  const changeModel = useRef<HTMLButtonElement>(null);
+  /** Also opened, without Change, when a failure asks for another model. */
+  const [modelOpen, setModelOpen] = useState(false);
+  const showModelPicker = () => {
+    flushSync(() => setModelOpen(true));
+    modelPicker.current?.focus();
+  };
   /** Opens the model list where it is, or puts the cursor in the field a model is typed in. */
   const openModelPicker = () => {
-    if (modelPicker.current) {
-      modelPicker.current.focus();
-      modelPicker.current.showPicker?.();
-    } else modelText.current?.focus();
+    showModelPicker();
+    if (modelPicker.current) modelPicker.current.showPicker?.();
+    else modelText.current?.focus();
   };
   // A refused key's field is where "Check the key" leads: in view, focused, and under "More
   // providers" opened when its provider is listed there.
@@ -297,9 +303,9 @@ export function ProviderForm({
     if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
     setEndpointId(defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
-    setModelId((current) =>
-      current === "" || isSuggestion(current) ? suggestedModel(next) : current,
-    );
+    setModelId(suggestedModel(next));
+    setOtherModel(false);
+    setModelOpen(false);
     setTest(null);
     setNotChecked(false);
     setError(null);
@@ -354,6 +360,7 @@ export function ProviderForm({
     setError(null);
     setTest(null);
     setNotChecked(false);
+    setTestedRegion(endpoint?.id ?? null);
     try {
       const result = await core.testChatConnection(request);
       const notChecked = !result.ok && result.error.kind === "local-mode";
@@ -396,6 +403,15 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? keyProviderName(kind, t, language) : "";
+  const refusedOn =
+    catalog && catalog.endpoints.length > 1 ? endpointOf(catalog, testedRegion) : undefined;
+  const badKeyLine = refusedOn
+    ? t("providers.form.badKeyAt", {
+        host: siteOf(refusedOn.baseUrl),
+        region: refusedOn.label[words],
+        site: siteOf(refusedOn.keyUrl ?? catalog?.keyUrl),
+      })
+    : t("providers.form.badKey", { provider: providerName, site });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -409,6 +425,23 @@ export function ProviderForm({
       : shownName(id);
   };
   const example = catalog?.roles.answers;
+  const modelLine = !modelOpen && !otherModel && choices.includes(modelId);
+  const docsLink = !standalone && catalog?.docsUrl && (
+    <a
+      href={catalog.docsUrl}
+      target="_blank"
+      rel="noreferrer"
+      data-testid="provider-docs-link"
+      className="text-[12px] leading-5 text-ink-meta underline"
+    >
+      {t("providers.form.modelsAndPrices")} ↗
+    </a>
+  );
+  const untestedReason = untestedForCitations(catalog) && modelId === recommended && (
+    <span data-testid="provider-model-reason" className={hintClass}>
+      {t("providers.untested")}
+    </span>
+  );
   const modelIdField = (
     <input
       id={`${id}-model-id`}
@@ -622,29 +655,51 @@ export function ProviderForm({
               </label>
               {modelIdField}
             </div>
+          ) : modelLine ? (
+            <div>
+              <div className="flex items-baseline justify-between gap-3">
+                <MetaLine
+                  data-testid="provider-model-line"
+                  className="text-[13px] leading-5 text-ink-secondary"
+                  parts={[
+                    t("providers.form.modelLine", { model: shownName(modelId) }),
+                    <LineAction
+                      key="change"
+                      ref={changeModel}
+                      action={{
+                        label: t("providers.form.change"),
+                        ariaLabel: t("providers.form.changeModel"),
+                        testId: "provider-model-change",
+                        onClick: showModelPicker,
+                      }}
+                    />,
+                  ]}
+                />
+                {docsLink}
+              </div>
+              {untestedReason}
+            </div>
           ) : (
             <div>
               <div className="flex items-baseline justify-between gap-3">
                 <label htmlFor={`${id}-model`} className={fieldLabelClass}>
                   {t("providers.form.model")}
                 </label>
-                {!standalone && catalog?.docsUrl && (
-                  <a
-                    href={catalog.docsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid="provider-docs-link"
-                    className="text-[12px] leading-5 text-ink-meta underline"
-                  >
-                    {t("providers.form.modelsAndPrices")} ↗
-                  </a>
-                )}
+                {docsLink}
               </div>
               <select
                 id={`${id}-model`}
                 ref={modelPicker}
                 data-testid="provider-model"
                 value={!otherModel && choices.includes(modelId) ? modelId : OTHER_MODEL}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape" || otherModel || !choices.includes(modelId)) return;
+                  // Esc closes the innermost thing open: the list, back to its line, not the card or Settings.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  flushSync(() => setModelOpen(false));
+                  changeModel.current?.focus();
+                }}
                 onChange={(event) => {
                   const chosen = event.target.value;
                   setOtherModel(chosen === OTHER_MODEL);
@@ -670,12 +725,7 @@ export function ProviderForm({
                   <span className={hintClass}>{t("providers.form.modelIdHint")}</span>
                 </div>
               ) : (
-                untestedForCitations(catalog) &&
-                modelId === recommended && (
-                  <span data-testid="provider-model-reason" className={hintClass}>
-                    {t("providers.untested")}
-                  </span>
-                )
+                untestedReason
               )}
             </div>
           )}
@@ -698,8 +748,14 @@ export function ProviderForm({
               className={primaryButtonClass}
             >
               {busy
-                ? t("providers.form.checking")
-                : t(local && !keyRequired ? "providers.form.save" : "providers.form.useKey")}
+                ? t(keyRequired ? "providers.form.checking" : "providers.form.connecting")
+                : t(
+                    keyRequired
+                      ? "providers.form.useKey"
+                      : local
+                        ? "providers.form.save"
+                        : "providers.form.connect",
+                  )}
             </button>
             {missing && (
               <span data-testid="provider-use-key-why" className={hintClass}>
@@ -718,9 +774,7 @@ export function ProviderForm({
                 <TestResult
                   result={test}
                   model={shownName(modelId)}
-                  {...(test.error.kind === "auth" && site
-                    ? { line: t("providers.form.badKey", { provider: providerName, site }) }
-                    : {})}
+                  {...(test.error.kind === "auth" && site ? { line: badKeyLine } : {})}
                   {...(test.error.kind === "data-retention" && {
                     action: {
                       label: t("answer.error.chooseModel"),
