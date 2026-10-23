@@ -34,17 +34,15 @@ const RULES = [
  */
 const reply = (language: Language) =>
   [
-    "Reply in exactly this form, the field words and the verdict word in English:",
-    // Before the verdict: with the verdict first, Claude Haiku 5.5 called "must pay" Supported
-    // against "may pay" and only then named the difference (#1668).
-    'Roles: who does it, for or to whom, and must, may or neither, first as the sentence says it, in its own words untranslated, then " / " and as the Passage says it, then same or differs ("Roles: the Tenant must repaint / the Tenant may repaint, differs"; "Roles: the Landlord insures for the Tenant / the Tenant insures for the Landlord, differs"). "differs" only when the other party does it, the two parties are the other way round, or one says must where the other says may. Anything else is "same": a condition one of them adds, or a sentence that names no party and says neither must nor may ("Roles: none, same"); Scope, below, weighs the words for a party.',
+    "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
     'Scope: the sentence\'s own word for the Passage\'s party or term, then same or wider ("Scope: tenants, wider" for "the Tenant"; "Scope: none, same" when the sentence names none). "wider" when that word is a general one for a wider group than the Passage\'s; "same" otherwise: the Passage\'s own word for its party ("the Tenant" for "the Tenant"), a name for it or another word for the very same party ("Ms Patel" for "the Tenant").',
     'Topic: found or not found. "found" when a Passage is about the sentence\'s own subject and detail, even when it gives another value or only part of it; "not found" when none is, though one may be about a neighbouring topic (rent, for a parking fee).',
+    'Roles: who does it, for or to whom, and must, may or neither, first as the sentence says it, in its own words untranslated, then " / " and as the Passage says it, then same or differs ("Roles: the Tenant must repaint / the Tenant may repaint, differs"; "Roles: the Landlord insures for the Tenant / the Tenant insures for the Landlord, differs"). "differs" only when the other party does it, the two parties are the other way round, or one says must where the other says may. Anything else is "same": another word for a party (Scope weighs that), a condition one of them adds, or a sentence that names no party and says neither must nor may ("Roles: none, same").',
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
     `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say.`,
     `Add two last lines, "Covered: " and "Not covered: ", only when a Passage states part of what this sentence itself says: the same subject and the same detail, the sentence saying more than the Passage (a wider group, an added condition, more days). "Covered: " is a short phrase in ${LANGUAGE_NAMES[language]} for that part ("the speed comparison"), "Not covered: " for the rest, as a phrase of the same kind ("memory and robustness"). A Passage about a neighbouring thing (the rent for a service charge, another period, site or person) states no part of the sentence: then write neither line.`,
-    `For supported with a wider scope, the same two last lines: "Covered: " and what the Passage states for its own party, then "Not covered: " and the wider group.`,
+    `For supported with a wider scope, the same two last lines: "Covered: " and what the Passage states for its own party, then "Not covered: " and the wider group. For supported with roles that differ, "Covered: " and what the Passage states, then "Not covered: " and what the sentence says otherwise.`,
     "Write nothing else.",
   ].join("\n");
 
@@ -311,6 +309,8 @@ export interface ReadVerdict {
   scope: "same" | "wider" | null;
   /** "not found": no Passage is about the sentence's own subject and detail; null when the reply doesn't say. */
   topic: "found" | "not found" | null;
+  /** "differs": another party does it, the parties are the other way round, or must is may; null when the reply doesn't say. */
+  roles: "same" | "differs" | null;
 }
 
 const MARKERS = /\s*\[[\^=]?\d{1,4}\]/g;
@@ -323,12 +323,10 @@ const BARE = /^[\s>*_#`"'“”-]*(supported|unsupported|contradicted)\b[\s*_"'�
 /** "Covered: …" and "Not covered: …", in bold or quoted too, on lines of their own. */
 const COVERED = /^[\s>*_#`"'“”-]*(?:covered|已涵盖|涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
 const NOT_COVERED = /^[\s>*_#`"'“”-]*(?:not covered|uncovered|未涵盖)[\s*_]*[:：][\s*_]*(.*)$/i;
-/** "Scope: wider" and "Topic: not found", in bold or quoted too, on lines of their own. */
+/** "Scope: wider", "Topic: not found" and "Roles: …, differs", in bold or quoted too, on lines of their own. */
 const SCOPE = /^[\s>*_#`"'“”-]*(?:scope|范围)[\s*_]*[:：](.*)$/i;
 const TOPIC = /^[\s>*_#`"'“”-]*(?:topic|主题)[\s*_]*[:：][\s*_"'“”`]*(found|not found)\b/i;
 const ROLES = /^[\s>*_#`"'“”-]*(?:roles|角色)[\s*_]*[:：](.*)$/i;
-// With Roles first, a model may run the fields on in one line: "Roles: none, same. Verdict: supported."
-const RUN_ON = /([.。;；])[ \t]*(?=[*_]*(?:verdict|scope|topic)[*_]*[ \t]*[:：])/gi;
 const MAX_PHRASE = 120;
 const MAX_REASON = 300;
 const PHRASE_EDGES = /^[\s"'“”‘’「」『』*_`]+|[\s"'“”‘’「」『』*_`.。;；:：,，]+$/gu;
@@ -343,7 +341,10 @@ function jsonVerdict(reply: string): ReadVerdict | null {
   try {
     const value: unknown = JSON.parse(reply.slice(start, end + 1));
     if (typeof value !== "object" || value === null) return null;
-    const { verdict, says, covered, uncovered, scope, topic } = value as Record<string, unknown>;
+    const { verdict, says, covered, uncovered, scope, topic, roles } = value as Record<
+      string,
+      unknown
+    >;
     const known = VERDICTS.find((each) => each === String(verdict).toLowerCase());
     if (!known) return null;
     return {
@@ -353,6 +354,7 @@ function jsonVerdict(reply: string): ReadVerdict | null {
       uncovered: typeof uncovered === "string" ? phraseOf(uncovered) : null,
       scope: scopeOf(typeof scope === "string" ? `Scope: ${scope}` : undefined),
       topic: topicOf(typeof topic === "string" ? `Topic: ${topic}` : undefined),
+      roles: rolesOf(typeof roles === "string" ? `Roles: ${roles}` : undefined),
     };
   } catch {
     return null;
@@ -380,6 +382,16 @@ const scopeOf = (line: string | undefined): ReadVerdict["scope"] => {
   return word === "same" || word === "wider" ? word : null;
 };
 
+// The field's last word: the parties' own words come first and may hold "same".
+const rolesOf = (line: string | undefined): ReadVerdict["roles"] => {
+  const word = (line === undefined ? undefined : ROLES.exec(line)?.[1])
+    ?.match(/\b(?:same|differs?)\b/gi)
+    ?.at(-1)
+    ?.toLowerCase();
+  if (word === "same") return "same";
+  return word === "differs" || word === "differ" ? "differs" : null;
+};
+
 const topicOf = (line: string | undefined): ReadVerdict["topic"] => {
   const words = line === undefined ? undefined : TOPIC.exec(line)?.[1]?.toLowerCase();
   return words === "found" || words === "not found" ? words : null;
@@ -403,7 +415,7 @@ const cleanSays = (text: string): string | null => {
  * some models give. Null when no verdict can be read.
  */
 export function readVerdict(reply: string): ReadVerdict | null {
-  const text = reply.replace(THINKING, "").replace(RUN_ON, "$1\n").trim();
+  const text = reply.replace(THINKING, "").trim();
   const lines = text
     .split("\n")
     .map((line) => line.trim())
@@ -430,6 +442,7 @@ export function readVerdict(reply: string): ReadVerdict | null {
       uncovered: phrase(NOT_COVERED),
       scope: scopeOf(after.find((each) => SCOPE.test(each))),
       topic: topicOf(after.find((each) => TOPIC.test(each))),
+      roles: rolesOf(after.find((each) => ROLES.test(each))),
     });
   }
   return withShortReason(jsonVerdict(text));

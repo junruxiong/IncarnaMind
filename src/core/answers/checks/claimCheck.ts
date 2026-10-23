@@ -159,9 +159,6 @@ export function recordJudged(
 const SEARCH_FIRST =
   "You gave a verdict without searching the User's Documents. Search them with search_documents first, then give your verdict from what you find.";
 
-const VERDICT_LINE =
-  "Your reply has no Verdict line. Reply again in exactly the form asked, each field on a line of its own.";
-
 export function createClaimCheck(deps: ClaimCheckDependencies) {
   return async function checkClaim(request: ClaimCheckRequest): Promise<ClaimCheckResult> {
     const { scope, signal } = request;
@@ -339,15 +336,6 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
           check: (text) =>
             !searched && readVerdict(text) ? { claims: [], note: SEARCH_FIRST } : null,
         },
-        // Lines written beside `cite` are taken back as a preamble, and with them the verdict when
-        // the model wrote it there: Claude Haiku 5.5 did, about one check in a hundred (#1668).
-        {
-          name: "verdict-line",
-          check: (text) =>
-            searched && text.trim() !== "" && !readVerdict(text) && !readsAsRefusal(text)
-              ? { claims: [], note: VERDICT_LINE }
-              : null,
-        },
       ],
       signal,
     })) {
@@ -454,13 +442,21 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         ? { covered: verdict.covered, uncovered: verdict.uncovered }
         : await partOf(request, quoted, session, signal, deps.language());
     // A general word for the Passage's own party is backed for that party only: the wider group
-    // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
-    // its own, so the verdict doesn't rest on the model weighing it.
-    if (verdict.verdict === "supported" && verdict.scope === "wider" && !byCalculation) {
+    // is the part the Documents don't cover (DESIGN.md › Checks). Another party, the parties the
+    // other way round, or must for may is no support at all: Claude Haiku 5.5 called "must pay"
+    // Supported against "may pay", then named the difference (#1668). The reply says each in a
+    // field of its own, so the verdict doesn't rest on the model weighing it.
+    const differs = verdict.roles === "differs";
+    if (
+      verdict.verdict === "supported" &&
+      (verdict.scope === "wider" || differs) &&
+      !byCalculation
+    ) {
       const part = await parts(evidence);
       if (signal.aborted) return notChecked("stopped");
       if (part.covered && part.uncovered)
         return unsupported({ reason: verdict.says, ...part }, evidence);
+      if (differs) return unsupported();
     }
     if (verdict.verdict === "contradicted") {
       // The judgements disagree with the check: the card shows the part the quote states
