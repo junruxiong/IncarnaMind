@@ -21,7 +21,7 @@ export interface Plan {
   reply?: ScriptedReply;
   /** What it says when asked to confirm a contradiction it found. */
   judgement?: "conflict" | "same" | "neither";
-  /** Its reply to the strict judgement (a contradiction's second, or the nearest line's); `judgement` when absent. */
+  /** Its reply to the strict judgement, a contradiction's second; `judgement` when absent. */
   strict?: GeneratedReply;
   /** Its reply when asked for the parts of a sentence it called contradicted that the strict judgement didn't uphold. */
   part?: string;
