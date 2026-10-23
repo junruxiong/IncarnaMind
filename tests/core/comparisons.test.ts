@@ -854,6 +854,63 @@ describe("Compare Documents", () => {
     ).toEqual([1, 1, 1, 1, 1, 0]);
   });
 
+  test("quitting while a cell's words show: at the next start no cell is left reading, and the table fills whole", async () => {
+    const held = new Promise<void>(() => {});
+    const model = cellModel((call, asked) =>
+      call.results.some((result) => result.tool === "cite") &&
+      asked.document === "Corvane" &&
+      asked.question === QUESTIONS[0]
+        ? { text: "90 days [^1]", pause: { after: 12, until: held } }
+        : null,
+    );
+    const { core, client, mind, documents, dataDir } = await setUpWithDocuments(model, SUPPLIERS);
+    const result = await core.compareDocuments({
+      mindId: mind.id,
+      documentIds: documents.map((document) => document.id),
+      questions: QUESTIONS,
+    });
+    if (!result.started) throw new Error("The table wasn't made.");
+    await vi.waitFor(() =>
+      expect(tableIn(client).rows[0]?.cells[0]).toMatchObject({
+        status: "writing",
+        text: "90 days",
+      }),
+    );
+    const [task] = await core.listTasks();
+    core.close();
+
+    const reopened = startCore(dataDir, {
+      createChatModel: scriptedModels(cellModel()).createChatModel,
+    });
+    const again = await connectToMind(reopened, mind.id);
+    await vi.waitFor(
+      async () =>
+        expect((await reopened.listTasks()).find((each) => each.id === task?.id)?.status).toBe(
+          "done",
+        ),
+      { timeout: 10_000 },
+    );
+    await again.settled();
+    const cells = tableIn(again).rows.flatMap((row) => row.cells);
+    expect(cells.map((cell) => cell.status)).toEqual([
+      "done",
+      "done",
+      "done",
+      "done",
+      "done",
+      "failed",
+    ]);
+    expect(cells.map((cell) => cell.text)).toEqual([
+      "90 days",
+      "12 months of fees",
+      "6 months",
+      "twice the annual fees",
+      "30 days",
+      "",
+    ]);
+    expect(cells.map((cell) => cell.citations.length)).toEqual([1, 1, 1, 1, 1, 0]);
+  });
+
   test("the monthly cap pauses the table's Task; filling again once the cap allows resumes that Task", async () => {
     const model = cellModel();
     const { core, client, mind, documents } = await cloudSetUp(model);
