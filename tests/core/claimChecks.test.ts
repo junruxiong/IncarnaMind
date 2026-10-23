@@ -190,10 +190,18 @@ describe("A check that starts with the search of its sentence (#1635)", () => {
   const FR = "Les grandes marées arrivent avec la nouvelle lune et la pleine lune.";
   const MAREES = {
     name: "Marées.md",
-    contents: "# Marées\n\nLes grandes marées arrivent avec la nouvelle lune et la pleine lune.",
+    contents: [
+      "# Marées",
+      "",
+      "Les grandes marées arrivent avec la nouvelle lune et la pleine lune.",
+      "",
+      "Elles sont plus fortes dans les ports de la côte, et cette marée est une des plus hautes pour une ville sur la mer.",
+    ].join("\n"),
   };
+  const SHORT = "Staff may work from home two days a week.";
   const SENTENCES = {
     en: { claim: SUPPORTED, plans: PLANS },
+    short: { claim: SHORT, plans: { [SHORT]: { verdict: "unsupported" } } as Record<string, Plan> },
     zh: { claim: ZH, plans: ZH_PLANS },
     fr: {
       claim: FR,
@@ -215,6 +223,7 @@ describe("A check that starts with the search of its sentence (#1635)", () => {
     ["kimi", "kimi-k2.6", "en", "en", true],
     ["kimi", "kimi-k2.6", "zh", "zh", false],
     ["kimi", "kimi-k2.6", "fr", "fr", false],
+    ["kimi", "kimi-k2.6", "short", "fr", false],
   ] as const)(
     "%s %s, a sentence in %s, Documents in %s: starts with its search, %s",
     async (kind, modelId, sentence, documents, starts) => {

@@ -64,7 +64,6 @@ import {
   answerTemperature,
   type CiteOptions,
   type DocumentLanguage,
-  searchLanguage,
 } from "../engine";
 import { agreesWith, statedFigure } from "./calculated";
 import { figuresMatch, nearestLine } from "./nearest";
@@ -157,11 +156,6 @@ export function recordJudged(
       occurredAt: at,
     },
   ]);
-}
-
-function sentenceLanguage(claim: string): Language | null {
-  const detected = detectLanguage(claim, 1);
-  return detected === "English" ? "en" : detected === "Chinese" ? "zh-CN" : null;
 }
 
 const SEARCH_FIRST =
@@ -317,12 +311,15 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     // sentence's own words, Claude Haiku 5.5 took "Staff" for "the Employee" more often. A Claude
     // account's requests weren't measured. Documents in another language are searched in theirs,
     // which only the model can do.
-    const language = sentenceLanguage(request.claim);
+    const written = detectLanguage(request.claim, 1);
+    const language = written === "English" ? "en" : written === "Chinese" ? "zh-CN" : null;
     const searchesFirst =
       language !== null &&
       model.provider.kind !== "claude-account" &&
       searchesCheckFirst(model.capabilities, language) &&
-      !searchLanguage(request.claim, deps.documents.searchableLanguages(scope.documentIds));
+      deps.documents
+        .searchableLanguages(scope.documentIds)
+        .every((each) => each.language === written);
     let reply = "";
     let failed: ProviderError | null = null;
     let finished = false;
