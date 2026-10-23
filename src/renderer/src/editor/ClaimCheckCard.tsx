@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import type * as Y from "yjs";
 import { CITATION_NODE, type CitationAttributes, type ClaimCalculation } from "../../../core/api";
 import { shownDocumentName } from "../../../shared/citations";
-import { coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
+import { checkedScope, coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
 import { savedPageSource } from "../../../shared/webSource";
@@ -19,6 +19,7 @@ import { translateNow, useLanguage, useT } from "../i18n";
 import { groupsMerged } from "../layoutSlice";
 import { firstOpenOf } from "../nudges";
 import { openCited } from "../openCited";
+import { useScopeName } from "../scopeDocuments";
 import { useAppStore } from "../store";
 import { citedIn, cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
 import type { NumberedCitation } from "./citationNumbers";
@@ -315,8 +316,9 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
  * quote, and Cut the unsupported part, Search all Documents and Keep as my view
  * (#1111); for one without, the Passage the check quoted for part of it, with
  * what that part is and what it doesn't cover; otherwise why, with Check again.
- * A Passage from a saved web page names the page. Documents IncarnaMind wrote
- * that matched are named, with Count it.
+ * A Passage from a saved web page names the page. Every verdict says where the
+ * check looked (#1623). Documents IncarnaMind wrote that matched are named, with
+ * Count it.
  */
 function ClaimCard({
   claim,
@@ -381,11 +383,8 @@ function ClaimCard({
     (state === "supported" || state === "contradicted" || state === "unsupported") &&
     evidence !== null &&
     where !== null;
-  const folderName = useAppStore((store) =>
-    check.scope.folderId === null
-      ? null
-      : (store.library?.groups.find((group) => group.id === check.scope.folderId)?.name ?? null),
-  );
+  const looked = useScopeName(checkedScope(check.scope));
+  const lookedIn = looked?.name ?? t("composer.scope.all");
   const documents = useAppStore((store) => store.documents);
   const savedPage = evidence
     ? documents.find((each) => each.id === evidence.documentId)?.web
@@ -396,7 +395,9 @@ function ClaimCard({
       savedPage.versions.find((each) => each.contentHash === evidence?.contentHash)?.fetchedAt ??
       savedPage.fetchedAt,
   };
-  const searchedFolder = !check.scope.widened && folderName !== null;
+  const saysNotFound =
+    state === "unsupported" && !differs && !decisionMissing && !fixes && !covers && !ownWorkings;
+  const checkedIn = decided || state === "unsupported";
   const cuttable = fixes && uncoveredOf(claim) !== null;
   const pastCap = shown.state === "not-checked" && shown.reason === "too-many";
   const reason =
@@ -497,9 +498,13 @@ function ClaimCard({
             >
               {ownWorkings
                 ? t("claim.unsupported.ownWorkings")
-                : t("claim.unsupported.notFound", {
-                    scope: searchedFolder && folderName ? folderName : t("composer.scope.all"),
-                  })}
+                : looked && looked.more > 0
+                  ? t("claim.unsupported.notFound.more", {
+                      scope: lookedIn,
+                      count: looked.more,
+                      total: looked.more + 1,
+                    })
+                  : t("claim.unsupported.notFound", { scope: lookedIn })}
             </p>
           )}
         </>
@@ -560,6 +565,17 @@ function ClaimCard({
           />
         </div>
       )}
+      {checkedIn && !saysNotFound && (
+        <p data-testid="claim-checked-in" className="citation-card-note">
+          {looked && looked.more > 0
+            ? t("claim.checkedIn.more", {
+                scope: lookedIn,
+                count: looked.more,
+                total: looked.more + 1,
+              })
+            : t("claim.checkedIn", { scope: lookedIn })}
+        </p>
+      )}
       {check.excluded.map((left) => {
         const document =
           left.reason === "own-file" && documents.find((each) => each.id === left.documentId);
@@ -619,7 +635,7 @@ function ClaimCard({
             {t("claim.cutUnsupported")}
           </button>
         )}
-        {state === "unsupported" && searchedFolder && !decisionMissing && (
+        {state === "unsupported" && looked !== null && !decisionMissing && (
           <button
             type="button"
             data-testid="claim-search-all"

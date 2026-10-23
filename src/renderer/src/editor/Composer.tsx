@@ -11,8 +11,10 @@ import {
 } from "react";
 import type * as Y from "yjs";
 import type { AnswerPlace, SearchScope } from "../../../core/api";
+import { setMindScope } from "../../../shared/mindScope";
 import { mindName } from "../../../shared/naming";
 import {
+  chosenScope,
   filingFolder,
   hasSearchScope,
   mindSearchScope,
@@ -27,7 +29,6 @@ import { ProblemLine } from "../components/ProblemLine";
 import { answerAskFrom } from "../components/TaskTray";
 import { TypingTextarea } from "../components/TypingTextarea";
 import {
-  chosenScope,
   composerKey,
   composerScope,
   type Draft,
@@ -221,7 +222,10 @@ export function Composer({
     return (own && mindName(own)) || t("mind.untitled");
   });
 
-  const update = (change: Partial<Draft>) => useComposer.getState().update(key, change);
+  const update = (change: Partial<Draft>) => {
+    useComposer.getState().update(key, change);
+    if (mind && change.scope !== undefined) setMindScope(mind.doc, change.scope);
+  };
   /** Keeps the scope the User chose; the Mind's own follows it to another Folder. */
   const updateScope = (next: SearchScope) => update({ scope: chosenScope(next, folderId) });
 

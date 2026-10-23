@@ -38,7 +38,7 @@ import { paperFor } from "../shared/printDocument";
 import { resolveProposals, restoreRevised } from "../shared/proposals";
 import { isCitableWork } from "../shared/references";
 import { RESEARCH_TASK } from "../shared/research";
-import { hasSearchScope, holdsText, mindSearchScope } from "../shared/searchScope";
+import { hasSearchScope, holdsText, mindSearchScope, type ScopeKind } from "../shared/searchScope";
 import { SPEAKER_ME, SPEAKER_THEM } from "../shared/speakers";
 import { wordFileOf } from "../shared/wordFiles";
 import { logActivity, silentLogger } from "./activityLog";
@@ -1143,6 +1143,12 @@ export function createCore(adapters: CoreAdapters): Core {
     );
     return hasSearchScope(searched) ? searched : null;
   };
+  const scopeItemName = (kind: ScopeKind, id: string): string | null =>
+    kind === "folder"
+      ? (library.folders().find((folder) => folder.id === id)?.name ?? null)
+      : kind === "tag"
+        ? (tags.list().find((tag) => tag.id === id)?.name ?? null)
+        : (documents.getMany([id])[0]?.name ?? null);
   // A Folder of the Library holds no file that isn't a Document, so it names the folders on disk
   // its Documents are in: a Linked folder filed into it whole names the Linked folder.
   const foldersOnDisk = (folderIds: readonly string[]) => {
@@ -1869,6 +1875,11 @@ export function createCore(adapters: CoreAdapters): Core {
     content,
     requireMind: (mindId) => writableMind(mindId).id,
     recheck: (input) => recheckCitation(documents, input),
+    askedScope: ({ from }) =>
+      from.artifactKind === "conversation"
+        ? conversations.askedScope(from.artifactId, from.anchor.messageId)
+        : null,
+    mindFolder: (mindId) => minds.get(mindId).folderId,
     recordAiUse: (inputs) => void aiUse.record(inputs),
     now: () => adapters.now?.() ?? new Date(),
   });
@@ -1910,8 +1921,7 @@ export function createCore(adapters: CoreAdapters): Core {
           })
         : null,
     language: () => settings.get().language,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     citationStyle: (mindId) => {
       const { style, textLanguage } = mindStyleAndText(mindId);
       return { style: citationStyles.resolve(style.style, textLanguage), textLanguage };
@@ -1957,8 +1967,7 @@ export function createCore(adapters: CoreAdapters): Core {
             quote,
           })
         : null,
-    folderName: (folderId) =>
-      library.folders().find((folder) => folder.id === folderId)?.name ?? null,
+    scopeItemName,
     localMode: () => embedding.localOnly(),
     language: () => settings.get().language,
     printer: adapters.printer ?? null,

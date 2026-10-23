@@ -30,6 +30,7 @@ import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
+import { carryAnswerScope } from "../../shared/mindScope";
 import { cutTitle, mindName } from "../../shared/naming";
 import {
   citedTables,
@@ -120,6 +121,8 @@ async function addToReadMind(added: AddedAnswer, mindId: string): Promise<boolea
   const ids = addInEditor(editor, checked, read.cursorInMind());
   if (!ids) return true;
   setOrigins(doc, ids, originOf(added));
+  const folderId = useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId;
+  carryAnswerScope(doc, questionOf(added.answer)?.scope ?? null, folderId ?? null);
   flashBlocks(editor, ids);
   const { model } = added.answer;
   // After the Mind's own update, so the record finds the Blocks there.

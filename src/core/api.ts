@@ -181,8 +181,12 @@ export interface CreateMindInput {
  *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
  *   which an older version's editor would strip, so the sentence would count
  *   and be checked again. Older content is version 25 content as it is.
+ * - 26: a check made in the Search scope the User set for the Mind (#1623):
+ *   `chosen` in the `claimCheck` mark's `scope`. An older version would read
+ *   it as made in the Mind's Folder or in every Document, and say so on its
+ *   card. Older content is version 26 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 25;
+export const CONTENT_SCHEMA_VERSION = 26;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -4865,15 +4869,17 @@ export interface CheckClaimInput {
 }
 
 /**
- * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document (`widened`)
- * because the User asked ("Search all Documents") or the Mind's Folder held
- * no Document (#1359). A Mind moved to another Folder since needs its
- * sentences checked again; one whose check was widened doesn't.
+ * Where a sentence's check searched: the Search scope the User set for the
+ * Mind (`chosen`, #1623), else the Mind's Folder (null for a Mind in none,
+ * which searches every Document), or every Document (`widened`) because the
+ * User asked ("Search all Documents") or the Mind's Folder held no Document
+ * (#1359). A Mind moved to another Folder since needs its sentences checked
+ * again, unless they were checked in its chosen scope or widened.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
   widened: boolean;
+  chosen?: SearchScope;
 }
 
 /**

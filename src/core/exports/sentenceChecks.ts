@@ -1,5 +1,6 @@
 import type * as Y from "yjs";
-import { claimCheckShown, coveredPart } from "../../shared/claimChecks";
+import { checkedScope, claimCheckShown, coveredPart } from "../../shared/claimChecks";
+import { type ScopeKind, scopeName } from "../../shared/searchScope";
 import { checkedSentences } from "../answers/checks/sentences";
 import type { CitationAttributes } from "../api";
 import type { FailedSentence } from "../mindText";
@@ -8,7 +9,8 @@ import type { FailedSentence } from "../mindText";
 export interface SentenceCheckContext {
   versions: ReadonlyMap<string, string>;
   folderId: string | null;
-  folderName(folderId: string): string | null;
+  /** A Folder's, Tag's or Document's name; null for one that isn't there. */
+  scopeItemName(kind: ScopeKind, id: string): string | null;
   /** A Passage's Document and Location, as a footnote says it. */
   sourceOf(passage: CitationAttributes): string;
 }
@@ -38,13 +40,13 @@ export function failedSentences(
             : null,
       });
     } else if (shown.state === "unsupported") {
-      const { evidence, scope } = check;
+      const { evidence } = check;
       const covers = evidence ? null : coveredPart(check.unsupported);
+      const looked = checkedScope(check.scope);
       failed.set(id, {
         id,
         check: "unsupported",
-        folder:
-          !scope.widened && scope.folderId !== null ? context.folderName(scope.folderId) : null,
+        scope: looked && scopeName(looked, context.scopeItemName),
         nearest: evidence?.quote
           ? { quote: evidence.quote, source: context.sourceOf(evidence) }
           : null,

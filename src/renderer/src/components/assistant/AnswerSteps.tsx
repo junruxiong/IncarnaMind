@@ -8,6 +8,7 @@ import type {
 import { shownDocumentName } from "../../../../shared/citations";
 import { citationLocation, formatLocation } from "../../../../shared/locations";
 import { mindName } from "../../../../shared/naming";
+import { NO_SCOPE } from "../../../../shared/searchScope";
 import {
   type FoldedLine,
   foldedLine,
@@ -30,7 +31,6 @@ import {
 import { useAnswers } from "../../answers";
 import { stepsScope } from "../../assistantContext";
 import { commandCallText } from "../../commandFacts";
-import { NO_SCOPE } from "../../composer";
 import { CallRow, SkillRow } from "../../editor/AnswerView";
 import { CheckMarkIcon, RegenerateSmallIcon } from "../../editor/icons";
 import { holdSteps, type ShownStep, type StepHold, takeOver } from "../../heldStep";

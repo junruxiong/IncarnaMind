@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { addedCouldChange, claimCheckShown } from "../../../shared/claimChecks";
 import { readMindCheck, sentenceKey, writeMindCheck } from "../../../shared/mindCheck";
 import { mindModelOf } from "../../../shared/mindModel";
+import { oneFolderOf } from "../../../shared/searchScope";
 import { isClaim } from "../../../shared/sentences";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import type {
@@ -194,7 +195,11 @@ export function createMindCheck(options: MindCheckOptions) {
         options.documents.joinedAfter(
           check.scope.documentIds,
           since,
-          widened ? null : check.marked.folderId,
+          widened
+            ? null
+            : check.marked.chosen
+              ? oneFolderOf(check.marked.chosen)
+              : check.marked.folderId,
         );
       joined.set(widened, known);
       return known;

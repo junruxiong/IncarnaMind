@@ -18,8 +18,10 @@ import {
   claimCheckActions,
   type EvidenceExclusion,
   type LeftOutDocument,
+  type SearchScope,
   type UnsupportedReason,
 } from "../core/api";
+import { folderScope, hasSearchScope, storedSearchScope } from "./searchScope";
 import { comparableSentence } from "./sentences";
 
 /** The most sentences with Citations one write of the assistant's has checked as it lands (#1111): past it, a long draft would wait minutes and cost dozens of requests. */
@@ -104,7 +106,18 @@ function unsupportedOf(value: unknown): UnsupportedReason | null {
 
 function scopeOf(value: unknown): ClaimCheckScope {
   if (!isRecord(value)) return { folderId: null, widened: false };
-  return { folderId: text(value.folderId), widened: value.widened === true };
+  const chosen = storedSearchScope(value.chosen);
+  return {
+    folderId: text(value.folderId),
+    widened: value.widened === true,
+    ...(chosen && hasSearchScope(chosen) && { chosen }),
+  };
+}
+
+/** Where a check looked: the Mind's chosen scope, else its Folder; null for every Document. */
+export function checkedScope(scope: ClaimCheckScope): SearchScope | null {
+  if (scope.chosen) return scope.chosen;
+  return !scope.widened && scope.folderId !== null ? folderScope(scope.folderId) : null;
 }
 
 /** A check's attributes as a mark holds them, or null when they aren't one's. Unknown values read safely. */
@@ -215,7 +228,7 @@ export function claimCheckShown(check: ClaimCheckAttributes, now: ClaimCheckNow)
       }
     }
   }
-  if (!check.scope.widened && check.scope.folderId !== now.folderId) {
+  if (!check.scope.widened && !check.scope.chosen && check.scope.folderId !== now.folderId) {
     return { state: "needs-recheck", why: "scope" };
   }
   if (check.state === "not-checked")

@@ -28,7 +28,8 @@ import type * as Y from "yjs";
 import { caseCitations } from "../../../shared/caseCitations";
 import { type LiveDocument, withShownName } from "../../../shared/citations";
 import { restsOn } from "../../../shared/claimChecks";
-import { oneFolderOf } from "../../../shared/searchScope";
+import { mindScopeIn } from "../../../shared/mindScope";
+import { folderScope, oneFolderOf } from "../../../shared/searchScope";
 import { judgesUnreliably } from "../../../shared/smallModel";
 import { recordCheckUnread } from "../../../shared/unreadFiles";
 import {
@@ -375,21 +376,20 @@ export function createChecks(options: ChecksOptions) {
   }
 
   /**
-   * Where a Mind's sentences are checked: its Folder, or every Document, never the file the
-   * Mind was imported from. The contradiction watch leaves out the same, so a sentence finds
-   * the same evidence alone or in a whole check.
+   * Where a Mind's sentences are checked: the scope the User set for it, else its Folder, or
+   * every Document, never the file the Mind was imported from. The contradiction watch leaves
+   * out the same, so a sentence finds the same evidence alone or in a whole check.
    */
   function scopeOf(mindId: string, allDocuments: boolean, checked: CheckedDocument = {}) {
     const own = options.mindFolder(mindId);
-    const wanted = allDocuments
-      ? null
-      : options.searchedScope(
-          own === null ? null : { folderIds: [own], tagIds: [], documentIds: [] },
-          mindId,
-        );
+    const chosen = content.readSettings(mindId, mindScopeIn);
+    const wanted = allDocuments ? null : options.searchedScope(chosen ?? folderScope(own), mindId);
     const folderId = oneFolderOf(wanted);
+    const inChosen = chosen !== null && wanted !== null && (own === null || folderId !== own);
     // An own Folder that holds no Document searches everything, as "Search all Documents" does.
-    const marked: ClaimCheckScope = { folderId: own, widened: allDocuments || own !== folderId };
+    const marked: ClaimCheckScope = inChosen
+      ? { folderId: own, widened: false, chosen: wanted }
+      : { folderId: own, widened: allDocuments || own !== folderId };
     const scope = options.evidence.scope(
       wanted && options.resolveScope(wanted),
       leftOutOf(mindId, checked),

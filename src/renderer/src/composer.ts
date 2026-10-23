@@ -2,14 +2,15 @@ import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
 import { create } from "zustand";
 import type { SearchScope } from "../../core/api";
-import { hasSearchScope } from "../../shared/searchScope";
+import { folderScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
 export interface Draft {
   text: string;
   /**
    * The Mind's Search scope once the User changed it (a chip removed, or one
-   * added with "@"): kept after asking. Empty: every Document. Null until
+   * added with "@"): kept after asking, and with the Mind (`setMindScope`), which
+   * this mirrors while the Mind is open. Empty: every Document. Null until
    * then: the Mind's own, which `mindSearchScope` turns into what is searched.
    */
   scope: SearchScope | null;
@@ -37,32 +38,11 @@ export const linesOf = (text: string) => text.split("\n").length;
 export const isLongPaste = (text: string) =>
   text.length > LONG_PASTE_CHARS || linesOf(text) > LONG_PASTE_LINES;
 
-export const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
-
 const EMPTY_DRAFT: Draft = { text: "", scope: null, skill: null, pastes: [] };
-
-export const folderScope = (folderId: string | null): SearchScope =>
-  folderId === null ? NO_SCOPE : { folderIds: [folderId], tagIds: [], documentIds: [] };
 
 /** The core decides what this searches (`mindSearchScope`), when the Question is asked. */
 export const composerScope = (draft: Draft, folderId: string | null): SearchScope =>
   draft.scope ?? folderScope(folderId);
-
-/**
- * The scope to keep for a Mind once the User changes it: null (the Mind's
- * own again) when it is the Mind's own, so it follows the Mind to another Folder.
- */
-export function chosenScope(scope: SearchScope, folderId: string | null): SearchScope | null {
-  const own = folderScope(folderId);
-  const same = (a: readonly string[], b: readonly string[]) =>
-    a.length === b.length && a.every((id, index) => id === b[index]);
-  const isOwn =
-    same(scope.folderIds, own.folderIds) &&
-    same(scope.tagIds, own.tagIds) &&
-    same(scope.documentIds, own.documentIds);
-  // A Folder's Mind with no scope left searches everything, by the User's choice: kept.
-  return isOwn ? null : hasSearchScope(scope) ? scope : NO_SCOPE;
-}
 
 interface ComposerState {
   /** By Mind id: switching tabs keeps what was typed in each Mind's composer. */

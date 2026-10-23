@@ -62,7 +62,7 @@ import {
   recordProposalRequest,
   resolveProposals,
 } from "../../shared/proposals";
-import { filingFolder, hasSearchScope, searchScopeOf } from "../../shared/searchScope";
+import { filingFolder, hasSearchScope, NO_SCOPE, searchScopeOf } from "../../shared/searchScope";
 import { setTextOrigin } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -395,8 +395,6 @@ const EMPTY_SCOPE_NOTE = `The User limited this Question to a Search scope (Fold
 
 const noDocumentsNote = (examples: boolean) =>
   `None of the User's own Documents can be searched yet${examples ? " (the examples IncarnaMind made aren't theirs)" : ""}, so there is nothing to search. ${NOTHING_TO_CITE} They can add Documents to the Library.`;
-
-const NO_SCOPE: SearchScope = { folderIds: [], tagIds: [], documentIds: [] };
 
 const changesAMind = (change: MindChange) =>
   change.created || change.revised === true || change.proposals > 0;

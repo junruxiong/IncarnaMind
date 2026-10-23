@@ -10,6 +10,8 @@ import { ANSWER_BLOCK, MIND_CONTENT_FIELD } from "../../../core/api";
 import { writingTime } from "../../../shared/blockTimes";
 import type { CitationForm } from "../../../shared/citationStyles";
 import { translate } from "../../../shared/i18n";
+import { setMindScope } from "../../../shared/mindScope";
+import { chosenScope } from "../../../shared/searchScope";
 import { checkSentences } from "../checks";
 import {
   citationForm,
@@ -22,7 +24,7 @@ import {
 import { noteHandle, readMindHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { startCompareDocuments, useComparisons } from "../comparisons";
-import { chosenScope, useComposer } from "../composer";
+import { useComposer } from "../composer";
 import { core } from "../core";
 import { AnswerView } from "../editor/AnswerView";
 import { holdsAiText } from "../editor/aiText";
@@ -106,6 +108,7 @@ import { setWritingPlace, WritingPlace } from "../editor/writingPlace";
 import { requestEdit, startEditing, TRANSLATE_LANGUAGES, useEdits } from "../editWithAi";
 import { useFirstOpen } from "../firstOpen";
 import { translateNow, useT } from "../i18n";
+import { useKeptScope } from "../keptScope";
 import { markSelectionAsMine } from "../markAsMine";
 import { useMeetingOf, useMeetings } from "../meetings";
 import { type OpenedCopy, openMindCopy } from "../mindCopies";
@@ -612,6 +615,7 @@ function MindEditorView({
     return () => document.removeEventListener("focusin", onFocusIn);
   }, [editor, dock]);
 
+  useKeptScope(mindId, doc);
   // The assistant's one composer asks in this Mind while it reads it (`Assistant`).
   const asksHere = dock !== null && !readOnly;
   useEffect(() => {
@@ -652,11 +656,13 @@ function MindEditorView({
     if (scope) {
       const folderId =
         useAppStore.getState().minds.find((each) => each.id === mindId)?.folderId ?? null;
-      useComposer.getState().update(mindId, { scope: chosenScope(scope, folderId) });
+      const kept = chosenScope(scope, folderId);
+      useComposer.getState().update(mindId, { scope: kept });
+      if (!readOnly) setMindScope(doc, kept);
     }
     useComposer.getState().requestFocus();
     useAppStore.getState().questionStarted();
-  }, [questionHere, composerShown, mindId]);
+  }, [questionHere, composerShown, mindId, readOnly, doc]);
 
   /** The hint's "press ⌘J…": the composer takes the focus, the Question to go on the hint's line. */
   const askOnLine = (pos: number) => {
