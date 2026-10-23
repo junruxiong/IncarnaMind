@@ -44,6 +44,7 @@ import {
 } from "../../../shared/charts";
 import type { PlacedFigure } from "../../../shared/figureMarkers";
 import { translate } from "../../../shared/i18n";
+import { holdsNothing } from "../../../shared/madeMind";
 import { looksLikeTable } from "../../../shared/markdownTables";
 import {
   changedParagraphs,
@@ -55,7 +56,6 @@ import {
 import { countFor, countText, mostlyCjk } from "../../../shared/wordCount";
 import {
   createElement,
-  holdsNothing,
   type NodeJSON,
   nodeOf,
   syncContent,

@@ -27,11 +27,13 @@ import {
   type BlockOrigin,
   type Conversation,
   type ConversationAnswer,
+  MIND_CONTENT_FIELD,
 } from "../../core/api";
 import { messageReference } from "../../core/references";
 import { asGenerated } from "../../shared/aiText";
 import type { NodeJSON } from "../../shared/blockJson";
 import { setOrigins } from "../../shared/blockOrigins";
+import { holdsNothing } from "../../shared/madeMind";
 import { cutTitle, mindName, numberedName } from "../../shared/naming";
 import {
   citedTables,
@@ -194,7 +196,8 @@ const putIn = (mindId: string, added: AddedAnswer) =>
  */
 async function addToNewMind(added: AddedAnswer): Promise<void> {
   const read = readMindHandle.current;
-  const empty = read && !read.editor.isDestroyed && read.editor.state.doc.textContent.trim() === "";
+  const empty =
+    read && !read.editor.isDestroyed && holdsNothing(read.doc.getXmlFragment(MIND_CONTENT_FIELD));
   if (read && empty && (await addToReadMind(added, read.mindId))) return;
   // A name another Mind has gets a number, so a second Mind of the same Answer reads apart.
   const given = added.conversation?.title ?? "";
