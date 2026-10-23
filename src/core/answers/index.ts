@@ -2328,11 +2328,7 @@ export function createAnswers(options: AnswersOptions) {
           ? "task-answer"
           : outside
             ? "outside-agent"
-            : routed?.kind === "write"
-              ? "assistant-write"
-              : routed?.kind === "edit"
-                ? "assistant-edit"
-                : "question";
+            : "question";
     inFlow(flow, run).catch((error: unknown) => {
       options.reportError(error);
       settleMinds();
