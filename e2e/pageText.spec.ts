@@ -5,6 +5,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   enterContent,
+  focusSettled,
   launchApp,
   motionSettled,
   newMind,
@@ -123,6 +124,7 @@ test("the page starts with its text; the ⋯ at its top right opens by click and
 
   // The selection's count of the whole.
   await window.getByTestId("mind-editor").locator("p").first().click();
+  await focusSettled(window, window.getByTestId("mind-editor"));
   await window.keyboard.press(process.platform === "darwin" ? "Meta+ArrowLeft" : "Home");
   await window.keyboard.press(`Shift+${WORD_KEY}+ArrowRight`);
   await window.keyboard.press(`Shift+${WORD_KEY}+ArrowRight`);
