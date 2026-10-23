@@ -2872,12 +2872,14 @@ export function createAnswers(options: AnswersOptions) {
      * offered the Documents' search and `cite` only, and kept nowhere: it
      * comes back once written, its Citations checked, as the Blocks a Mind
      * holds. The model is ready and allowed already. `signal` stops it.
+     * `onText` hears the words as they stream, before the Citations are checked.
      */
     answerCell(input: {
       context: QuestionContext;
       documentIds: string[];
       model: ChatModelChoice;
       signal: AbortSignal;
+      onText?(streamed: Pick<CellAnswer, "markdown" | "blocks">): void;
     }): Promise<CellAnswer> {
       const answerId = randomUUID();
       return new Promise<CellAnswer>((resolve) => {
@@ -2893,6 +2895,8 @@ export function createAnswers(options: AnswersOptions) {
                   citations: answer.citations(),
                   error: outcome.status === "failed" ? outcome.error : null,
                 });
+              } else if (answer.markdown !== "") {
+                input.onText?.({ markdown: answer.markdown, blocks: answer.blocks() });
               }
               return true;
             },

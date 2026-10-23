@@ -23,6 +23,7 @@ import { addAndProcess, sha256, waitForProcessing, writeSourceFile } from "../he
 import { connectToMind, type MindClient, typeInto } from "../helpers/mindClient";
 import { readMind, writeMind } from "../helpers/minds";
 import {
+  type GeneratedReply,
   type ModelCall,
   type ScriptedReply,
   scriptedModel,
@@ -364,6 +365,143 @@ describe("One claim check", () => {
       shown: { state: "supported" },
       check: { evidence: { quote: "Harbours publish the times of high water every year." } },
     });
+  });
+
+  describe("a contradiction the strict judgement doesn't uphold", () => {
+    const YEARLY = "Harbours publish the times of high water every year.";
+    const JANUARY = "Harbours publish the times of high water every year in January.";
+    const nearMiss = (strict: GeneratedReply, says?: string): Plan => ({
+      verdict: "contradicted",
+      quote: YEARLY,
+      says:
+        says ??
+        "Tides says they are published every year, not in which month.\nCovered: the yearly times of high water\nNot covered: January",
+      judgement: "conflict",
+      strict,
+    });
+    const strictAsked = (model: ReturnType<typeof checkingModel>) =>
+      model.doGenerateCalls.filter((call) => JSON.stringify(call.prompt).includes("Judgement:"))
+        .length;
+
+    test("shows the partly-supported card, quoting the Passage the check cited", async () => {
+      const model = checkingModel({
+        [JANUARY]: nearMiss({
+          text: "Sentence: in January\nQuote: not stated\nJudgement: neither",
+        }),
+      });
+      const { core, client, check } = await mindWith([JANUARY], model);
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]).toMatchObject({
+        shown: { state: "unsupported" },
+        check: {
+          evidence: null,
+          unsupported: {
+            covered: "the yearly times of high water",
+            uncovered: "January",
+            quoted: { documentName: "Tides", quote: YEARLY, check: "found" },
+          },
+        },
+      });
+      expect(strictAsked(model)).toBe(1);
+    });
+
+    test("asks once for the parts when the check named none", async () => {
+      const model = checkingModel({
+        [JANUARY]: {
+          ...nearMiss(
+            { text: "Sentence: in January\nQuote: not stated\nJudgement: neither" },
+            "Tides says they are published every year.",
+          ),
+          part: "Covered: the yearly times of high water\nNot covered: the month",
+        },
+      });
+      const { core, client, check } = await mindWith([JANUARY], model);
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]?.check.unsupported).toMatchObject({
+        covered: "the yearly times of high water",
+        uncovered: "the month",
+        quoted: { quote: YEARLY, check: "found" },
+      });
+      const asked = model.doGenerateCalls.filter((call) =>
+        JSON.stringify(call.prompt).includes("says more than words quoted"),
+      );
+      expect(asked).toHaveLength(1);
+    });
+
+    test("in Chinese, the card keeps the check's own phrases", async () => {
+      const contract = { name: "合同.md", contents: "乙方每周可在家工作两天，须事先与主管商定。" };
+      const days = "员工可以在每周一和周五居家办公。";
+      const model = checkingModel({
+        [days]: {
+          ...nearMiss(
+            {
+              text: "Sentence: on Mondays and Fridays (2 named days)\nQuote: not stated\nJudgement: neither",
+            },
+            "合同写的是每周可在家工作两天，没有写是哪两天。\nCovered: 每周居家办公两天\nNot covered: 每周一和周五",
+          ),
+          quote: "乙方每周可在家工作两天，须事先与主管商定。",
+        },
+      });
+      const { core, client, check } = await mindWith([days], model, [contract]);
+      await core.updateSettings({ user: { language: "zh-CN" } });
+
+      await check();
+
+      expect((await shownChecks(core, client))[0]).toMatchObject({
+        shown: { state: "unsupported" },
+        check: {
+          unsupported: {
+            covered: "每周居家办公两天",
+            uncovered: "每周一和周五",
+            quoted: { quote: "乙方每周可在家工作两天，须事先与主管商定。", check: "found" },
+          },
+        },
+      });
+    });
+
+    test.each(["conflict", "same"])(
+      "stays Contradicted when the strict judgement says %s: only a quote silent on the detail downgrades it",
+      async (word) => {
+        const { core, client, check } = await mindWith(
+          [JANUARY],
+          checkingModel({
+            [JANUARY]: nearMiss({
+              text: `Sentence: in January\nQuote: every year\nJudgement: ${word}`,
+            }),
+          }),
+        );
+
+        await check();
+
+        expect((await shownChecks(core, client))[0]).toMatchObject({
+          shown: { state: "contradicted" },
+          check: { evidence: { quote: YEARLY, check: "found" } },
+        });
+      },
+    );
+
+    test.each<{ reason: ClaimCheckAttributes["reason"]; strict: GeneratedReply }>([
+      { reason: "failed", strict: { error: { status: 500, message: "Overloaded" } } },
+      { reason: "malformed", strict: { text: "It depends on the month." } },
+    ])(
+      "$reason: a judgement that fails leaves the sentence not checked, with why",
+      async ({ reason, strict }) => {
+        const { core, client, check } = await mindWith(
+          [JANUARY],
+          checkingModel({ [JANUARY]: nearMiss(strict) }),
+        );
+
+        await check();
+
+        const [checked] = await shownChecks(core, client);
+        expect(checked?.shown).toEqual({ state: "not-checked", reason });
+        expect(checked?.check.evidence).toBeNull();
+      },
+    );
   });
 
   // protects=a sentence found unsupported keeps the nearest line the Run read when that line states another value for the same thing, and the verdict stays unsupported; fails_when=the line is lost, the verdict says contradicted, or an unrelated sentence gets a line; no_claim=how a real model words its judgement.
@@ -1052,7 +1190,7 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     await check();
 
     const [staff, plain] = await shownChecks(core, client);
-    expect(calls[0]?.system).toContain('"wider" when the sentence names the Passage\'s own party');
+    expect(calls[0]?.system).toContain("Scope: the sentence's own word for the Passage's party");
     expect(staff).toMatchObject({
       shown: { state: "unsupported" },
       check: {
@@ -1089,17 +1227,39 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     });
   });
 
-  test("stays supported when the reply names a wider group but not the parts", async () => {
-    const { core, client, check } = await mindWith(
-      [STAFF],
+  test("asks once for the parts when the reply names a wider group but none it can show", async () => {
+    const wider = (part: string) =>
       checkingModel({
-        [STAFF]: { verdict: "supported", quote: MOON, says: "Scope: wider\nTides says so." },
-      }),
-    );
+        [STAFF]: {
+          verdict: "supported",
+          quote: MOON,
+          says: "Scope: Staff, wider\nTides says so.",
+          judgement: "same",
+          part,
+        },
+      });
+    const asked = (model: ReturnType<typeof checkingModel>) =>
+      model.doGenerateCalls.filter((call) =>
+        JSON.stringify(call.prompt).includes("says more than words quoted"),
+      ).length;
 
+    const model = wider("Covered: spring tides at new and full moon\nNot covered: the staff");
+    const { core, client, check } = await mindWith([STAFF], model);
     await check();
+    expect((await shownChecks(core, client))[0]?.check.unsupported).toMatchObject({
+      covered: "spring tides at new and full moon",
+      uncovered: "the staff",
+      quoted: { quote: MOON, check: "found" },
+    });
+    expect(asked(model)).toBe(1);
 
-    expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
+    const none = wider("I can't say.");
+    const again = await mindWith([STAFF], none);
+    await again.check();
+    expect((await shownChecks(again.core, again.client))[0]?.shown).toEqual({
+      state: "supported",
+    });
+    expect(asked(none)).toBe(1);
   });
 
   test("a sentence with its own Citations asks for no quote: its card shows them", async () => {

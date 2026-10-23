@@ -39,6 +39,7 @@
     "eval:transcription": "vitest run --config eval/transcription/vitest.config.ts",
     "eval:speakers": "vitest run --config eval/speakers/vitest.config.ts",
     "eval:score": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON eval/score.ts",
+    "nightly:real-model": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/tsResolve.mjs scripts/nightlyRealModel.ts",
     "catalog:update": "node --import ./scripts/tsResolve.mjs scripts/catalogModels.ts",
     "styles:pack": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/tsResolve.mjs scripts/citationStylePack.ts",
     "dist": "electron-vite build && electron-builder --publish never",

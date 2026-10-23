@@ -5,7 +5,7 @@
 import { describe, expect, test } from "vitest";
 import { SETS } from "../../eval/repeats/cases";
 import { type Outcome, outcomeOf } from "../../eval/repeats/repeat";
-import { type RepeatRow, summarise } from "../../eval/repeats/score";
+import { type RepeatRow, report, summarise } from "../../eval/repeats/score";
 import type { ClaimCheckAttributes } from "../../src/core";
 
 const QUOTE = {
@@ -44,8 +44,10 @@ const mark = (change: Partial<ClaimCheckAttributes>): ClaimCheckAttributes => ({
   ...change,
 });
 
-const row = (repeat: number, key: string, outcome: Outcome): RepeatRow => {
-  const sentence = SETS[0]?.sentences.find((each) => each.key === key);
+const RUN = { commit: "abc", spent: 0, repeats: 1 };
+
+const row = (repeat: number, key: string, outcome: Outcome, set = "en"): RepeatRow => {
+  const sentence = SETS.find((each) => each.id === set)?.sentences.find((each) => each.key === key);
   if (!sentence) throw new Error(`No sentence ${key}`);
   return {
     repeat,
@@ -56,11 +58,12 @@ const row = (repeat: number, key: string, outcome: Outcome): RepeatRow => {
     uncovered: null,
     quote: null,
     failure: null,
-    set: "en",
+    set,
     model: "anthropic/claude-haiku-5-5",
     key,
     kind: sentence.kind,
     expected: sentence.expected,
+    ...(sentence.knownMiss !== undefined && { knownMiss: sentence.knownMiss }),
   };
 };
 
@@ -114,6 +117,54 @@ describe("the repeated checks", () => {
     ]);
     expect(summary?.misses.map((each) => [each.repeat, each.outcome])).toEqual([[2, "supported"]]);
     expect(summary?.falseSupported).toBe(0);
+  });
+
+  test("count a genuine conflict Supported as a false Supported, and a known miss apart", () => {
+    const [summary] = summarise([
+      row(1, "number", "contradicted", "en-conflicts"),
+      row(1, "place", "supported", "en-conflicts"),
+      row(1, "scope", "partly", "en-conflicts"),
+      row(1, "duty", "supported", "en-conflicts"),
+    ]);
+    expect(summary).toMatchObject({
+      falseSupported: 1,
+      conflicts: { contradicted: 1, checked: 3 },
+    });
+    expect(summary?.misses.map((each) => each.key)).toEqual(["place", "scope"]);
+    expect(summary?.known.map((each) => [each.key, each.knownMiss])).toEqual([["duty", 1668]]);
+    const shown = report(
+      summarise([
+        row(1, "duty", "supported", "en-conflicts"),
+        row(2, "duty", "contradicted", "en-conflicts"),
+        row(1, "employer", "partly", "en-conflicts"),
+      ]),
+      RUN,
+    );
+    expect(shown).toContain("### Known misses (#1668), outside the counts above");
+    expect(shown).toContain(
+      "- duty: 1 of 2 Contradicted, 1 Supported, 0 unsupported, 0 not checked or not named",
+    );
+    expect(shown).toContain(
+      "- employer: 0 of 1 Contradicted, 0 Supported, 1 unsupported, 0 not checked or not named",
+    );
+    expect(shown).not.toContain("Genuine conflicts Contradicted");
+  });
+
+  test("mark as known misses (#1668) the conflicts the first verdict or the claims miss today, and keep them in the sets", () => {
+    const known = (id: string) =>
+      SETS.find((each) => each.id === id)
+        ?.sentences.filter((each) => each.knownMiss === 1668)
+        .map((each) => each.key);
+    expect(known("en-conflicts")).toEqual(["employer", "duty"]);
+    expect(known("zh-conflicts")).toEqual(["negation", "payer", "landlord", "share"]);
+  });
+
+  test("expect every genuine conflict to be Contradicted, a dozen kinds in each language", () => {
+    for (const id of ["en-conflicts", "zh-conflicts"]) {
+      const sentences = SETS.find((each) => each.id === id)?.sentences ?? [];
+      expect(sentences.length).toBeGreaterThanOrEqual(12);
+      expect(new Set(sentences.map((each) => each.expected))).toEqual(new Set(["contradicted"]));
+    }
   });
 
   test("give every set's sentences a verdict to expect, the same keys in English and Chinese", () => {

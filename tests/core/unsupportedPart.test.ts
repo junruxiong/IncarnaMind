@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { readVerdict } from "../../src/core/answers/checks/prompt";
+import { readJudgement, readVerdict } from "../../src/core/answers/checks/prompt";
 
 describe("What a reply says its Citations cover and don't", () => {
   test("are the phrases on the lines after the reason, whatever the label's markup", () => {
@@ -148,6 +148,33 @@ describe("What a reply says its Citations cover and don't", () => {
         scope: "wider",
       },
     );
+  });
+
+  test("a reply's scope is the field's last word, after the sentence's own word for the party", () => {
+    const scopeOf = (line: string) =>
+      readVerdict(`Verdict: supported\n${line}\nIt says so.`)?.scope;
+    expect(scopeOf("Scope: Staff, wider")).toBe("wider");
+    expect(scopeOf("Scope: the Employee, same")).toBe("same");
+    expect(scopeOf("Scope: none, same")).toBe("same");
+    expect(scopeOf("**Scope:** 员工，wider")).toBe("wider");
+    expect(scopeOf("Scope: the same party, wider")).toBe("wider");
+    expect(scopeOf("Scope: Staff")).toBeNull();
+  });
+});
+
+describe("What a judgement of a sentence beside its quote says", () => {
+  test("is the last “Judgement:” line of a reply that writes the details first, else its first word", () => {
+    expect(
+      readJudgement(
+        "Sentence: on Mondays and Fridays (2 named days)\nQuote: not stated\nJudgement: neither",
+      ),
+    ).toBe("neither");
+    expect(readJudgement("Sentence: 30 days\nQuote: 27 days\n**Judgement:** Conflict")).toBe(
+      "conflict",
+    );
+    expect(readJudgement("same")).toBe("same");
+    expect(readJudgement("Sentence: 30 days\nQuote: 27 days")).toBeNull();
+    expect(readJudgement("It depends.")).toBeNull();
   });
 
   test("a supported reply's explanation is still its line", () => {

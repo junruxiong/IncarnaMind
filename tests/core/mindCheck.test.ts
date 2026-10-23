@@ -64,7 +64,7 @@ const runsIn = (calls: readonly ModelCall[]) =>
  * `billed`, one billed per token, each request reporting its tokens), and
  * every call to it kept.
  */
-async function setUp(billed?: { usage: ReportedUsage }) {
+async function setUp(billed?: { usage: ReportedUsage; judged?: ReportedUsage }) {
   const checks: ModelCall[] = [];
   const finds: GenerateCall[] = [];
   const model = scriptedModel(
@@ -75,7 +75,10 @@ async function setUp(billed?: { usage: ReportedUsage }) {
     {
       generate: (call) => {
         if (call.system.startsWith("You sort the sentences")) finds.push(call);
-        return checkGenerate(PLANS)(call);
+        const reply = checkGenerate(PLANS)(call);
+        return billed?.judged && "text" in reply && call.system.startsWith("Compare a sentence")
+          ? { ...reply, usage: billed.judged }
+          : reply;
       },
       ...(billed && { usage: billed.usage }),
     },
@@ -383,7 +386,12 @@ describe("Check this Mind", () => {
       inputTokens: { total: 8_260, noCache: 995, cacheRead: 2_903, cacheWrite: 4_362 },
       outputTokens: { total: 129, text: 129, reasoning: undefined },
     };
-    const { core, mindId, dataDir } = await setUp({ usage });
+    // A judgement of a sentence beside its quote is a short request of its own, as the recorded run's was.
+    const judged: ReportedUsage = {
+      inputTokens: { total: 867, noCache: 867, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 5, text: 5, reasoning: undefined },
+    };
+    const { core, mindId, dataDir } = await setUp({ usage, judged });
     const found = await core.findMindClaims(request(mindId, "changed", "sort"));
     if (found.kind !== "found") throw new Error(`No claims: ${found.kind}.`);
 
