@@ -448,6 +448,10 @@ for (const language of ["en", "zh-CN"] as const) {
     const title = step(window, "citation").getByTestId("first-open-step-do");
     const height = async () => Math.round((await card.boundingBox())?.height ?? 0);
     const before = await height();
+    const scrolled = () =>
+      window
+        .getByTestId("mind-pane")
+        .evaluate((element) => element.closest(".mind-scroller")?.scrollTop ?? 0);
     const away = () =>
       window.getByTestId("mind-pane").evaluate((element) => {
         element.closest(".mind-scroller")?.scrollTo({ top: 0 });
@@ -472,6 +476,14 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(await gettingStarted(window)).toMatchObject({ mistakeSeen: false });
     expect(await height()).toBe(before);
 
+    // With the ≠ already in view, going there again leaves the page where it is.
+    const settled = await scrolled();
+    expect(settled).toBeGreaterThan(0);
+    await title.evaluate((element) => element.focus({ preventScroll: true }));
+    await window.keyboard.press("Space");
+    await expect(mark).toBeFocused();
+    expect(await scrolled()).toBe(settled);
+
     await window.keyboard.press("Enter");
     await expect(window.getByTestId("claim-card")).toBeVisible();
     await expect(step(window, "citation")).toHaveAttribute("data-state", "done");
@@ -490,6 +502,25 @@ for (const language of ["en", "zh-CN"] as const) {
     await app.close();
   });
 }
+
+test("See a mistake it caught leaves the page where it is when the red ≠ is already in view (#1489)", async () => {
+  const { app, window } = await launchApp(dataDir, { examples: true, fakeChat: true });
+  await setWindowSize(app, window, 1440, 900);
+  const mark = window.getByTestId("mind-pane").getByTestId("claim-mark");
+  await expect(mark).toHaveAttribute("data-check", "contradicted");
+  const scroller = window
+    .getByTestId("mind-pane")
+    .locator("xpath=ancestor::*[contains(@class,'mind-scroller')]");
+  expect(
+    await mark.evaluate(
+      (element) => element.getBoundingClientRect().bottom <= globalThis.innerHeight,
+    ),
+  ).toBe(true);
+  await pointAndClick(window, step(window, "citation").getByTestId("first-open-step-do"));
+  await expect(mark).toBeFocused();
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0);
+  await app.close();
+});
 
 for (const language of ["en", "zh-CN"] as const) {
   test(`Ask a question ticks when the Answer arrives, never when the Question is only asked or its Answer fails, in ${language} (#1489)`, async () => {

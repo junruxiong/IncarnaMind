@@ -9,7 +9,7 @@ export function goToMistake(from: Element): void {
     .closest('[data-testid="mind-pane"]')
     ?.querySelector<HTMLElement>('[data-testid="claim-mark"][data-check="contradicted"]');
   if (!mark) return;
-  mark.scrollIntoView({ block: "center" });
+  mark.scrollIntoView({ block: "nearest" });
   quiet = mark;
   try {
     // The ring shows as it does for a key press, whatever moved the focus here.

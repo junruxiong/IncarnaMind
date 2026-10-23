@@ -191,8 +191,9 @@ const GETTING_STARTED_STEPS = [
   "hidden",
 ];
 
-// Progress kept before the ready Question (#123) has no `askedReady`, and before the mistake had its
-// own step no `mistakeSeen`; `get` reads either as not done.
+// Progress kept before the ready Question (#123) has no `askedReady`; `get` reads it as not asked.
+// Progress kept before the mistake had its own step has no `mistakeSeen`; `get` takes it from
+// `citationChecked`, so a first open already finished stays finished.
 const ADDED_LATER = ["askedReady", "mistakeSeen"];
 const isGettingStarted = (value: unknown): value is GettingStarted =>
   isRecord(value) &&
@@ -352,7 +353,12 @@ export function createSettings(
       "share-page": stored["share-page"] ?? SHARE_PAGE_DEFAULTS,
     };
     const device = read(db, deviceScope);
-    device.gettingStarted = { ...deviceScope.defaults.gettingStarted, ...device.gettingStarted };
+    const progress: Partial<GettingStarted> = device.gettingStarted;
+    device.gettingStarted = {
+      ...deviceScope.defaults.gettingStarted,
+      ...progress,
+      mistakeSeen: progress.mistakeSeen ?? progress.citationChecked ?? false,
+    };
     const language = resolveLanguage(user.language, systemLanguages());
     const author = user.authorName ?? systemUserName().trim();
     return { user, device, language, scriptSandbox, meetingAudio, author };
