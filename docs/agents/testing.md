@@ -4,7 +4,7 @@ Read this before writing code or tests, whether you are a person or a coding age
 
 **The bar:** a change is done when its pull request's checks are green on GitHub, not when the tests pass on your computer. CI runs on clean machines that are slower than yours and have a different screen. A test that passes only on your computer is a broken test.
 
-CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` doesn't run CI: `main` moves to exactly the group the queue tested. A run by hand (`workflow_dispatch`) is there when needed. A draft pull request runs only the light checks, which report as passed, until it is marked ready for review:
+CI (`.github/workflows/ci.yml`) runs three checks on every pull request (`pull_request`), and again on each group the merge queue tests on top of `main` (`merge_group`). A push to `main` doesn't run CI: `main` moves to exactly the group the queue tested. Every night at 01:30 UTC (`schedule`), and by hand (`workflow_dispatch`), the same jobs run on `main` whatever the last change was: a failing night shows its failed specs in the run's summary and is fixed before new work, like a red `main`. A draft pull request runs only the light checks, which report as passed, until it is marked ready for review:
 
 | Check | Where | What it runs |
 |---|---|---|
