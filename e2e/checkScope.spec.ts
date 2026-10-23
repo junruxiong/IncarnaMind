@@ -276,9 +276,16 @@ test("when the Mind's own scope holds nothing, the check says so and offers all 
   await expect(composer.getByTestId("composer-input")).toBeFocused();
   await window.keyboard.press("Escape");
 
+  // With no Document left at all, the selection offers to add some, and so does Check this Mind.
   await remove("Seabirds");
-  await findSupport();
-  const empty = (await checkCard(window)).getByTestId("checks-problem");
+  await slideSelect(window, line, "Harbours publish", { line, words: "spring." });
+  await expect(
+    window.getByTestId("selection-menu").getByTestId("selection-action-find-support"),
+  ).toContainText("添加文档后才能查找支持");
+  await window.keyboard.press("Escape");
+  const card = await checkCard(window);
+  await pointAndClick(window, card.getByTestId("badge-check-mind"));
+  const empty = card.getByTestId("checks-problem");
   await expect(empty).toContainText("没有可核对的文档：请先添加文档。");
   await expect(empty.getByTestId("checks-add-files")).toBeVisible();
   await app.close();
