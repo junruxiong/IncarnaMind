@@ -444,35 +444,44 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
         ? { covered: verdict.covered, uncovered: verdict.uncovered }
         : await partOf(request, quoted, session, signal, deps.language());
     // A general word for the Passage's own party is backed for that party only: the wider group
-    // is the part the Documents don't cover (DESIGN.md › Checks). The reply says so in a field of
-    // its own, so the verdict doesn't rest on the model weighing it.
-    if (verdict.verdict === "supported" && verdict.scope === "wider" && !byCalculation) {
+    // is the part the Documents don't cover (DESIGN.md › Checks). Another party, the parties the
+    // other way round, or must for may is no support at all: Claude Haiku 5.5 called "must pay"
+    // Supported against "may pay", then named the difference (#1668). The reply says each in a
+    // field of its own, so the verdict doesn't rest on the model weighing it.
+    const differs = verdict.roles === "differs";
+    if (
+      verdict.verdict === "supported" &&
+      (verdict.scope === "wider" || differs) &&
+      !byCalculation
+    ) {
       const part = await parts(evidence);
       if (signal.aborted) return notChecked("stopped");
       if (part.covered && part.uncovered)
         return unsupported({ reason: verdict.says, ...part }, evidence);
+      if (differs) return unsupported();
     }
     if (verdict.verdict === "contradicted") {
+      // The judgements disagree with the check: the card shows the part the quote states
+      // (DESIGN.md › Checks).
+      const inDoubt = async (): Promise<ClaimCheckResult> => {
+        if (byCalculation) return byCalculation;
+        if (unit) return unsupported(unit, evidence);
+        if (verdict.topic === "not found") return unsupported();
+        const part = await parts(evidence);
+        if (signal.aborted) return notChecked("stopped");
+        if (!part.covered || !part.uncovered) return unsupported();
+        // A judgement has just compared this very quote with the sentence.
+        const skipNearest = true;
+        return unsupported({ reason: verdict.says, ...part }, evidence, skipNearest);
+      };
       const first = await compare(request, evidence, session, signal, CONFIRM_INSTRUCTIONS);
       if (signal.aborted) return notChecked("stopped");
       if ("failed" in first) return failedCheck(first.failed);
       const judged = readJudgement(first.reply);
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
-      if (judged === "same") {
-        if (unit) return unsupported(unit, evidence);
-        return (
-          byCalculation ?? {
-            verdict: "supported",
-            evidence,
-            says: null,
-            unsupported: null,
-            calculation: null,
-            ...citedCase(evidence),
-            ...facts(),
-          }
-        );
-      }
+      // Never Supported: in one word it called the parties the other way round the same (#1668).
+      if (judged === "same") return inDoubt();
       // A false contradiction is the worst verdict a check gives, and one judgement upheld near
       // misses (#1647): the strict one finds the quote doesn't state the sentence's detail, and
       // then the card shows the part the quote states (DESIGN.md › Checks). Its "same" doesn't
@@ -482,17 +491,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       if ("failed" in strict) return failedCheck(strict.failed);
       const strictly = readJudgement(strict.reply);
       if (strictly === null) return notChecked("malformed");
-      if (strictly === "neither") {
-        if (byCalculation) return byCalculation;
-        if (unit) return unsupported(unit, evidence);
-        if (verdict.topic === "not found") return unsupported();
-        const part = await parts(evidence);
-        if (signal.aborted) return notChecked("stopped");
-        if (!part.covered || !part.uncovered) return unsupported();
-        // The strict judgement has just found this very quote silent on the detail.
-        const skipNearest = true;
-        return unsupported({ reason: verdict.says, ...part }, evidence, skipNearest);
-      }
+      if (strictly === "neither") return inDoubt();
     }
     return {
       verdict: verdict.verdict,

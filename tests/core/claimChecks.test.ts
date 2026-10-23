@@ -358,13 +358,71 @@ describe("One claim check", () => {
     await check();
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "unsupported" });
 
-    const same = { ...PLANS[CONTRADICTED], judgement: "same" as const };
+    const same = {
+      ...PLANS[CONTRADICTED],
+      judgement: "same" as const,
+      part: "Covered: the times of high water\nNot covered: every week",
+    };
     const again = await mindWith([CONTRADICTED], checkingModel({ [CONTRADICTED]: same }));
     await again.check();
     expect((await shownChecks(again.core, again.client))[0]).toMatchObject({
-      shown: { state: "supported" },
-      check: { evidence: { quote: "Harbours publish the times of high water every year." } },
+      shown: { state: "unsupported" },
+      check: {
+        unsupported: {
+          covered: "the times of high water",
+          uncovered: "every week",
+          quoted: { quote: "Harbours publish the times of high water every year." },
+        },
+      },
     });
+  });
+
+  test("a supported reply whose roles differ from the Passage's shows the partly-supported card", async () => {
+    const MUST = "Harbours must publish the times of high water every year.";
+    const YEARLY = "Harbours publish the times of high water every year.";
+    const calls: ModelCall[] = [];
+    const supported = (roles: string, lines = ""): Plan => ({
+      verdict: "supported",
+      quote: YEARLY,
+      says: `Roles: ${roles}\nTides says harbours publish them every year.${lines}`,
+      judgement: "neither",
+    });
+    const { core, client, check } = await mindWith(
+      [MUST, SUPPORTED],
+      checkingModel(
+        {
+          [MUST]: supported(
+            "Harbours must publish / Harbours publish, differs",
+            "\nCovered: the yearly times of high water\nNot covered: a duty to publish them",
+          ),
+          [SUPPORTED]: { ...(PLANS[SUPPORTED] as Plan), says: "Roles: none, same\nTides says so." },
+        },
+        calls,
+      ),
+    );
+
+    await check();
+
+    const [must, plain] = await shownChecks(core, client);
+    expect(calls[0]?.system).toContain("Roles: who does it, for or to whom");
+    expect(must).toMatchObject({
+      shown: { state: "unsupported" },
+      check: {
+        unsupported: {
+          covered: "the yearly times of high water",
+          uncovered: "a duty to publish them",
+          quoted: { quote: YEARLY, check: "found" },
+        },
+      },
+    });
+    expect(plain?.shown).toEqual({ state: "supported" });
+
+    const none = await mindWith(
+      [MUST],
+      checkingModel({ [MUST]: supported("Harbours must publish / Harbours publish, differs") }),
+    );
+    await none.check();
+    expect((await shownChecks(none.core, none.client))[0]?.shown).toEqual({ state: "unsupported" });
   });
 
   describe("a contradiction the strict judgement doesn't uphold", () => {

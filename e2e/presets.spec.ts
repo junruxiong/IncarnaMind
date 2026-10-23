@@ -42,8 +42,12 @@ test("each preset is a tile in Add a provider; Groq's page has its key page and 
     await settings.getByTestId("models-back").click();
     const form = await addProviderForm(settings, "groq");
     await expect(settings.getByTestId("provider-page-title")).toHaveText("Groq");
-    await expect(form.getByTestId("provider-model")).toHaveValue("openai/gpt-oss-120b");
+    // Under the model's line, and under its list once Change opens it.
     const reason = form.getByTestId("provider-model-reason");
+    await expect(form.getByTestId("provider-model-line")).toBeVisible();
+    await expect(reason).toHaveText("Not yet tested for checked Citations");
+    await form.getByTestId("provider-model-change").click();
+    await expect(form.getByTestId("provider-model")).toHaveValue("openai/gpt-oss-120b");
     await expect(reason).toHaveText("Not yet tested for checked Citations");
     await expect(form.getByTestId("provider-key-link")).toHaveAttribute(
       "href",
@@ -166,6 +170,9 @@ test("LM Studio and Unsloth Studio are On this computer in Add a provider, besid
     const saveButton = () => form.getByTestId("provider-use-key");
     await expect(form.getByTestId("provider-field")).toHaveValue("127.0.0.1:8888");
     await expect(form.getByTestId("local-server")).toContainText("Unsloth Studio is running");
+    // The first model the server lists, named on one line; Change opens the server's list.
+    await expect(form.getByTestId("provider-model-line")).toHaveText("Model: qwen3.5-4b · Change");
+    await form.getByTestId("provider-model-change").click();
     const model = form.getByTestId("provider-model");
     await expect(model.locator("option")).toHaveText([
       "qwen3.5-4b",

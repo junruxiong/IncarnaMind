@@ -134,7 +134,14 @@ export const en = {
   "library.model": "Model name",
   "library.server": "Local Ollama address",
   "library.pageImages": "Up to 3 PDF page images go to local Clef-Flash.",
-  "library.automatic": "Move new Documents into Folders automatically",
+  "library.automaticOff":
+    "Automatic tagging and sorting is now off for {service}, since it sent each Document’s name and an excerpt.",
+  "library.automaticOff.turnOn": "Turn it on in Settings",
+  "library.automaticOff.dismiss": "Got it",
+  "tagging.automatic.switch": "Tag and sort new Documents automatically",
+  "tagging.automatic.sends":
+    "Sends each new Document’s name and first passages, and your Folder and Tag names, to {service}.",
+  "tagging.automatic.local": "Runs on this computer.",
   "library.preset.research": "Research papers",
   "library.preset.research.description": "Academic papers, experiments and research methods.",
   "library.preset.reports": "Reports & presentations",
@@ -633,6 +640,7 @@ export const en = {
   "claim.state.needs-recheck": "Needs re-check",
   "claim.mark.label": "Sentence check: {state}",
   "claim.card.label": "Sentence check: {state}. {sentence}",
+  "claim.sentence": "“{sentence}”",
   "claim.addAsCitation": "Add as Citation",
   "claim.alreadyCited": "Already cited",
   "claim.alreadyCited.open": "Already cited: open citation {number}",
@@ -1427,6 +1435,16 @@ export const en = {
   "tagging.problem.unknown": "Couldn’t tag, and the AI model’s service didn’t say why.",
   "status.choose": "Choose…",
   "status.downloading": "Search model",
+  "status.downloadFailed.everySource": "Couldn’t download the search model from any source",
+  "modelSource.tryAgain": "Try again",
+  "modelSource.details": "Details",
+  "modelSource.failed": "{source}: {message}",
+  "modelSource.label": "Download source:",
+  "modelSource.auto": "Automatic",
+  "modelSource.huggingface": "Hugging Face",
+  "modelSource.modelscope": "ModelScope",
+  "modelSource.hfMirror": "hf-mirror.com",
+  "modelSource.copy": "IncarnaMind’s copy",
   "status.downloadFailed": "Search model download failed",
   "status.modelFailed": "Search model couldn’t start",
   "status.rerankDownloading": "Search setup",
@@ -1926,19 +1944,20 @@ export const en = {
   "providers.form.baseUrlHint":
     "For example https://api.deepseek.com/v1 or http://localhost:1234/v1",
   "providers.form.model": "Model",
+  "providers.form.modelLine": "Model: {model}",
+  "providers.form.change": "Change",
+  "providers.form.changeModel": "Change the model",
   "providers.form.test": "Test connection",
   "providers.form.testing": "Testing…",
   "providers.form.save": "Use this service",
   "providers.sendsLine": "Sends your questions and document text to {provider}.",
   "providers.sends.chat":
-    "your Questions, the Mind you’re in, matching passages with their Document names and pages, and the names of other Documents in scope",
+    "your Questions, the Mind you’re in or one you name, matching passages with their Document names and pages, the names, Folders and Tags of the Documents a Question or a command finds (up to 50), and a Meeting’s Transcript",
   "providers.sends.checks": "each sentence you check",
   "providers.sends.suggestions": "the paragraph you pause on, for writing suggestions",
   "providers.sends.edits": "the text you ask the assistant to change",
-  "providers.sends.tagging":
-    "each Document’s name, outline and short excerpts, with your Folder and Tag names, to tag and file it. Page images of scans go only if you allow them in Settings → Privacy",
-  "providers.sends.tagsOnSave": "Tagging starts when you save the key.",
-  "providers.sends.tagsOnConnect": "Tagging starts when you connect the server.",
+  "providers.sends.onRequest":
+    "Tagging and sorting your Documents send each Document’s name and an excerpt, with your Folder and Tag names, only when you turn them on or ask for them. Page images of scans go only if you allow them in Settings → Privacy.",
   "providers.form.saving": "Saving…",
   "providers.form.moreShort": "More…",
   "providers.form.whereKey": "Where do I find it?",
@@ -1964,6 +1983,7 @@ export const en = {
   "providers.form.needsServer": "Start {provider} first.",
   "providers.form.needsModel": "Choose a model first.",
   "providers.form.badKey": "This key isn’t valid for {provider}. Check it on {site}.",
+  "providers.form.badKeyAt": "{region}: {host} refused this key. Check it on {site}.",
 
   "providers.test.ok": "Connected: the provider answered.",
   "providers.test.auth": "The key was refused. Check that it is correct and still active.",
@@ -2184,6 +2204,11 @@ export const en = {
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks": "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
+  "consent.data.document-names":
+    "The names, Folders and Tags of the Documents and Minds a Question or a command finds (up to 50 Documents)",
+  "consent.data.other-minds": "Part of another Mind, when a Question names it",
+  "consent.data.live-transcript":
+    "A Meeting’s Transcript: the live lines while it records, and all of it to fill in the notes after Stop",
   "consent.data.passages":
     "passages from your Documents that match the Question, with their Documents’ names and pages",
   "consent.data.tool-results": "Results of Connectors and Skill scripts an Answer uses",
@@ -2366,9 +2391,6 @@ export const en = {
   "privacy.flows.stopped": "Stopped allowing {service}",
   "privacy.flows.stopFlow": "Stop allowing {flow}",
   "privacy.flows.allowFlow": "Allow {flow}",
-  "privacy.flows.chatMore": "Chat sends more than its line names.",
-  "privacy.flows.chatMore.details":
-    "Up to 50 Document names, another Mind a Question names, and the live Transcript while a Meeting records.",
   "privacy.flows.stoppedFlow": "Stopped allowing {flow} for {service}",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro": "These services receive nothing of yours.",
@@ -2390,6 +2412,15 @@ export const en = {
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.tip":
     "The speech model for meetings, and the models that tell speakers apart, are downloaded once, the first time a meeting is recorded or transcribed. Nothing you say is sent.",
+  "privacy.traffic.model-source-modelscope": "Built-in models from ModelScope",
+  "privacy.traffic.model-source-modelscope.tip":
+    "Before a built-in model downloads, IncarnaMind asks ModelScope and Hugging Face which answers first, to choose where to download from. Nothing of yours is sent.",
+  "privacy.traffic.model-source-hf-mirror": "Built-in models from hf-mirror.com",
+  "privacy.traffic.model-source-hf-mirror.tip":
+    "If Hugging Face can’t be reached, a built-in model’s files may come from this mirror of it. Nothing of yours is sent.",
+  "privacy.traffic.model-source-copy": "Built-in models from IncarnaMind’s copy",
+  "privacy.traffic.model-source-copy.tip":
+    "The last source for a built-in model’s files. Nothing of yours is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.tip":
     "When you choose a local model, Ollama downloads it from its library.",
@@ -4425,6 +4456,8 @@ export const en = {
   "meetings.transcript.savedIn": "Transcript saved in {folder}",
   "meetings.transcript.open": "Open transcript",
   "meetings.transcript.empty": "Nothing to transcribe, so no transcript was saved.",
+  "meetings.transcript.downloadFailed.everySource":
+    "Couldn’t download the speech model from any source",
   "meetings.transcript.downloadFailed": "The speech model couldn’t be downloaded: {message}",
   "meetings.transcript.engineStopped": "Transcription stopped.",
   "meetings.transcript.saveFailed": "The transcript couldn’t be saved: {message}",

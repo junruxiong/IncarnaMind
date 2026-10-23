@@ -7,10 +7,18 @@ import { shownDocumentName } from "../../../shared/citations";
 import { checkedScope, coveredPart, SENTENCES_CHECKED_AT_MOST } from "../../../shared/claimChecks";
 import { formulaText } from "../../../shared/formula";
 import { citationLocation, formatLocation, openKind } from "../../../shared/locations";
+import { comparableSentence } from "../../../shared/sentences";
 import { verificationOf } from "../../../shared/verification";
 import { savedPageSource } from "../../../shared/webSource";
 import { useAddedDocuments } from "../addedDocuments";
-import { addAsCitation, checkAgain, removeClaimMark } from "../checks";
+import {
+  addAsCitation,
+  checkAgain,
+  closeOpenClaim,
+  removeClaimMark,
+  setOpenClaim,
+  useChecks,
+} from "../checks";
 import { CountItLine } from "../components/CountItLine";
 import { MetaLine } from "../components/MetaLine";
 import { LineAction } from "../components/ProblemLine";
@@ -24,6 +32,8 @@ import { useScopeName } from "../scopeDocuments";
 import { useAppStore } from "../store";
 import { cutUnsupported, keepAsView, offersFixes, uncoveredOf } from "../unsupportedFixes";
 import { alreadyCitedBy, citationsOf } from "./alreadyCited";
+import { ClaimOutline } from "./ClaimOutline";
+import { useCardPlace } from "./checkPlace";
 import type { NumberedCitation } from "./citationNumbers";
 import { useReadableQuote } from "./citationScan";
 import type { ShownClaim } from "./claimChecks";
@@ -66,7 +76,8 @@ function searchTheWeb(mindId: string, sentence: string): void {
  * Citation (a plain tick when the sentence already cites it), an amber "!",
  * an outlined red "≠", a grey ring when it wasn't checked, ↻ when it needs a
  * re-check. Hovering or focusing it shows its card, and clicking keeps the
- * card until it is dismissed; Esc closes it.
+ * card until it is dismissed; Esc closes it. While the card is open, its
+ * sentence is outlined.
  */
 export function ClaimMark({
   claim,
@@ -87,9 +98,12 @@ export function ClaimMark({
   reveal: boolean;
   onRevealed(): void;
 }) {
+  const t = useT();
   const state = claim.shown.state;
-  const button = useRef<HTMLButtonElement>(null);
-  const [pinned, setPinned] = useState(false);
+  const id = claim.check.id;
+  const place = useCardPlace(mindId);
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  const pinned = useChecks((store) => store.openClaim[place] === id);
   const [peeking, setPeeking] = useState(false);
   const askers = useRef(new Set<string>());
   const timer = useRef<number | undefined>(undefined);
@@ -109,9 +123,9 @@ export function ClaimMark({
   const dismiss = useCallback(() => {
     askers.current.clear();
     window.clearTimeout(timer.current);
-    setPinned(false);
+    closeOpenClaim(place, id);
     setPeeking(false);
-  }, []);
+  }, [place, id]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const guided = useAppStore((app) => {
@@ -128,7 +142,7 @@ export function ClaimMark({
   return (
     <>
       <button
-        ref={button}
+        ref={setButton}
         type="button"
         data-testid="claim-mark"
         data-check={state}
@@ -149,7 +163,7 @@ export function ClaimMark({
         onFocus={() => hold("focus", true)}
         onBlur={() => hold("focus", false)}
         onClick={() => {
-          setPinned(true);
+          setOpenClaim(place, id);
           // Step 1 of the first open's steps, "See a mistake it caught".
           const { examples, updateGettingStarted } = useAppStore.getState();
           if (examples?.mindId === mindId) updateGettingStarted({ citationChecked: true });
@@ -161,14 +175,20 @@ export function ClaimMark({
         <ClaimMarkIcon state={state} className="margin-check-icon" />
         {plus && <span aria-hidden="true">+</span>}
       </button>
+      {open && button?.parentElement && (
+        <ClaimOutline editor={editor} id={id} layer={button.parentElement} />
+      )}
       {open &&
-        button.current &&
+        button &&
         createPortal(
           <Popover
-            anchor={button.current}
+            anchor={button}
             placement="bottom-end"
             onDismiss={dismiss}
-            aria-label={label}
+            aria-label={t("claim.card.label", {
+              state: t(`claim.state.${state}`),
+              sentence: comparableSentence(claim.sentence.text),
+            })}
             data-testid="claim-card"
             data-check={state}
             onPointerEnter={() => hold("card", true)}
@@ -296,20 +316,20 @@ function Working({ calculation, onOpen }: { calculation: ClaimCalculation; onOpe
 }
 
 /**
- * A sentence check's card: its state; for a Passage found, the Document and
- * Location with the quote washed in the state's colour, and Add as Citation
- * when it isn't cited yet, or "Already cited" with the Citation's own words
- * and number when the sentence has one on those words; for a contradiction, what the Document says; for a
- * figure worked out, its working and inputs; for nothing found, where it
- * looked, with Search all Documents, or, for a court decision no Document
- * holds, that it can't be checked here, with Remove the mark only; for a
- * sentence with a Citation, the part the Citation doesn't cover, with its
- * quote, and Cut the unsupported part, Search all Documents and Keep as my view
- * (#1111); for one without, the Passage the check quoted for part of it, with
- * what that part is and what it doesn't cover; otherwise why, with Check again.
- * A Passage from a saved web page names the page. Every verdict says where the
- * check looked (#1623). Documents IncarnaMind wrote that matched are named, with
- * Count it.
+ * A sentence check's card: its state and the sentence it is about; for a
+ * Passage found, the Document and Location with the quote washed in the
+ * state's colour, and Add as Citation when it isn't cited yet, or "Already
+ * cited" with the Citation's own words and number when the sentence has one on
+ * those words; for a contradiction, what the Document says; for a figure
+ * worked out, its working and inputs; for nothing found, where it looked, with
+ * Search all Documents, or, for a court decision no Document holds, that it
+ * can't be checked here, with Remove the mark only; for a sentence with a
+ * Citation, the part the Citation doesn't cover, with its quote, and Cut the
+ * unsupported part, Search all Documents and Keep as my view (#1111); for one
+ * without, the Passage the check quoted for part of it, with what that part is
+ * and what it doesn't cover; otherwise why, with Check again. A Passage from a
+ * saved web page names the page. Every verdict says where the check looked (#1623).
+ * Documents IncarnaMind wrote that matched are named, with Count it.
  */
 function ClaimCard({
   claim,
@@ -356,6 +376,7 @@ function ClaimCard({
   const [webOffShown, setWebOffShown] = useState(false);
   const { shown, check } = claim;
   const state = shown.state;
+  const sentence = comparableSentence(claim.sentence.text);
   const decided = state === "supported" || state === "contradicted";
   const calculation = decided ? check.calculation : null;
   // A figure that agrees can sit beside a Passage that contradicts the rest of the sentence.
@@ -416,6 +437,11 @@ function ClaimCard({
             {decisionMissing ? t("claim.courtDecision.title") : t(`claim.state.${state}`)}
           </span>
         </p>
+        {sentence && (
+          <p data-testid="claim-sentence" className="claim-card-sentence">
+            {t("claim.sentence", { sentence })}
+          </p>
+        )}
         {state === "contradicted" && check.says && (
           <p data-testid="claim-says" className="claim-card-says">
             {check.says}

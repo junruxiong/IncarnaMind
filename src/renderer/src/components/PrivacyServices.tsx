@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { RegisteredDataFlow } from "../../../core/api";
 import { formatDate } from "../../../shared/dates";
 import { core } from "../core";
@@ -49,8 +49,18 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
   const language = useLanguage();
   const [busy, setBusy] = useState(false);
   const item = useRef<HTMLLIElement>(null);
+  const stopping = useRef<string | null>(null);
   const { service, uses } = group;
   const decision = decisionOf(uses);
+
+  // A use nothing else holds goes from the list once stopped, and its button with it: the focus
+  // goes to the service's own button then, not to the page, whenever the list is updated.
+  useLayoutEffect(() => {
+    if (stopping.current === null || uses.some((use) => use.flow === stopping.current)) return;
+    stopping.current = null;
+    if (document.activeElement?.isConnected && document.activeElement !== document.body) return;
+    item.current?.querySelector<HTMLElement>('button[data-testid^="data-service-"]')?.focus();
+  });
 
   const run = async (action: () => Promise<void>) => {
     if (busy) return;
@@ -78,13 +88,8 @@ function ServiceItem({ group }: { group: ServiceGroup }) {
     });
   const stopUse = (use: ServiceUse) =>
     run(async () => {
+      stopping.current = use.flow;
       await revokeAll(service.id, [use]);
-      // A use nothing else holds goes from the list once stopped, and its button with it: the
-      // focus goes to the service's own button then, not to the page.
-      requestAnimationFrame(() => {
-        if (document.activeElement?.isConnected && document.activeElement !== document.body) return;
-        item.current?.querySelector<HTMLElement>('button[data-testid^="data-service-"]')?.focus();
-      });
       useUndo.getState().push({
         said: (words) =>
           words("privacy.flows.stoppedFlow", {

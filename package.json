@@ -32,6 +32,7 @@
     "eval:repeats": "vitest run --config eval/repeats/vitest.config.ts",
     "eval:scope": "vitest run --config eval/repeats/vitest.scope.config.ts",
     "eval:harness": "vitest run --config eval/harness/vitest.config.ts",
+    "eval:speed": "vitest run --config eval/speed/vitest.config.ts",
     "eval:word:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON eval/word/fetch-extended.ts",
     "eval:dump": "vitest run --config eval/dumps/vitest.config.ts",
     "eval:references": "vitest run --config eval/references/vitest.config.ts",
