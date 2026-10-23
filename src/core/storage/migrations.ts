@@ -1798,10 +1798,11 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
-    version: 103,
+    version: 104,
     description: "How long each AI request and local step took, by flow (#1624)",
     // This computer's own measurements, never synced: times in milliseconds from started_at,
-    // tokens, and names, never text. Rows past 30 days are removed at start.
+    // tokens, and names, never text. Rows past 30 days are deleted at start rather than marked
+    // with deleted_at: nothing else reads them, and a kept row would only grow the database.
     sql: `
       CREATE TABLE ai_timings (
         id TEXT PRIMARY KEY NOT NULL,
@@ -1824,8 +1825,7 @@ export const migrations: readonly Migration[] = [
         units REAL,
         outcome TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT
+        updated_at TEXT NOT NULL
       ) STRICT;
       CREATE INDEX ai_timings_by_started_at ON ai_timings (started_at);
     `,

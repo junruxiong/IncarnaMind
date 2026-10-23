@@ -10,12 +10,13 @@
  * INCARNAMIND_EVAL_SPEED_FLOWS: flow ids to run, comma-separated (default: all).
  * INCARNAMIND_EVAL_SPEED_LANGUAGES: "en", "zh-CN" or both (default: both).
  * INCARNAMIND_EVAL_SPEED_RUNS: how many times each flow runs per model and language (default: 3).
+ * INCARNAMIND_EVAL_SPEED_STOP_USD: stops before the next run once this much is spent (default: 12).
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { loadavg } from "node:os";
+import { cpus, loadavg, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vitest";
-import { chatProviderKinds, type SaveChatProviderInput } from "../../src/core";
+import { type Core, chatProviderKinds, type SaveChatProviderInput } from "../../src/core";
 import { queryDatabase } from "../../tests/helpers/core";
 import { reports } from "../everyday/asking";
 import { readConfig } from "../lib/config";
@@ -24,15 +25,22 @@ import { openLibrary } from "../lib/library";
 import { createLog } from "../lib/log";
 import { createWorkerCrossEncoder } from "../lib/rerank";
 import { FLOWS, type Language } from "./flows";
-import { type FlowRun, flowTable, requestTable, type TimingRecord } from "./report";
+import { type FlowRun, flowTable, percentile, requestTable, type TimingRecord } from "./report";
 
 const ROOT = resolve(__dirname, "../..");
+const CNY_PER_USD = 7.1;
 const env = (name: string) => process.env[`INCARNAMIND_EVAL_SPEED_${name}`]?.trim() || null;
 const list = (name: string) =>
   env(name)
     ?.split(",")
     .map((each) => each.trim())
     .filter(Boolean) ?? null;
+
+const spentUsd = async (core: Core) =>
+  (await core.getCostSummary()).spent.reduce((sum, each) => {
+    if (each.currency === "USD") return sum + each.amount;
+    return each.currency === "CNY" ? sum + each.amount / CNY_PER_USD : sum;
+  }, 0);
 
 function modelsAsked(): SaveChatProviderInput[] {
   return (list("MODELS") ?? []).map((each) => {
@@ -52,6 +60,14 @@ function modelsAsked(): SaveChatProviderInput[] {
   });
 }
 
+const NOT_MEASURED = [
+  "- DeepSeek: no key for this run.",
+  "- The ChatGPT plan: its sign-in is in a browser, which a run can't do; it is timed by hand in the app.",
+  "- Call help and the meeting notes after Stop: they need a Meeting's audio and transcription, which this runner doesn't record.",
+  "- Organize and Automatic Tags run in the background as Documents are added: their requests made during a run show under `tagging` and `classification` in the requests table.",
+  "- The first sign of the flows that aren't Answers is the first one the core sends; the window's own pending state, shown at once, isn't seen here.",
+];
+
 test("the speed of every AI flow, on each model and language", async () => {
   const log = createLog();
   const config = readConfig(ROOT);
@@ -61,7 +77,12 @@ test("the speed of every AI flow, on each model and language", async () => {
   const flows = wanted ? FLOWS.filter((flow) => wanted.includes(flow.id)) : FLOWS;
   const languages = (list("LANGUAGES") ?? ["en", "zh-CN"]) as Language[];
   const runs = Number(env("RUNS") ?? "3");
+  const stopUsd = Number(env("STOP_USD") ?? "12");
   const results: FlowRun[] = [];
+  const loads: number[] = [];
+  let stopped: string | null = null;
+  let indexing: TimingRecord[] = [];
+  let spent = 0;
   const library = await openLibrary({
     name: "speed",
     embedder: createWorkerEmbedder(),
@@ -73,24 +94,35 @@ test("the speed of every AI flow, on each model and language", async () => {
     log,
   });
   try {
-    const { core, dataDir } = library;
+    const { core, dataDir, documents } = library;
+    indexing = queryDatabase<TimingRecord>(
+      dataDir,
+      "SELECT * FROM ai_timings WHERE kind = 'local' ORDER BY started_at, rowid",
+    );
     // Setting the variables is the consent to send the requests and Passages to each model.
     core.on("consent.requested", (request) => void core.respondToConsent(request.requestId, true));
-    for (const model of models) {
+    matrix: for (const model of models) {
       const name = `${model.kind}/${model.modelId}`;
       await core.saveChatProvider(model);
+      await core.updateSettings({ user: { suggestWhileWriting: true } });
       for (const flow of flows) {
         for (const language of languages) {
           await core.updateSettings({ user: { language } });
           for (let run = 1; run <= runs; run++) {
+            spent = await spentUsd(core);
+            if (spent >= stopUsd) {
+              stopped = `Stopped at $${spent.toFixed(2)}, before ${name} · ${flow.id} · ${language} · ${run}.`;
+              log(stopped);
+              break matrix;
+            }
             const since = new Date().toISOString();
-            log(
-              `${name} · ${flow.id} · ${language} · ${run}/${runs} · load ${loadavg()[0]?.toFixed(1)}`,
-            );
+            const load = loadavg()[0] ?? 0;
+            loads.push(load);
+            log(`${name} · ${flow.id} · ${language} · ${run}/${runs} · load ${load.toFixed(1)}`);
             let signs: FlowRun["signs"] = null;
             let error: string | null = null;
             try {
-              signs = await flow.run({ core, language });
+              signs = await flow.run({ core, language, documents });
             } catch (thrown) {
               error = thrown instanceof Error ? thrown.message : String(thrown);
               log(`  failed: ${error}`);
@@ -105,13 +137,18 @@ test("the speed of every AI flow, on each model and language", async () => {
         }
       }
     }
+    spent = await spentUsd(core);
   } finally {
     await library.close();
   }
+  const cpu = cpus()[0]?.model ?? "unknown CPU";
+  const loadLine = `one-minute load ${Math.min(...loads).toFixed(1)} to ${Math.max(...loads).toFixed(1)}, median ${(percentile(loads, 0.5) ?? 0).toFixed(1)}`;
   const report = [
     "# Speed baseline",
     "",
     `${new Date().toISOString()} · ${runs} runs a flow, model and language · times are median / 90th percentile.`,
+    "",
+    `This computer: ${cpu}, ${cpus().length} cores, ${Math.round(totalmem() / 2 ** 30)} GB; ${loadLine}. Spent: $${spent.toFixed(2)}.${stopped ? ` ${stopped}` : ""}`,
     "",
     "## Flows",
     "",
@@ -121,6 +158,23 @@ test("the speed of every AI flow, on each model and language", async () => {
     "",
     requestTable(results),
     "",
+    "## Indexing the sample reports on this computer",
+    "",
+    requestTable([
+      {
+        flow: "index",
+        model: "local",
+        language: "en",
+        signs: null,
+        error: null,
+        records: indexing,
+      },
+    ]),
+    "",
+    "## Not measured here",
+    "",
+    ...NOT_MEASURED,
+    "",
   ].join("\n");
   console.log(report);
   const out = join(config.resultsDir, `speed-${new Date().toISOString().replace(/[:.]/g, "-")}`);
@@ -128,5 +182,5 @@ test("the speed of every AI flow, on each model and language", async () => {
   await writeFile(join(out, "report.md"), report);
   await writeFile(join(out, "report.json"), JSON.stringify(results, null, 2));
   log(`Report in ${out}`);
-  expect(results.length).toBe(models.length * flows.length * languages.length * runs);
+  if (!stopped) expect(results.length).toBe(models.length * flows.length * languages.length * runs);
 });

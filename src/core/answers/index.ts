@@ -2286,14 +2286,15 @@ export function createAnswers(options: AnswersOptions) {
       settleMinds();
       finish(outcome);
     };
+    // An Answer inside another flow (a comparison's cell, a check's sentence) is that flow's step.
     const flow = help
       ? "call-help"
-      : outside
-        ? "outside-agent"
-        : input.toolSet === "check"
-          ? "check"
-          : input.task
-            ? "task"
+      : input.toolSet === "check"
+        ? "check"
+        : input.task
+          ? "task-answer"
+          : outside
+            ? "outside-agent"
             : routed?.kind === "write"
               ? "assistant-write"
               : routed?.kind === "edit"
