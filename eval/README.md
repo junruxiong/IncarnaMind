@@ -481,7 +481,7 @@ The check now ignores letter case, reads "[^36]" as "[36]", and finds a quote wi
 
 ## Repeated checks
 
-`npm run eval:repeats` presses Check this Mind ten times on Minds nobody edits, with a real chat model and the app's real search, and counts each sentence's verdict and how its card shows it: how steady the verdicts are, false Supported, and "Nothing in your Documents says this" on a sentence a Document states (#1608). `npm run eval` doesn't run it. See `repeats/README.md`; `tests/eval/repeatsScoring.test.ts` checks its scoring.
+`npm run eval:repeats` presses Check this Mind ten times on Minds nobody edits, with a real chat model and the app's real search, and counts each sentence's verdict and how its card shows it: how steady the verdicts are, false Supported, and a sentence a Document states reported as not found (#1608). `npm run eval` doesn't run it. See `repeats/README.md`; `tests/eval/repeatsScoring.test.ts` checks its scoring.
 
 ## The hard tier
 

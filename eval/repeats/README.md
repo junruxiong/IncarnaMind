@@ -1,6 +1,6 @@
 # Repeated checks of an unchanged Mind
 
-`npm run eval:repeats` presses Check this Mind again and again on Minds nobody edits, with a real chat model and the app's real search, and counts what each sentence gets each time (#1608). A User who checks the same text twice expects the same verdicts, and never "Nothing in your Documents says this" for a sentence a Document states. Neither `npm test` nor CI runs it.
+`npm run eval:repeats` presses Check this Mind again and again on Minds nobody edits, with a real chat model and the app's real search, and counts what each sentence gets each time (#1608). A User who checks the same text twice expects the same verdicts, and never to be told a sentence a Document states wasn't found. Neither `npm test` nor CI runs it.
 
 ## What it does
 
@@ -11,9 +11,9 @@
    - **supported**, **contradicted**;
    - **partly**: unsupported, and the card says what the Documents support and what they don't, quoting the Passage the check read;
    - **differs**: unsupported, and the card quotes a line that says something different;
-   - **nothing**: unsupported, and the card says nothing in the Documents says it;
+   - **not found**: unsupported, and the card says "I didn't find this in “{scope}”";
    - **not checked**, with why.
-5. The report: per set and model, each sentence's outcomes and how many checks gave its most frequent verdict (partly, differs and nothing are one verdict, unsupported), false Supported, "nothing" on a sentence the Documents state, how many checks gave other verdicts than the check before, and every result that isn't the expected verdict in the check's own words. It goes into `eval/results/<start time>-repeats/` (`report.md`, `report.json`).
+5. The report: per set and model, each sentence's outcomes and how many checks gave its most frequent verdict (partly, differs and not found are one verdict, unsupported), false Supported, not found on a sentence the Documents state, how many checks gave other verdicts than the check before, and every result that isn't the expected verdict in the check's own words. It goes into `eval/results/<start time>-repeats/` (`report.md`, `report.json`).
 
 The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core, so other sets can use it with their own Documents.
 
@@ -45,25 +45,28 @@ npm run eval:repeats
 
 ## Results
 
-### 2026-10-22: before and after the partly-supported card for a sentence with no Citation
+### 2026-10-23: the card says where it looked, and a part covered needs the same claim
 
-Before: `main` at bf47b4631, measured with this evaluation's first draft on the same Documents, Library and search (no `zh-control` yet). After: the change that keeps the Passage a check quoted for the part it covers and shows the partly-supported card. The verdicts are the model's in both; the change is what an Unsupported card says. Counts are of 10 checks; S supported, C contradicted, U unsupported (partly / nothing / differs after).
+Three versions on the same Documents, Library and search: `main` at bf47b4631 ("main"); the first partly-supported card for a sentence with no Citation ("first"); and this version ("now"), where the check's reply says in fields of its own whether a Passage is about the sentence's topic (`Topic: found` or `not found`) and whether the sentence names the Passage's party in general words (`Scope: same` or `wider`). A Supported reply with `Scope: wider` shows the partly-supported card; an Unsupported one with `Topic: not found` names no part covered, and its card says "I didn't find this in “{scope}”". Counts are of 10 checks; S supported, C contradicted, P the partly-supported card, N not found, D a line that says something different. `zh-control` didn't run on `main`.
 
-| Set · sentence | Haiku 5.5 before | Haiku 5.5 after | Sonnet 5.5 before | Sonnet 5.5 after |
-|---|---|---|---|---|
-| en · staff-home | 10 S | 9 S, 1 U nothing | 5 S, 5 U nothing | 8 S, 2 U partly |
-| en · home-days (near miss) | 5 U nothing, 5 C | 4 U differs, 6 C | 10 U nothing | 10 U partly |
-| en · car (absent) | 10 U nothing | 9 U nothing, 1 U partly | 10 U nothing | 10 U nothing |
-| en-control · staff-home | not run | 10 S | 8 S, 2 U nothing | 9 S, 1 U partly |
-| zh · staff-home | 9 S, 1 U nothing | 9 S, 1 U partly | 9 S, 1 U nothing | 10 S |
-| zh · home-days (near miss) | 10 U nothing | 10 U partly | 10 U nothing | 10 U partly |
-| zh · car (absent) | 10 U nothing | 9 U nothing, 1 U partly | 10 U nothing | 9 U nothing, 1 U partly |
-| zh-control · staff-home | not run | 9 S, 1 U partly | not run | 8 S, 2 U partly |
-| zh-control · employees-home | not run | 9 S, 1 U differs | not run | 10 S |
+| Set · sentence | Haiku main | Haiku first | Haiku now | Sonnet main | Sonnet first | Sonnet now |
+|---|---|---|---|---|---|---|
+| en · staff-home ("Staff…") | 10 S | 9 S, 1 N | 9 P, 1 S | 5 S, 5 N | 8 S, 2 P | 8 P, 2 S |
+| en · car allowance (absent) | 10 N | 9 N, 1 P | 10 N | 10 N | 10 N | 10 N |
+| en · holiday (wrong figure) | 10 C | 10 C | 10 C | 10 C | 10 C | 10 C |
+| en · near miss (Mondays and Fridays) | 5 D, 5 C | 4 D, 6 C | 5 D, 5 C | 10 N | 10 P | 10 P |
+| en-control · staff-home | not run | 10 S | 5 P, 4 S, 1 N | 8 S, 2 N | 9 S, 1 P | 10 P |
+| en-control · employees-home | not run | 10 S | 9 P, 1 not checked | 10 S | 10 S | 10 P |
+| zh · staff-home (员工…) | 9 S, 1 N | 9 S, 1 P | 9 P, 1 S | 9 S, 1 N | 10 S | 10 P |
+| zh · notice (paraphrase) | 10 S | 10 S | 8 S, 2 P | 10 S | 10 S | 10 S |
+| zh · car allowance (absent) | 10 N | 9 N, 1 P | 10 N | 10 N | 9 N, 1 P | 10 N |
+| zh · holiday (wrong figure) | 10 C | 10 C | 10 C | 10 C | 10 C | 10 C |
+| zh · near miss (每周一和周五) | 10 N | 10 P | 5 P, 5 C | 10 N | 10 P | 10 P |
+| zh-control · staff-home | not run | 9 S, 1 P | 10 P | not run | 8 S, 2 P | 10 P |
+| zh-control · employees-home | not run | 9 S, 1 D | 10 P | not run | 10 S | 10 P |
 
-Every other sentence gave the same verdict in all its checks, before and after: notice, the paraphrases and the agreement's own words Supported, the wrong holiday figure Contradicted. No check gave a false Supported.
+Every other sentence (the English notice, the agreement's own words, the controls' paraphrase and name) was Supported in every check of every version. No check gave a false Supported.
 
-- **"Nothing in your Documents says this" on a sentence the agreement states:** 9 checks before (Sonnet 8, Haiku 1), each with the clause quoted in the check's own reason; 1 after, with two more sets run (Haiku, English, a reply that named no covered part).
-- **What still varies:** whether "Staff" (员工) counts as the agreement's Employee. Sonnet 5.5 said no in 2 of 10 English checks after (5 of 10 before), so two checks of the unchanged Mind still disagree; the cards now say what the agreement supports instead of nothing.
-- **A looser card:** on 3 of 40 checks of the absent car allowance the model named the pay clause as covered, and the card shows "Your Documents support the employee's pay terms, not the parts about car allowance…" with the salary line, where it said "Nothing…".
-- **Spend:** $0.09 on Haiku 5.5 and $2.16 on Sonnet 5.5 after; $1.78 for the before counts and their diagnosis.
+- **Not found, for a sentence the agreement states:** 9 checks on `main` (Sonnet 8, Haiku 1), 1 in the first version, 1 now (Haiku, English control).
+- **Misses now, all on Haiku 5.5:** the English control's "Staff…" gets the partly card in 5 of 10 checks; the Chinese notice paraphrase gets a partly card in 2 of 10, where it was Supported in every check; the near miss is Contradicted in 5 of 10 in English, as on `main`, and in 5 of 10 in Chinese, where it was never Contradicted before.
+- **Spend:** `main` $1.78 (with the diagnosis), the first version $2.26, now $2.28 (Haiku 5.5 $0.22, Sonnet 5.5 $2.06).
