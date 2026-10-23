@@ -87,7 +87,7 @@ async function setUp(language: Language) {
             .flatMap((result) => shownPassages(result.text).map((each) => each.document)),
         ),
     );
-  return { core, words, own, other, calls, handed, sources };
+  return { core, dataDir, words, own, other, calls, handed };
 }
 
 async function mindWith(core: Core, line: string, folderId: string | null = null) {
@@ -112,7 +112,7 @@ async function checkOf(client: MindClient) {
 describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) => {
   // protects=a Mind whose scope the User set to one Document is checked against that Document only, in no Folder, in a Folder holding others, and after a restart; fails_when=the check searches the Folder or every Document, or the scope is gone after a restart; no_claim=what the model then decides.
   test("with a chosen scope of one Document looks only there, unfiled or filed, and the scope is kept with the Mind", async () => {
-    const { core, words, own, other, calls, handed } = await setUp(language);
+    const { core, dataDir, words, own, other, calls, handed } = await setUp(language);
     const { mindId, client } = await mindWith(core, words.own.line);
     setMindScope(client.doc, documentsScope(own.id));
     await client.settled();
@@ -142,8 +142,9 @@ describe.each(["en", "zh-CN"] as const)("A check from a Mind (%s)", (language) =
     expect([...handed(before)]).toEqual([words.own.name]);
     expect(checkedScope((await checkOf(client)).check.scope)).toEqual(documentsScope(own.id));
 
-    const another = await connectToMind(core, mindId);
-    expect(mindScopeOf(another.doc)).toEqual(documentsScope(own.id));
+    core.close();
+    const restarted = await connectToMind(startCore(dataDir), mindId);
+    expect(mindScopeOf(restarted.doc)).toEqual(documentsScope(own.id));
   });
 
   // protects=a Mind with no scope of its own is checked against its Folder while it holds a Document, and against every Document unfiled, with the mark saying which; fails_when=the Folder's Mind reads the other agreement, or the unfiled one is marked as checked in a Folder; no_claim=a Folder that holds no Document (#1359's tests).
