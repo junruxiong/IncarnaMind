@@ -48,6 +48,11 @@ export function useHandle<T>(handle: Handle<T>, value: T): void {
   }, [handle, value]);
 }
 
+/** The words selected in a Document's viewer (#101), while they are: what its selection menu does with them. */
+export const viewerSelectionHandle: Handle<{ addToNote(): void; copy(): void }> = {
+  current: null,
+};
+
 /** The Transcript in view (#139): the line the User is on, which "Add transcript line to note" adds. */
 export const transcriptHandle: Handle<{ hasLine(): boolean; addLine(): Promise<void> }> = {
   current: null,

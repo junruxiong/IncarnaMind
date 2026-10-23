@@ -1687,6 +1687,23 @@ export interface CitationRecheck {
   location: CitationLocation | null;
 }
 
+/** Words the User selected in a Document's viewer, on one of its Units (`CoreApi.citeSelection`). */
+export interface SelectedPart {
+  /** The Unit they are on, from 1: a PDF's page. Null where the viewer doesn't know it. */
+  unit: number | null;
+  /** As the viewer shows them, a line break between lines. */
+  text: string;
+  /** How many of the Unit's lines with text come before and after them: a running header or footer sits at a page's edge. */
+  linesBefore?: number;
+  linesAfter?: number;
+}
+
+/** A Citation of what the User selected: the attributes to store on its node, and the quote it cites. */
+export interface CitedSelection extends CitationRecheck {
+  /** The words selected, read as words (`readableQuote`), without a running header or footer selected with them. */
+  quote: string;
+}
+
 /**
  * Text kept of a Document that left the index with its Linked folder: the
  * Units of one version that Citations pointed to when the folder was
@@ -9091,6 +9108,12 @@ export interface CoreApi {
    */
   recheckCitation(input: RecheckCitationInput): Promise<CitationRecheck>;
   /**
+   * Cites words the User selected in a Document's viewer (#101), given in the
+   * order selected, one part for each Unit: checked against the current
+   * version's text of those Units only, never found somewhere else.
+   */
+  citeSelection(input: { documentId: string; parts: SelectedPart[] }): Promise<CitedSelection>;
+  /**
    * Searches the Passages of live Documents, best match first: hybrid
    * (keyword and vector) search by default, which is keyword search while
    * embeddings are off, over every Document or only the given ones. A
@@ -10392,6 +10415,7 @@ const methods: Record<CoreApiMethod, true> = {
   setLinkedFolderPaused: true,
   downloadOnlineOnlyFiles: true,
   recheckCitation: true,
+  citeSelection: true,
   searchPassages: true,
   searchEvidence: true,
   setCountedAsEvidence: true,

@@ -5,6 +5,7 @@ import { useT } from "../../i18n";
 import { useAppStore, type ViewerTarget } from "../../store";
 import { DocumentView } from "../../viewer/DocumentView";
 import { type PlaceMemory, PlaceMemoryContext, type ViewPlace } from "../../viewer/place";
+import { SelectionMenu } from "../../viewer/SelectionMenu";
 import { type ViewerFrame, ViewerFrameContext, ViewerHeader } from "../../viewer/ViewerHeader";
 import { DocumentRemoved } from "../../viewer/ViewerMessage";
 
@@ -180,6 +181,7 @@ export function DocumentTab({ tab }: { tab: LayoutTab }) {
               <DocumentView document={document} target={target} />
             </Suspense>
           )}
+          {document && <SelectionMenu document={document} section={section} />}
         </PlaceMemoryContext.Provider>
       </ViewerFrameContext.Provider>
     </section>
