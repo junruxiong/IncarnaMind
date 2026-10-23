@@ -46,7 +46,7 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-test("New Mind fills the empty Mind in front, then makes new Minds named by the Answer's first line, numbered apart, its Citation checked and nothing left to accept", async () => {
+test("New Mind isn't offered in the empty Mind in front, where Add to note names it; with text in front it makes new Minds named by the Answer's first line, numbered apart, its Citation checked and nothing left to accept", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -60,8 +60,9 @@ test("New Mind fills the empty Mind in front, then makes new Minds named by the 
 
   const answer = await askInAssistant(window, "When do spring tides happen?");
   const button = answer.getByTestId("answer-new-mind");
-  await expect(button).toHaveText("New Mind");
-  await pointAndClick(window, button);
+  // It would fill this same empty Mind, as the named Add to note does.
+  await expect(button).toHaveCount(0);
+  await pointAndClick(window, answer.getByTestId("answer-add"));
   await expect(editor.getByTestId("citation").first()).toHaveAttribute("data-check", "found");
   await expect(tabs).toHaveCount(1);
   await expect(window.getByTestId("proposals-bar")).toHaveCount(0);
@@ -85,7 +86,7 @@ test("New Mind fills the empty Mind in front, then makes new Minds named by the 
   await expect(button).toHaveText("新建 Mind");
 });
 
-test("by the keyboard: Tab reaches New Mind and Enter fills the empty Mind in front, its Undo taking the focus and the fill back, as ⌘Z does; with text in front, or only a divider, it makes a new Mind beside it, which Delete takes back; ⌘K finds it by the button's name", async () => {
+test("by the keyboard: Tab reaches New Mind, which an empty Mind in front doesn't offer; with text in front, or only a divider, Enter makes a new Mind beside it, which Delete takes back; ⌘K finds it by the button's name", async () => {
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await dismissChatSetup(window);
   await useLocalChatModel(window);
@@ -98,34 +99,12 @@ test("by the keyboard: Tab reaches New Mind and Enter fills the empty Mind in fr
   const tabs = window.getByTestId("mind-tab");
   const answer = await askInAssistant(window, "When do spring tides happen?");
   const button = answer.getByTestId("answer-new-mind");
+  await expect(button).toHaveCount(0);
 
-  // After Add to note ▾, Tab reaches New Mind.
-  await answer.getByTestId("answer-add-to").focus();
-  await window.keyboard.press("Tab");
-  await expect(button).toBeFocused();
-  await window.keyboard.press("Enter");
-  const added = answer.getByTestId("answer-added");
-  await expect(added.getByRole("status")).toHaveText(/^Added to “.+”$/);
-  await expect(citations.first()).toHaveAttribute("data-check", "found");
-  await expect(tabs).toHaveCount(1);
-  const undo = answer.getByTestId("answer-added-undo");
-  await expect(undo).toBeFocused();
-  // Enter on its Undo, where the focus went, brings back the empty Mind.
-  await window.keyboard.press("Enter");
-  await expect(citations).toHaveCount(0);
-  await expect(editor).toHaveText("");
-
-  // ⌘Z takes the fill back too.
-  await pointAndClick(window, button);
-  await expect(citations.first()).toHaveAttribute("data-check", "found");
-  await expect(undo).toBeFocused();
-  await window.keyboard.press("ControlOrMeta+z");
-  await expect(citations).toHaveCount(0);
-  await expect(editor).toHaveText("");
-
-  // With text in front, Enter makes a new Mind beside it.
+  // With text in front, Enter makes a new Mind beside it, after Add to note ▾ in the Tab order.
   await editor.click();
   await window.keyboard.type("Harbour notes");
+  await expect(button).toHaveText("New Mind");
   await answer.getByTestId("answer-add-to").focus();
   await window.keyboard.press("Tab");
   await expect(button).toBeFocused();
