@@ -22,9 +22,10 @@ import { elements, parseXml, type XmlElement } from "../../src/core/documents/fo
 import { quitCopyOptions } from "../../src/shared/exportOptions";
 import { setMindScope } from "../../src/shared/mindScope";
 import { recordProposalRequest } from "../../src/shared/proposals";
+import { folderScope } from "../../src/shared/searchScope";
 import { wordFileOf, wordImportProgressOf } from "../../src/shared/wordFiles";
 import { createTempDataFolder, startCore } from "../helpers/core";
-import { addAndProcess, writeSourceFile } from "../helpers/documents";
+import { addAndProcess, linkAndProcess, writeSourceFile } from "../helpers/documents";
 import { acceptedParagraphs, textOf, unzip } from "../helpers/docx";
 import { connectToMind, type MindClient } from "../helpers/mindClient";
 import { editMind } from "../helpers/minds";
@@ -818,6 +819,41 @@ describe("sentences whose check isn't good, in an imported file (#900)", () => {
       expect(inBoth).not.toContain(one);
     },
   );
+
+  // protects=a Linked folder chosen as the Mind's scope is named by its own name in the Word comment, and a Folder deleted since still reads as deleted; fails_when=the Linked folder reads as a deleted Folder; no_claim=the card, which names it from the window's Folders.
+  test("a sentence checked in a Linked folder chosen as the scope names that folder, and one in a Folder since deleted says it was deleted", async () => {
+    const { core, mindId, client } = await setUp({
+      body: paragraph("Leave is 30 days.") + paragraph("Margins widened in 2026."),
+    });
+    const notes = join(await createTempDataFolder(), "Notes");
+    await writeSourceFile(notes, "Holiday.md", "# Holiday\n\nLeave is 25 days.\n");
+    await linkAndProcess(core, notes);
+    const linked = (await core.listFolders()).find((folder) => folder.name === "Notes");
+    if (!linked) throw new Error("The Linked folder has no Folder.");
+    const gone = await core.createLibraryGroup({ name: "Old harbours", description: "" });
+    const inFolder = (value: string, folderId: string) => {
+      const scope = { folderId: null, widened: false, chosen: folderScope(folderId) };
+      return checked(value, "unsupported", null, null, { scope });
+    };
+    editMind(client, ([first, second]) => [
+      { ...(first as JSONContent), content: [inFolder("Leave is 30 days.", linked.id)] },
+      { ...(second as JSONContent), content: [inFolder("Margins widened in 2026.", gone.id)] },
+    ]);
+    await core.deleteLibraryGroup(gone.id);
+    const commentsIn = async (folderId: string) => {
+      setMindScope(client.doc, folderScope(folderId));
+      await client.settled();
+      const result = await core.exportMind(mindId, { format: "docx", commentFailedChecks: true });
+      return textOf(unzip(result.data).get("word/comments.xml")?.toString("utf8") ?? "");
+    };
+
+    expect(await commentsIn(linked.id)).toContain(
+      "Unsupported: I didn’t find this in “Notes”.",
+    );
+    expect(await commentsIn(gone.id)).toContain(
+      "Unsupported: I didn’t find this in “Deleted Folder”.",
+    );
+  });
 
   test("with the option off the file is the one it was", async () => {
     const { core, bytes, mindId, client } = await setUp({
