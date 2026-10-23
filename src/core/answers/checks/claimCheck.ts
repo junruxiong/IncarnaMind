@@ -43,6 +43,7 @@ import type { Evidence, EvidenceScope } from "../../documents/evidence";
 import type { Language } from "../../language";
 import { calculates, givesStructuredOutput } from "../../providers/capabilities";
 import type { PreparedChatModel } from "../../providers/chat";
+import { classifyProviderError } from "../../providers/providerErrors";
 import {
   answerLanguage,
   type CalculationSession,
@@ -286,6 +287,11 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       ...facts(),
     });
 
+    const failedAfterVerdict = ({ failed }: Failed) => {
+      const { reason, detail } = failureOf(failed);
+      return notChecked(reason, detail);
+    };
+
     let opinions: Opinions;
     try {
       opinions = await opinionsOf(decisions, scoped, signal);
@@ -395,7 +401,8 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
           ? null
           : (found ??
             decidingCitation(session.finalCitation) ??
-            (await askForEvidence(request, verdict, session, signal, why.covered)));
+            // Only the card's quote rests on it: the verdict stands without.
+            notFailed(await askForEvidence(request, verdict, session, signal, why.covered)));
       if (signal.aborted) return notChecked("stopped");
       const left = facts();
       return {
@@ -424,6 +431,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
       decidingCitation(session.finalCitation) ??
       (await askForEvidence(request, verdict, session, signal));
     if (signal.aborted) return notChecked("stopped");
+    if (isFailed(evidence)) return failedAfterVerdict(evidence);
     if (!evidence) return byCalculation ?? notChecked("no-evidence");
     const unit = byCalculation
       ? null
@@ -447,6 +455,7 @@ export function createClaimCheck(deps: ClaimCheckDependencies) {
     if (verdict.verdict === "contradicted") {
       const judged = await confirmContradiction(request, evidence, session, signal);
       if (signal.aborted) return notChecked("stopped");
+      if (isFailed(judged)) return failedAfterVerdict(judged);
       // The Passage is about something else: what is nearest may still say something different.
       if (judged === "neither") return byCalculation ?? unsupported();
       if (judged === "same") {
@@ -517,7 +526,7 @@ async function askForEvidence(
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
   covered: string | null = null,
-): Promise<Citation | null> {
+): Promise<Citation | null | Failed> {
   const passages = session.shownPassages();
   if (passages.length === 0) return null;
   const { model } = request;
@@ -535,7 +544,7 @@ async function askForEvidence(
   } catch (error) {
     if (!signal.aborted)
       console.error(`A check's evidence couldn't be asked for again: ${messageOf(error)}`);
-    return null;
+    return { failed: classifyProviderError(error) };
   }
   const record = readEvidence(reply);
   if (!record) return null;
@@ -549,8 +558,8 @@ async function askForEvidence(
  * A contradiction counts only once the sentence and the quote it rests on,
  * judged alone, conflict. In a whole check a model leant to "contradicted"
  * for near misses: a figure for a related thing, another site in a parallel
- * Document (#97). A reply that can't be read, or a failed request, leaves
- * the verdict as it was.
+ * Document (#97). A reply that can't be read leaves the verdict as it was; a failed request
+ * leaves the claim not checked, so it is never Contradicted unconfirmed.
  */
 async function confirmContradiction(
   request: ClaimCheckRequest,
@@ -558,7 +567,7 @@ async function confirmContradiction(
   session: ReturnType<typeof createCitationSession>,
   signal: AbortSignal,
   instructions = CONFIRM_INSTRUCTIONS,
-): Promise<"conflict" | "same" | "neither" | null> {
+): Promise<"conflict" | "same" | "neither" | null | Failed> {
   const passage = session.shownPassages().find((each) => each.passageId === evidence.passageId);
   const { model } = request;
   try {
@@ -579,9 +588,19 @@ async function confirmContradiction(
   } catch (error) {
     if (!signal.aborted)
       console.error(`A contradiction couldn't be confirmed: ${messageOf(error)}`);
-    return null;
+    return { failed: classifyProviderError(error) };
   }
 }
+
+/** A request made after the model's verdict that the provider failed. */
+interface Failed {
+  failed: ProviderError;
+}
+
+const isFailed = (value: unknown): value is Failed =>
+  typeof value === "object" && value !== null && "failed" in value;
+
+const notFailed = <T>(value: T | Failed): T | null => (isFailed(value) ? null : value);
 
 interface Opinions {
   documentIds: ReadonlySet<string>;

@@ -99,12 +99,25 @@ export async function runItems<I, T>(
   const workers = Math.max(1, Math.min(concurrency, items.length));
   /** How many items may run at once now: one fewer each time a provider limits requests. */
   let allowed = workers;
+  /** Items that ended without a rate limit since the last one: a round of them brings one more back. */
+  let calm = 0;
+  /** A rate limit that outlasted every pause: the provider won't take more now, so nothing else is sent. */
+  let limitedOut: ProviderError | null = null;
   /** Workers holding an item: waiting out a pause, or running it. */
   let holding = 0;
 
   const settle = (index: number, outcome: ItemOutcome<T>) => {
     outcomes[index] = outcome;
     onOutcome?.(items[index] as I, outcome);
+  };
+
+  const ended = () => {
+    calm++;
+    if (allowed < workers && calm >= allowed) {
+      allowed++;
+      calm = 0;
+      grow();
+    }
   };
 
   /** Whether the worker goes on to the next item. */
@@ -117,9 +130,14 @@ export async function runItems<I, T>(
         return false;
       }
     }
+    if (limitedOut) {
+      settle(index, { status: "failed", error: limitedOut });
+      return true;
+    }
     tries[index] = (tries[index] ?? 0) + 1;
     try {
       settle(index, { status: "done", value: await each(items[index] as I) });
+      ended();
       return true;
     } catch (thrown) {
       if (signal?.aborted) {
@@ -139,13 +157,17 @@ export async function runItems<I, T>(
         return false;
       }
       const tried = tries[index] ?? 1;
-      if (error.kind === "rate-limit" && tried <= RATE_LIMIT_PAUSES_MS.length) {
-        const delay = RATE_LIMIT_PAUSES_MS[tried - 1] ?? 0;
-        pausedUntil = Math.max(pausedUntil, Date.now() + delay);
-        allowed = Math.max(1, allowed - 1);
-        queue.unshift(index);
-        return true;
-      }
+      if (error.kind === "rate-limit") {
+        calm = 0;
+        if (tried <= RATE_LIMIT_PAUSES_MS.length) {
+          const delay = RATE_LIMIT_PAUSES_MS[tried - 1] ?? 0;
+          pausedUntil = Math.max(pausedUntil, Date.now() + delay);
+          allowed = Math.max(1, allowed - 1);
+          queue.unshift(index);
+          return true;
+        }
+        limitedOut = error;
+      } else ended();
       settle(index, { status: "failed", error });
       return true;
     }
@@ -164,7 +186,20 @@ export async function runItems<I, T>(
     }
   };
 
-  await Promise.all(Array.from({ length: workers }, worker));
+  const pool: Promise<void>[] = [];
+  let live = 0;
+  function grow() {
+    while (live < allowed && queue.length > 0 && !stop && !signal?.aborted) {
+      live++;
+      pool.push(
+        worker().finally(() => {
+          live--;
+        }),
+      );
+    }
+  }
+  grow();
+  for (let index = 0; index < pool.length; index++) await pool[index];
   for (const index of queue) {
     settle(index, stop ? { status: "not-checked", stop } : { status: "stopped" });
   }
