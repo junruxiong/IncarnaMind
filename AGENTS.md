@@ -15,7 +15,7 @@ Issues live in GitHub Issues on `IncarnaMind/IncarnaMind`, managed with the `gh`
 
 ### Triage labels
 
-The default five labels: `needs-triage`, `needs-info`, `ready-to-build`, `needs-owner`, `wontfix`. See `docs/agents/triage-labels.md`.
+The default five labels: `needs-triage`, `needs-info`, `ready-to-build`, `needs-owner`, `wontfix`, and one of `priority:P0` to `priority:P3` on every open issue. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
