@@ -18,7 +18,7 @@ import { useSettled } from "../settling";
 import { allExamples, isOwnDocument, useAppStore } from "../store";
 import { useTaggingAlert } from "../taggingAlert";
 import { useTaggingExplained } from "../taggingExplained";
-import { taggingProblem } from "../taggingProblem";
+import { planLimitLine, taggingProblem } from "../taggingProblem";
 import { failedTagging, retryTagging } from "../taggingRetry";
 import { placesText, resumeTagging, stoppedDocumentPlaces, taggingPlaces } from "../taggingStop";
 import { textRecognitionStatus, useTextRecognition } from "../textRecognition";
@@ -302,6 +302,7 @@ function useStatuses(): Status[] {
       // Only the User's own Documents: the examples need no model, so they alone don't ask for one.
       let waitingForTagger = 0;
       let waitingForPlan = 0;
+      let planResetsAt: string | null = null;
       let rateLimited = 0;
       let keyRefused = 0;
       let rateLimitEnds: string | null = null;
@@ -339,7 +340,13 @@ function useStatuses(): Status[] {
               keyRefused++;
             } else {
               if (!held) waitingForTagger++;
-              if (item.taggingError?.kind === "plan-limit") waitingForPlan++;
+              if (item.taggingError?.kind === "plan-limit") {
+                waitingForPlan++;
+                const resets = item.taggingError.resetsAt ?? null;
+                if (resets !== null && (planResetsAt === null || resets > planResetsAt)) {
+                  planResetsAt = resets;
+                }
+              }
             }
           } else if (
             item.tagging === "failed" &&
@@ -358,6 +365,7 @@ function useStatuses(): Status[] {
         tagging,
         waitingForTagger,
         waitingForPlan,
+        planResetsAt,
         rateLimited,
         keyRefused,
         rateLimitEnds,
@@ -399,6 +407,10 @@ function useStatuses(): Status[] {
   const refusedService = useTaggingService(
     organizesNew ? "classification" : "tagging",
     counts.keyRefused > 0,
+  );
+  const planService = useTaggingService(
+    organizesNew ? "classification" : "tagging",
+    counts.waitingForPlan > 0,
   );
   const places = useAppStore(
     useShallow((state) =>
@@ -674,11 +686,19 @@ function useStatuses(): Status[] {
   }
 
   if (counts.waitingForPlan > 0) {
+    const line = planLimitLine(planService?.service ?? null, counts.planResetsAt, t, language);
     statuses.push({
       testId: "tagging-paused",
       tone: "waiting",
-      short: t("status.taggingPaused"),
-      full: t("status.taggingPaused.full"),
+      short: line,
+      full: t("status.planLimit.full", { line }),
+      wraps: true,
+      needsYou: true,
+      action: {
+        label: t("signInRoute.wayBack.pasteApiKey"),
+        testId: "tagging-paused-use-key",
+        run: () => openSettings("models"),
+      },
     });
   } else if (taggingWaits && taggingNeedsOk) {
     statuses.push({
@@ -833,7 +853,8 @@ function useStatuses(): Status[] {
       (item) =>
         (item.status === "waiting" &&
           item.error?.kind !== "rate-limit" &&
-          item.error?.kind !== "auth") ||
+          item.error?.kind !== "auth" &&
+          item.error?.kind !== "plan-limit") ||
         item.status === "failed",
     ).length;
     if (attention)
