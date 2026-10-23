@@ -658,6 +658,7 @@ export const zhCN = {
   "claim.cutSentence": "删除这句",
   "claim.cutSentence.keywords": "删除 删去 这句 无依据",
   "claim.cutSentence.done": "已删除这句",
+  "claim.cutSentence.moved": "未能删除：这句话不在核对时标记的位置。请重新核对。",
   "claim.courtDecision.title": "本句引用了法院判决。",
   "claim.courtDecision.body":
     "IncarnaMind 无法核对该判决是否存在、是否这样说。依赖前请在你的法律数据库中查证。",

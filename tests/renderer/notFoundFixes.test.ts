@@ -1,9 +1,9 @@
 import { type Editor, getSchema, type JSONContent } from "@tiptap/core";
 import { EditorState, type Transaction } from "@tiptap/pm/state";
 import { describe, expect, test, vi } from "vitest";
-import { CITATION_NODE } from "../../src/core/api";
+import { CITATION_NODE, CLAIM_CHECK_MARK, FOOTNOTE_NODE } from "../../src/core/api";
 import { citationNumbersPlugin } from "../../src/renderer/src/editor/citationNumbers";
-import type { ShownClaim } from "../../src/renderer/src/editor/claimChecks";
+import { claimSpans, type ShownClaim } from "../../src/renderer/src/editor/claimChecks";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 import { sentenceSpans } from "../../src/shared/sentences";
 
@@ -14,10 +14,12 @@ vi.mock("../../src/renderer/src/editWithAi", () => ({
   useEdits: { getState: () => ({ pending: {} }) },
 }));
 vi.mock("../../src/renderer/src/modelInUse", () => ({ modelInUseOf: vi.fn() }));
+vi.mock("../../src/renderer/src/i18n", () => ({ translateNow: (key: string) => key }));
 
 const { cutSentence, offersNotFound, searchedLess } = await import(
   "../../src/renderer/src/unsupportedFixes"
 );
+const { useNotices } = await import("../../src/renderer/src/notices");
 
 const schema = getSchema(noteExtensions());
 
@@ -187,5 +189,184 @@ describe("Search all Documents is offered while the check looked in less than ev
   test("not once it looked in every Document, or when it had no Folder", () => {
     expect(searchedLess(scoped({ folderId: "f1", widened: true }))).toBe(false);
     expect(searchedLess(scoped({ folderId: null, widened: false }))).toBe(false);
+  });
+});
+
+/** A paragraph's pieces as the editor holds them: its text nodes, and a footnote as "[its text]". */
+const shapeOf = (editor: Editor, block = 0) => {
+  const pieces: string[] = [];
+  editor.state.doc.child(block).forEach((child) => {
+    pieces.push(child.isText ? (child.text ?? "") : `[${child.textContent}]`);
+  });
+  return pieces;
+};
+
+const checkMark = (id: string) => ({
+  type: CLAIM_CHECK_MARK,
+  attrs: {
+    id,
+    request: "request-1",
+    action: "check-against-documents",
+    state: "unsupported",
+    text: "",
+    scope: { folderId: null, widened: false },
+    versions: [],
+    excluded: [],
+    checkedAt: "2026-10-23T09:00:00.000Z",
+  },
+});
+
+/** Text with a check's mark on it, or a footnote holding words. */
+const marked = (id: string, text: string): JSONContent => ({
+  type: "text",
+  text,
+  marks: [checkMark(id)],
+});
+const note = (text: string): JSONContent => ({
+  type: FOOTNOTE_NODE,
+  content: [{ type: "text", text }],
+});
+const plain = (text: string): JSONContent => ({ type: "text", text });
+
+/** The checks of the document as the editor finds them, ready to cut by. */
+function claimsIn(editor: Editor): Record<string, ShownClaim> {
+  return Object.fromEntries(
+    claimSpans(editor.state.doc).map((span) => [
+      span.check.id,
+      { ...span, shown: { state: "unsupported" } } as unknown as ShownClaim,
+    ]),
+  );
+}
+
+describe("Cut it in a paragraph with footnotes", () => {
+  const cases: [string, JSONContent[], string, string[]][] = [
+    [
+      "a footnote before the sentence",
+      [
+        plain("Whales sing in the bay."),
+        note("See p. 4."),
+        plain(" "),
+        marked("c", "Seals rest on the sandbanks."),
+      ],
+      "c",
+      ["Whales sing in the bay.", "[See p. 4.]"],
+    ],
+    [
+      "a footnote after the sentence, which goes with it",
+      [
+        marked("c", "Whales sing in the bay."),
+        note("See p. 4."),
+        plain(" Seals rest on the sandbanks."),
+      ],
+      "c",
+      ["Seals rest on the sandbanks."],
+    ],
+    [
+      "a footnote one sentence further back",
+      [
+        plain("Whales sing."),
+        note("See p. 4."),
+        plain(" Seals rest on the sandbanks. "),
+        marked("c", "Gulls follow the boats."),
+      ],
+      "c",
+      ["Whales sing.", "[See p. 4.]", " Seals rest on the sandbanks."],
+    ],
+    [
+      "two footnotes before the sentence",
+      [
+        plain("One cat."),
+        note("First."),
+        plain(" Two dogs."),
+        note("Second."),
+        plain(" "),
+        marked("c", "Three birds."),
+      ],
+      "c",
+      ["One cat.", "[First.]", " Two dogs.", "[Second.]"],
+    ],
+    [
+      "a sentence between two footnotes",
+      [
+        plain("One cat."),
+        note("First."),
+        plain(" "),
+        marked("c", "Two dogs."),
+        note("Second."),
+        plain(" Three birds."),
+      ],
+      "c",
+      ["One cat.", "[First.]", " Three birds."],
+    ],
+    [
+      "a footnote at the end of the paragraph",
+      [marked("c", "One cat."), plain(" Two dogs."), note("See p. 4.")],
+      "c",
+      ["Two dogs.", "[See p. 4.]"],
+    ],
+    [
+      "the sentence before a footnote at the end of the paragraph",
+      [plain("One cat. "), marked("c", "Two dogs."), note("See p. 4.")],
+      "c",
+      ["One cat."],
+    ],
+  ];
+
+  test.each(cases)("takes out exactly the sentence with %s", (_name, content, id, expected) => {
+    const { editor, dispatched } = editorHolding([{ type: "paragraph", content }]);
+    const claim = claimsIn(editor)[id] as ShownClaim;
+    expect(editor.state.doc.textBetween(claim.from, claim.to, "", "")).toBe(
+      content.flatMap((each) => (each.marks ? [each.text ?? ""] : [])).join(""),
+    );
+    cutSentence(editor, claim);
+    expect(shapeOf(editor)).toEqual(expected);
+    expect(dispatched).toHaveLength(1);
+  });
+
+  test("puts every check on its own words, however many footnotes come before it", () => {
+    const { editor } = editorHolding([
+      {
+        type: "paragraph",
+        content: [
+          marked("a", "One cat."),
+          note("First."),
+          plain(" "),
+          marked("b", "Two dogs."),
+          note("Second."),
+          plain(" "),
+          marked("c", "Three birds."),
+        ],
+      },
+    ]);
+    const claims = claimsIn(editor);
+    for (const [id, words] of [
+      ["a", "One cat."],
+      ["b", "Two dogs."],
+      ["c", "Three birds."],
+    ] as const) {
+      const claim = claims[id] as ShownClaim;
+      expect(editor.state.doc.textBetween(claim.from, claim.to)).toBe(words);
+      expect(claim.sentence.text.startsWith(words)).toBe(true);
+      expect(
+        editor.state.doc.textBetween(claim.sentence.from, claim.sentence.from + words.length),
+      ).toBe(words);
+    }
+  });
+
+  test("cuts nothing, and says so, when the words at the sentence's place aren't the sentence", () => {
+    const { editor, dispatched } = editorHolding([
+      { type: "paragraph", content: [plain("One cat. "), marked("c", "Two dogs.")] },
+    ]);
+    const claim = claimsIn(editor).c as ShownClaim;
+    const drifted = {
+      ...claim,
+      sentence: { ...claim.sentence, from: claim.sentence.from - 3, to: claim.sentence.to - 3 },
+    } as ShownClaim;
+    const before = useNotices.getState().errors.length;
+    cutSentence(editor, drifted);
+    expect(dispatched).toHaveLength(0);
+    expect(shapeOf(editor)).toEqual(["One cat. ", "Two dogs."]);
+    expect(useNotices.getState().errors).toHaveLength(before + 1);
+    expect(useNotices.getState().errors.at(-1)?.message).toBe("claim.cutSentence.moved");
   });
 });

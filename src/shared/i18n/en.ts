@@ -672,6 +672,8 @@ export const en = {
   "claim.cutSentence": "Cut it",
   "claim.cutSentence.keywords": "delete remove sentence unsupported",
   "claim.cutSentence.done": "Cut the sentence",
+  "claim.cutSentence.moved":
+    "Nothing was cut: the sentence isn’t where its check marked it. Check it again.",
   "claim.courtDecision.title": "This cites a court decision.",
   "claim.courtDecision.body":
     "IncarnaMind can’t check that this case exists or says this. Check it in your legal research service before you rely on it.",

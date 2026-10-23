@@ -8,6 +8,7 @@
  * showing or counting. Each is one step of Undo.
  */
 import type { Editor } from "@tiptap/core";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type * as Y from "yjs";
 import { CLAIM_CHECK_MARK } from "../../core/api";
 import { checkedScope } from "../../shared/claimChecks";
@@ -18,6 +19,8 @@ import { citationsOf } from "./editor/alreadyCited";
 import { type ShownClaim, shownClaims } from "./editor/claimChecks";
 import { asOneStep, offerEditorUndo } from "./editor/editorUndo";
 import { requestEdit, useEdits } from "./editWithAi";
+import { translateNow } from "./i18n";
+import { useNotices } from "./notices";
 
 /**
  * Whether a check is of a cited sentence nothing backs: not one where the
@@ -93,17 +96,36 @@ export const searchedLess = (claim: ShownClaim): boolean =>
 export const searchAllDocuments = (editor: Editor, mindId: string, doc: Y.Doc, claim: ShownClaim) =>
   checkAgain(editor, mindId, doc, claim, true);
 
+const wordsAt = (doc: ProseMirrorNode, from: number, to: number) => {
+  let words = "";
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isText) words += (node.text ?? "").slice(Math.max(from, pos) - pos, to - pos);
+    else if (node.isInline) {
+      words += node.type.name === "hardBreak" ? "\n" : INLINE_NODE;
+      return false;
+    }
+    return true;
+  });
+  return words;
+};
+
 /**
  * Takes the whole sentence out, with the space that kept it from its neighbour, or its paragraph when
  * it is all the paragraph says. No model: one step of Undo brings back the words and their check.
+ * Says so and cuts nothing when the words at the sentence's place aren't the sentence.
  */
 export function cutSentence(editor: Editor, claim: ShownClaim): void {
   const { state } = editor;
   const { from, to } = claim.sentence;
+  // Read from the document again, so a range that has drifted from its words is never deleted.
+  if (wordsAt(state.doc, from, to) !== claim.sentence.text) {
+    useNotices.getState().showError(new Error(translateNow("claim.cutSentence.moved")));
+    return;
+  }
   const $from = state.doc.resolve(from);
   const [start, end] = [$from.start(), $from.end()];
   const spaces = (pattern: RegExp, first: number, last: number) =>
-    pattern.exec(state.doc.textBetween(first, last, "\n", INLINE_NODE))?.[0].length ?? 0;
+    pattern.exec(wordsAt(state.doc, first, last))?.[0].length ?? 0;
   const lead = spaces(/\s*$/u, start, from);
   const trail = spaces(/^\s*/u, to, end);
   const tr = state.tr;

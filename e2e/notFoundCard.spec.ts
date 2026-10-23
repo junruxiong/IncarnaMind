@@ -120,8 +120,13 @@ const cursorIn = (editor: Locator, words: string) =>
     note.chain().focus().setTextSelection(at).run();
   }, words);
 
-/** Two Documents, one Mind of four sentences, and the Mind looking in only one of them. */
-async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440) {
+/** Two Documents, a Mind of these paragraphs, checked, and the Mind looking in only one of them. */
+async function launchedWithMind(
+  paragraphs: readonly string[],
+  firstWords: string,
+  language: "en" | "zh-CN",
+  width = 1440,
+) {
   await writeFile(join(sources, "Harbour times.txt"), `${OWN}\n`);
   await writeFile(join(sources, "Seabirds.txt"), `${ELSEWHERE}\n`);
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home: sources });
@@ -133,9 +138,10 @@ async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440)
   await newMind(window);
   const editor = window.getByTestId("mind-editor");
   await editor.click();
-  await window.keyboard.type(`${OWN} ${ELSEWHERE} ${NOTHING}`);
-  await window.keyboard.press("Enter");
-  await window.keyboard.type(ALONE);
+  for (const [index, text] of paragraphs.entries()) {
+    if (index > 0) await window.keyboard.press("Enter");
+    await window.keyboard.type(text);
+  }
   await window.keyboard.press("ControlOrMeta+j");
   await window.keyboard.type("@Harbour");
   await expect(window.getByTestId("scope-picker")).toBeVisible();
@@ -144,8 +150,8 @@ async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440)
     "Harbour times",
   );
   const lines = editor.locator(":scope > p");
-  await slideSelect(window, lines.nth(0), "Harbours publish", {
-    line: lines.nth(1),
+  await slideSelect(window, lines.nth(0), firstWords, {
+    line: lines.nth(paragraphs.length - 1),
     words: "tide.",
   });
   await pointAndClick(
@@ -153,11 +159,6 @@ async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440)
     window.getByTestId("selection-menu").getByTestId("selection-action-check-against-documents"),
   );
   const marks = window.getByTestId("claim-mark");
-  await expect(marks).toHaveCount(4);
-  await expect(marks.nth(0)).toHaveAttribute("data-check", "supported");
-  for (const index of [1, 2, 3]) {
-    await expect(marks.nth(index)).toHaveAttribute("data-check", "unsupported");
-  }
   const card = window.getByTestId("claim-card");
   const openCard = async (mark: Locator) => {
     await motionSettled(window);
@@ -168,6 +169,32 @@ async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440)
     marks.evaluateAll((all) => all.map((each) => each.getAttribute("data-claim")));
   return { app, window, editor, lines, marks, card, openCard, claimIds };
 }
+
+async function launchedWithFourSentences(language: "en" | "zh-CN", width = 1440) {
+  const mind = await launchedWithMind(
+    [`${OWN} ${ELSEWHERE} ${NOTHING}`, ALONE],
+    "Harbours publish",
+    language,
+    width,
+  );
+  const { marks } = mind;
+  await expect(marks).toHaveCount(4);
+  await expect(marks.nth(0)).toHaveAttribute("data-check", "supported");
+  for (const index of [1, 2, 3]) {
+    await expect(marks.nth(index)).toHaveAttribute("data-check", "unsupported");
+  }
+  return mind;
+}
+
+/** The first paragraph as the Mind holds it: its text, and a footnote as "[its words]". */
+const paragraphOf = (editor: Locator) =>
+  editor.evaluate((dom) => {
+    let text = "";
+    (dom as unknown as { editor: Editor }).editor.state.doc.child(0).forEach((child) => {
+      text += child.isText ? (child.text ?? "") : `[${child.textContent}]`;
+    });
+    return text;
+  });
 
 for (const language of ["en", "zh-CN"] as const) {
   const words = LANGUAGES[language];
@@ -368,5 +395,66 @@ test("Cut it and Keep as my view are reached and run with the keyboard alone: âŒ
   await window.keyboard.press("Enter");
   await expect(marks).toHaveCount(3);
   await expect(editor).toBeFocused();
+  await app.close();
+});
+
+test("Cut it in a paragraph with footnotes takes out exactly the sentence, its outline is over its words, and Undo puts it back", async () => {
+  test.setTimeout(180_000);
+  const FIRST = "See p. 4.";
+  const SECOND = "See p. 9.";
+  const { app, window, editor, marks, card, openCard } = await launchedWithMind(
+    [`${ELSEWHERE}^[${FIRST}] ${NOTHING}^[${SECOND}] ${ALONE}`],
+    "Penguins nest",
+    "en",
+  );
+  await expect(marks).toHaveCount(3);
+  for (const index of [0, 1, 2]) {
+    await expect(marks.nth(index)).toHaveAttribute("data-check", "unsupported");
+  }
+  const whole = `${ELSEWHERE}[${FIRST}] ${NOTHING}[${SECOND}] ${ALONE}`;
+  expect(await paragraphOf(editor)).toBe(whole);
+
+  // The last sentence follows two footnotes: its outline is over its words, not earlier.
+  await openCard(marks.nth(2));
+  const wash = editor.locator(".claim-wash").filter({ hasText: ALONE });
+  const spanOf = (boxes: Locator) =>
+    boxes.evaluateAll((all) => {
+      const rects = all.flatMap((each) => [...each.getClientRects()]);
+      return {
+        left: Math.min(...rects.map((rect) => rect.left)),
+        right: Math.max(...rects.map((rect) => rect.right)),
+        top: Math.min(...rects.map((rect) => rect.top)),
+        bottom: Math.max(...rects.map((rect) => rect.bottom)),
+      };
+    });
+  const [over, under] = [await spanOf(window.getByTestId("claim-outline")), await spanOf(wash)];
+  for (const edge of ["left", "right", "top", "bottom"] as const) {
+    expect(Math.abs(over[edge] - under[edge])).toBeLessThan(4);
+  }
+  await pointAndClick(window, card.getByTestId("claim-cut-sentence"));
+  await expect.poll(() => paragraphOf(editor)).toBe(`${ELSEWHERE}[${FIRST}] ${NOTHING}[${SECOND}]`);
+  await expect(marks).toHaveCount(2);
+  await expect(window.getByTestId("undo-line")).toContainText("Cut the sentence");
+  await focusSettled(window, editor);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => paragraphOf(editor)).toBe(whole);
+  await expect(marks).toHaveCount(3);
+
+  // The sentence between the footnotes goes with its own footnote and nothing else.
+  await cursorIn(editor, NOTHING);
+  await runCommand(window, "check.cutSentence", "Cut it");
+  await expect.poll(() => paragraphOf(editor)).toBe(`${ELSEWHERE}[${FIRST}] ${ALONE}`);
+  await expect(marks).toHaveCount(2);
+  await focusSettled(window, editor);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => paragraphOf(editor)).toBe(whole);
+
+  // The first one, with its footnote, from its card.
+  await openCard(marks.nth(0));
+  await pointAndClick(window, card.getByTestId("claim-cut-sentence"));
+  await expect.poll(() => paragraphOf(editor)).toBe(`${NOTHING}[${SECOND}] ${ALONE}`);
+  await focusSettled(window, editor);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect.poll(() => paragraphOf(editor)).toBe(whole);
   await app.close();
 });
