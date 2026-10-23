@@ -10,6 +10,7 @@ import {
   createDataFolder,
   dismissChatSetup,
   launchApp,
+  openAdvancedModels,
   openDocumentTags,
   openSettings,
   removeDataFolder,
@@ -76,9 +77,9 @@ test("with a Jev key, Jev tags Documents instead of the chat model, and an unsur
   await dismissChatSetup(window);
   await useLocalChatModel(window);
 
-  // Settings → Models → Tagging: a key and a Jev-compatible server, tested, then used.
-  await openSettings(window, "models");
-  const section = window.getByTestId("jev-settings");
+  // Settings → Models → Advanced → Tagging: a key and a Jev-compatible server, tested, then used.
+  const tagging = await openAdvancedModels(await openSettings(window, "models"));
+  const section = tagging.getByTestId("jev-settings");
   await section.getByTestId("jev-set-up").click();
   const form = section.getByTestId("jev-form");
   await form.getByLabel("Jev API key").fill(JEV_KEY);

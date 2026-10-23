@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { type CitationStyleId, isCitationStyleId } from "../../shared/citationStyles";
 import { wordingOf } from "../../shared/errorWording";
 import { translate } from "../../shared/i18n";
-import { organizeModelOf, supportsLibraryImages } from "../../shared/libraryModels";
+import {
+  LIBRARY_DEFAULTS,
+  organizeModelOf,
+  supportsLibraryImages,
+} from "../../shared/libraryModels";
 import { libraryPresetKeys } from "../../shared/libraryPresets";
 import type { DocumentKind, FolderDeletion, MovedDocument, ProviderError } from "../api";
 import type { BackgroundQueue } from "../backgroundQueue";
@@ -214,8 +218,9 @@ export function createLibrary(options: {
     const stored = settings.readDeviceValue("library");
     const saved = isRecord(stored) ? stored : {};
     return {
-      classifier: taggingClassifierOf(saved.classifier) ?? AUTOMATIC,
-      automatic: typeof saved.automatic === "boolean" ? saved.automatic : true,
+      classifier: taggingClassifierOf(saved.classifier) ?? LIBRARY_DEFAULTS.classifier,
+      automatic:
+        typeof saved.automatic === "boolean" ? saved.automatic : LIBRARY_DEFAULTS.automatic,
       organizeWith: taggingClassifierOf(saved.organizeWith),
       taggingStopped: Array.isArray(saved.taggingStopped)
         ? saved.taggingStopped.filter(
