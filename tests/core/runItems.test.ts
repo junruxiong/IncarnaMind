@@ -59,6 +59,65 @@ describe("Running a run's items", () => {
     expect(Math.max(...waited)).toBeGreaterThan(RATE_LIMIT_PAUSES_MS[0]);
   });
 
+  // protects=a provider that limits requests gets fewer at once for the rest of the run, and every item is still done (#1618); fails_when=the run keeps sending as many at once, or an item limited is left stopped; no_claim=how long the pauses are.
+  test("a provider limiting requests lowers how many run at once for the rest of the run", async () => {
+    const { wait } = noWait();
+    let running = 0;
+    let mostAfter = 0;
+    let limited = 0;
+    const run = await runItems(
+      Array.from({ length: 12 }, (_, index) => index + 1),
+      async (item) => {
+        running++;
+        if (limited > 0) mostAfter = Math.max(mostAfter, running);
+        try {
+          await new Promise((resolve) => setImmediate(resolve));
+          // Two answers of the provider's limit, the second after the run already sent fewer.
+          if ((item === 2 && limited === 0) || (item === 7 && limited === 1)) {
+            limited++;
+            throw failure("rate-limit");
+          }
+          return item;
+        } finally {
+          running--;
+        }
+      },
+      { concurrency: 4, wait },
+    );
+    expect(limited).toBe(2);
+    expect(mostAfter).toBe(3);
+    expect(running).toBe(0);
+    expect(run.outcomes.map((each) => each.status)).toEqual(Array(12).fill("done"));
+  });
+
+  test("an item limited while the others still run is tried again once they are done", async () => {
+    const { wait } = noWait();
+    let release = () => {};
+    const slow = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let tries = 0;
+    const run = await runItems(
+      ["slow", "limited once"],
+      async (item) => {
+        if (item === "slow") {
+          await slow;
+          return item;
+        }
+        tries++;
+        if (tries === 1) {
+          // The slow item ends only after this one's worker has left it to the slow one's.
+          setImmediate(release);
+          throw failure("rate-limit");
+        }
+        return item;
+      },
+      { concurrency: 2, wait },
+    );
+    expect(tries).toBe(2);
+    expect(run.outcomes.map((each) => each.status)).toEqual(["done", "done"]);
+  });
+
   test("a plan's limit stops the run: items running finish, those not started aren't checked", async () => {
     const heard: string[] = [];
     const run = await runItems(
