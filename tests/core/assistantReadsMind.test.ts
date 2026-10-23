@@ -514,8 +514,7 @@ describe("A Question whose Search scope holds no Documents (#748)", { timeout: 3
       scope: { folderIds: [empty.id], tagIds: [], documentIds: [] },
     });
 
-    // Asked to shorten, a reply that changed nothing is asked for once more.
-    expect(model.doStreamCalls).toHaveLength(2);
+    expect(model.doStreamCalls).toHaveLength(1);
     expect(answer.text).toBe("It is shorter now.");
     expect(answer.model).not.toBeNull();
     expect(answer.read).not.toBeNull();
