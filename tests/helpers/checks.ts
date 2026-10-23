@@ -17,7 +17,6 @@ export interface Plan {
   /** The line it cites, from the Passage that holds it. */
   quote?: string;
   says?: string;
-  roles?: string;
   /** Its reply instead, once it has searched. */
   reply?: ScriptedReply;
   /** What it says when asked to confirm a contradiction it found. */
@@ -109,7 +108,7 @@ export function checkReply(call: ModelCall, plans: Record<string, Plan>): Script
     };
   }
   return {
-    text: `${plan.roles ? `Roles: ${plan.roles}\n` : ""}Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
+    text: `Verdict: ${plan.verdict}${plan.says ? `\n${plan.says} [^1]` : ""}`,
   };
 }
 
