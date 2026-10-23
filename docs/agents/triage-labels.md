@@ -16,7 +16,7 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 ## Priority
 
-Every open issue also carries one priority label, which says what to take first. The labels above say what state an issue is in.
+Once an issue is triaged, it carries one priority label, which says what to take first. The labels above say what state it is in.
 
 | Label         | Meaning                                                                                                                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
