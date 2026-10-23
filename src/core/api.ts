@@ -2032,7 +2032,7 @@ export interface GettingStarted {
   started: boolean;
   /** The User opened a Citation's card. */
   citationChecked: boolean;
-  /** The User added Documents of their own, or connected an app. */
+  /** A Document of the User's own has been read, not only added, or the User connected an app. */
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
   askedOwn: boolean;
