@@ -7,12 +7,14 @@ import {
   acceptPlainTextKeys,
   addProviderPage,
   createDataFolder,
+  focusRingShows,
   launchApp,
   newMind,
   openSettings,
   pointAndClick,
   removeDataFolder,
   setWindowSize,
+  tabTo,
 } from "./app";
 
 let dataDir: string;
@@ -40,6 +42,12 @@ const localOnly = (window: Page) =>
   window.evaluate(async () => {
     const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     return (await bridge.getEmbeddingSettings()).localOnly;
+  });
+
+const chatModel = (window: Page) =>
+  window.evaluate(async () => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.getSettings()).user.chatModel?.modelId ?? null;
   });
 
 const language = (window: Page, value: "en" | "zh-CN") =>
@@ -159,7 +167,7 @@ for (const [name, locale] of [
     await app.close();
   });
 
-  test(`at setup, the local way says before the click that it keeps everything on this computer; the line then names the model and Local mode, Undo and Redo reach Local mode alone, and Change opens Privacy at its switch (${name})`, async () => {
+  test(`at setup, the local way says before the click that it keeps everything on this computer; the line then names the model and Local mode, Tab reaches its Change, Undo and Redo reach Local mode alone, and Change opens Privacy at its switch (${name})`, async () => {
     const { app, window } = await launchApp(dataDir, { ollama: ollamaUrl });
     await setWindowSize(app, window, 1100, 760);
     if (zh) await language(window, "zh-CN");
@@ -176,7 +184,7 @@ for (const [name, locale] of [
     const keeps = setup.getByTestId("setup-local-keeps");
     await expect(use).toBeEnabled();
     await expect(keeps).toHaveText(
-      zh ? "所有内容都会留在这台电脑上" : "Keeps everything on this computer",
+      zh ? "所有内容都留在这台电脑上" : "Keeps everything on this computer",
     );
     const [button, line] = await Promise.all([use.boundingBox(), keeps.boundingBox()]);
     if (!button || !line) throw new Error("The local way isn't laid out.");
@@ -191,8 +199,11 @@ for (const [name, locale] of [
       ? "使用 qwen3.5:4b · 所有内容都留在这台电脑上"
       : "Using qwen3.5:4b · Everything stays on this computer";
     await expect(undo.getByTestId("undo-message")).toHaveText(said);
-    await expect(undo.getByTestId("undo-change-local-mode")).toHaveText(zh ? "更改" : "Change");
+    const change = undo.getByTestId("undo-change-local-mode");
+    await expect(change).toHaveText(zh ? "更改" : "Change");
     await expect(undo.getByTestId("undo-action")).toHaveText(zh ? "撤销" : "Undo");
+    await tabTo(window, change);
+    expect(await focusRingShows(window)).toBe(true);
 
     await pointAndClick(window, undo.getByTestId("undo-action"));
     await expect.poll(() => localOnly(window)).toBe(false);
@@ -201,7 +212,7 @@ for (const [name, locale] of [
     await expect.poll(() => localOnly(window)).toBe(true);
     await expect(undo.getByTestId("undo-message")).toHaveText(said);
 
-    await pointAndClick(window, undo.getByTestId("undo-change-local-mode"));
+    await pointAndClick(window, change);
     const settings = window.getByTestId("settings");
     await expect(settings).toHaveAttribute("data-page", "privacy");
     const toggle = settings.getByTestId("local-only");
@@ -211,9 +222,3 @@ for (const [name, locale] of [
     await app.close();
   });
 }
-
-const chatModel = (window: Page) =>
-  window.evaluate(async () => {
-    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
-    return (await bridge.getSettings()).user.chatModel?.modelId ?? null;
-  });

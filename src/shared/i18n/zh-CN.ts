@@ -1766,7 +1766,7 @@ export const zhCN = {
   "setup.way.local.line": "免费、不联网 · 较慢",
   "setup.way.local.running": "Ollama 已运行 · 免费、较慢",
   "setup.way.local.notRunning": "需要免费的 Ollama 应用",
-  "setup.way.local.keeps": "所有内容都会留在这台电脑上",
+  "setup.way.local.keeps": "所有内容都留在这台电脑上",
   "setup.claude.title": "已经在用 Claude 订阅？",
   "setup.claude.line": "在 Claude 应用里使用你的 Claude 订阅，连上 IncarnaMind 即可。",
   "setup.claude.connect": "连接 Claude 应用",
