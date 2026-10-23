@@ -10,7 +10,7 @@ export const NARROWEST_MIND = 760;
 export type ReviewFilter = "all" | "unresolved";
 
 export interface ReviewPaneState {
-  /** Over the Mind's right edge, while the Mind is too narrow to have it beside; else folded to its button. */
+  /** Open at the page's right edge while the Mind is too narrow to have it beside; else folded to its button. */
   over: boolean;
   /** Null until the User picks: Unresolved once anything has been decided, else All. */
   filter: ReviewFilter | null;

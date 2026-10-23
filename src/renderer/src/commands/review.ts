@@ -17,10 +17,10 @@ function reviewableShown(ctx: CommandContext) {
   return mindId && held?.has() ? { mindId, ...held } : null;
 }
 
-/** The Mind in front while its pane is open on a change still waiting, and the cursor isn't on a change in the text, which ⌘↵ there takes. */
 function selectedShown(ctx: CommandContext) {
   const shown = reviewableShown(ctx);
   if (!shown || !useReviewPanes.getState().panes[shown.mindId]) return null;
+  // With the cursor on a change in the text, ⌘K's Accept change is the text's, for that change.
   const inText = commands.get("proposal.accept");
   if (inText && offered(inText, ctx)) return null;
   const change = selectedChange(shown.editor, shown.mindId);
