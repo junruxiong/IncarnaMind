@@ -13,6 +13,8 @@ import { askAssistant, lastResult } from "../helpers/assistant";
 import { answerEnded, askAndFinish, setUpWithDocuments } from "../helpers/citations";
 import { createTempDataFolder, nextEvent } from "../helpers/core";
 import { waitForProcessing } from "../helpers/documents";
+import { unzip } from "../helpers/docx";
+import { writeMind } from "../helpers/minds";
 import { type ModelCall, scriptedModel } from "../helpers/models";
 
 /**
@@ -439,6 +441,190 @@ describe("Commands that reach outside IncarnaMind wait for the User (#1110)", {
       options: [{ label: "标出" }, { label: "不标" }],
     });
     expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe("leave");
+  });
+
+  // protects=a Word or PDF export the assistant starts, of a Mind in the Numbered style that has Citations, with no answer stored about where they go, asks that question in the tray after the one about marking, with the count, keeps the answer and saves the file as answered, and a later export doesn't ask; fails_when=the file is saved before the answer, the answer isn't kept or isn't the one chosen, the count is missing, or a second export asks; no_claim=the window's own question.
+  test("a Word export of a Mind with Citations asks where they go, once, and List at the end is kept", async () => {
+    const model = calling(
+      find("Tides", "mind"),
+      run("mind.export", { format: "docx" }),
+      run("mind.export", { format: "docx" }),
+    );
+    const { core, client, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+    const [cited] = await core.listDocuments();
+    if (!cited) throw new Error("No Document.");
+    const cite = {
+      type: "citation",
+      attrs: {
+        passageId: "p1",
+        documentId: cited.id,
+        documentName: cited.name,
+        contentHash: cited.contentHash,
+        pageFrom: 1,
+        pageTo: 1,
+        quote: "A first draft.",
+        check: "found",
+        checkReason: null,
+      },
+    };
+    writeMind(client, [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Drafted " },
+          cite,
+          { type: "text", text: " twice " },
+          cite,
+        ],
+      },
+    ]);
+    await client.settled();
+    const asked = answeringQuestions(core, (request) => ({
+      skipped: false,
+      chosen: [
+        request.question.question === "Where should Citations go?"
+          ? "List at the end"
+          : "Leave it out",
+      ],
+      wrote: null,
+    }));
+
+    const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked.map((each) => each.question.question)).toEqual([
+      "Mark the text IncarnaMind wrote?",
+      "Where should Citations go?",
+    ]);
+    expect(asked[1]?.question).toMatchObject({
+      detail: "2 Citations from 1 Document",
+      multiple: false,
+      other: false,
+      options: [{ label: "Footnotes" }, { label: "List at the end" }],
+    });
+    expect((await core.getSettings()).user.exportOptions.citationPlace).toBe("list");
+    expect((await readdir(output)).sort()).toEqual(["Tides 2.docx", "Tides.docx"]);
+    for (const name of ["Tides.docx", "Tides 2.docx"]) {
+      const files = unzip(await readFile(join(output, name)));
+      expect(files.get("word/document.xml")?.toString("utf8")).not.toContain("footnoteReference");
+    }
+    expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
+  });
+
+  // protects=a request that names the marking choice ("without the AI marks") against a saved answer is followed for that file while the Citations question is answered too, and the result says what the file has; fails_when=answering where Citations go drops the one-off, so the file contradicts the result; no_claim=how a model reads the request.
+  test.each([
+    { saved: "leave", named: "mark", comments: true },
+    { saved: "mark", named: "leave", comments: false },
+  ] as const)(
+    "a request for $named against a saved $saved holds when the question about where Citations go is answered",
+    async ({ saved, named, comments }) => {
+      const model = calling(
+        find("Tides", "mind"),
+        run("mind.export", { format: "docx", marks: named }),
+      );
+      const { core, client, mind } = await setUpWithDocuments(model, DOCUMENTS);
+      const output = await createTempDataFolder();
+      await core.setOutputLocation(output);
+      const { exportOptions } = (await core.getSettings()).user;
+      await core.updateSettings({
+        user: {
+          exportOptions: { ...exportOptions, docx: { ...exportOptions.docx, markAiText: saved } },
+        },
+      });
+      const [cited] = await core.listDocuments();
+      if (!cited) throw new Error("No Document.");
+      writeMind(client, [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Drafted by the AI ", marks: [{ type: "generated" }] },
+            {
+              type: "citation",
+              attrs: {
+                passageId: "p1",
+                documentId: cited.id,
+                documentName: cited.name,
+                contentHash: cited.contentHash,
+                pageFrom: 1,
+                pageTo: 1,
+                quote: "A first draft.",
+                check: "found",
+                checkReason: null,
+              },
+            },
+          ],
+        },
+      ]);
+      await client.settled();
+      const asked = answeringQuestions(core, () => ({
+        skipped: false,
+        chosen: ["Footnotes"],
+        wrote: null,
+      }));
+
+      const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+      expect(asked.map((each) => each.question.question)).toEqual(["Where should Citations go?"]);
+      const files = unzip(await readFile(join(output, "Tides.docx")));
+      expect(files.has("word/comments.xml")).toBe(comments);
+      expect(lastResult(model)).toContain(
+        `${named === "mark" ? "marks the text IncarnaMind wrote with comments" : "leaves the text IncarnaMind wrote unmarked"}, as the User asked for it; their saved answer for Word exports is unchanged`,
+      );
+      expect((await core.getSettings()).user.exportOptions.docx.markAiText).toBe(saved);
+      expect(commandCalls(answer).map((call) => call.status)).not.toContain("failed");
+    },
+  );
+
+  // protects=closing the question about where Citations go exports nothing and keeps nothing; fails_when=a file is saved, an answer is kept, or the call doesn't say the question was closed; no_claim=how the tray shows it.
+  test("closing the question about where Citations go exports nothing and keeps no answer", async () => {
+    const model = calling(find("Tides", "mind"), run("mind.export", { format: "docx" }));
+    const { core, client, mind } = await setUpWithDocuments(model, DOCUMENTS);
+    const output = await createTempDataFolder();
+    await core.setOutputLocation(output);
+    await core.updateSettings({
+      user: {
+        exportOptions: {
+          ...(await core.getSettings()).user.exportOptions,
+          docx: { ...(await core.getSettings()).user.exportOptions.docx, markAiText: "leave" },
+        },
+      },
+    });
+    const [cited] = await core.listDocuments();
+    if (!cited) throw new Error("No Document.");
+    writeMind(client, [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Drafted " },
+          {
+            type: "citation",
+            attrs: {
+              passageId: "p1",
+              documentId: cited.id,
+              documentName: cited.name,
+              contentHash: cited.contentHash,
+              pageFrom: 1,
+              pageTo: 1,
+              quote: "A first draft.",
+              check: "found",
+              checkReason: null,
+            },
+          },
+        ],
+      },
+    ]);
+    await client.settled();
+    const asked = answeringQuestions(core, () => ({ skipped: true }));
+
+    const answer = await askAssistant(core, { text: "Export this to Word", mindId: mind.id });
+
+    expect(asked.map((each) => each.question.question)).toEqual(["Where should Citations go?"]);
+    expect(
+      commandCalls(answer).map((call) => [call.status, call.commandProblem?.wording?.key]),
+    ).toContainEqual(["failed", "error.commands.citationPlaceClosed"]);
+    expect(await readdir(output)).toEqual([]);
+    expect((await core.getSettings()).user.exportOptions.citationPlace).toBeUndefined();
   });
 
   // protects=adding files from a folder asks first, listing the files of the kinds asked for that are right in it and nothing a link leads to outside it, then adds them, and Undo takes them out; fails_when=a file outside the folder is listed or read, or files are added before Allow; no_claim=how each file is processed.

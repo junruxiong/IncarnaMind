@@ -273,7 +273,8 @@ export function createMeetings(options: MeetingsOptions) {
         deletedAt: row.audio_deleted_at,
       },
       saveError: current?.saveError ?? null,
-      transcript: transcripts && row.status !== "ready" ? transcripts.of(row.id) : null,
+      transcript:
+        transcripts && row.status !== "ready" ? transcripts.of(row.id, hasAudio(row.id)) : null,
       health: health.of(row.id),
       microphonePausedAtMs: microphonePausedAt.get(row.id) ?? null,
       help: help.get(row.id) ?? null,
