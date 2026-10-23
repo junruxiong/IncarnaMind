@@ -19,13 +19,14 @@ The cases are in `cases.ts`; `repeat.ts` checks any Mind's sentences in any core
 
 ## The sets
 
-An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and eight Minds:
+An employment agreement in English and a 劳动合同 in Chinese (two-page PDFs, invented for this evaluation), and ten Minds:
 
 | Set | Sentences |
 |---|---|
 | `en`, `zh` | The three sentences of #1608 (notice as a paraphrase; holiday with a wrong figure; "Staff" for "the Employee"), the agreement's own words, a car allowance it doesn't mention, and a near miss that names days it doesn't |
 | `en-control`, `zh-control` | The home-working clause four ways: a paraphrase about the same Employee, the Employee by name, "Staff" (员工) and "Employees" (职工) |
-| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped; in both, a duty for a permission and the reverse ("must" for "may", 须 for 可) in several sentences, and more parties reversed (who keeps whose secrets, who may pay in lieu of notice, who pays the social insurance, who may call whom in); and a figure for another year ("In 2026 … 25 days"), which still contradicts the agreement's yearly figure |
+| `en-conflicts`, `zh-conflicts` | Genuine contradictions of the agreements, one of each kind, each expected Contradicted: a number, a date and a year, a negation, a unit (per month for per year), the parties reversed (who reports to whom, who pays whom, employer and employee, seller and buyer, landlord and tenant), a name, a condition (seven days' notice for 24 hours), a scope word ("only during employment"), a place (the governing law), an entitlement turned off, and "unlimited"; in English also the pension shares swapped; in both, a duty for a permission and the reverse ("must" for "may", 须 for 可) in several sentences, and more parties reversed (who keeps whose secrets, who may pay in lieu of notice, who pays the social insurance, who may call whom in); a duty or permission in words other than must, may, 须 and 可 (shall, should and can for may or must, the Employee "entitled to" what the Company may do; 需, 应, 应当 for 可, 可以 for 须, 不得 for 可); and a figure for another year ("In 2026 … 25 days"), which still contradicts the agreement's yearly figure |
+| `en-paraphrases`, `zh-paraphrases` | A clause's duty or permission in other words, each expected Supported: "shall" for "must", "can" for "may", "is entitled to" for "may" and as the agreement says it; 需, 应, 应当, 必须 for 须, 可以 for 可, 不得泄露 for 须保密 |
 | `en-near-misses`, `zh-near-misses` | Near misses, each expected not Contradicted: a figure or a detail of another person or role than the agreement's (the Director of People, 人力资源总监, Managers, 经理), and "Staff" (员工) with a detail the agreement doesn't give (named days, a condition, bank transfer) |
 
 ## Running it

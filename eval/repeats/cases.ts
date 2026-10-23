@@ -175,7 +175,8 @@ export const DOCUMENTS: readonly RepeatDocument[] = [
  * a judgement is measured against the conflicts it loses (#1647). The near
  * misses give a figure or a detail of another person or role than the
  * agreement's, or add one to its own, so a nearest line is never taken for
- * their contradiction (#1708).
+ * their contradiction (#1708). The paraphrases say a clause's duty or
+ * permission in other words, each expected Supported.
  */
 const sentencesOf =
   (kind: RepeatSentence["kind"], expected: Expected) =>
@@ -190,6 +191,7 @@ const sentencesOf =
 
 const conflicts = sentencesOf("conflict", "contradicted");
 const nearMisses = sentencesOf("near-miss", "unsupported");
+const paraphrases = sentencesOf("paraphrase", "supported");
 
 export const SETS: readonly RepeatSet[] = [
   {
@@ -393,6 +395,16 @@ export const SETS: readonly RepeatSet[] = [
       ["entitlement-off", "The Employee gets no paid holiday beyond public holidays."],
       ["unlimited", "The Employee may take unlimited paid holiday."],
       ["period", "In 2026 the Employee was entitled to 25 days of paid holiday."],
+      ["duty-shall", "The Employee shall work from home two days a week."],
+      ["duty-should", "Up to 5 unused days should be carried over into the next year."],
+      [
+        "permission-can",
+        "The Employee can keep the Company's confidential information secret during and after employment.",
+      ],
+      [
+        "party-entitled",
+        "The Employee is entitled to salary in lieu of notice instead of working the notice period.",
+      ],
     ]),
   },
   {
@@ -424,6 +436,44 @@ export const SETS: readonly RepeatSet[] = [
       ["entitlement-off", "乙方不享有带薪年休假。"],
       ["unlimited", "乙方的带薪年休假不限天数。"],
       ["period", "2026年乙方享有带薪年休假15天。"],
+      ["duty-xu", "乙方每周需在家工作两天。"],
+      ["duty-ying", "甲方应提前24小时通知乙方在居家工作日到岗。"],
+      ["duty-yingdang", "试用期内任何一方应当提前三日书面通知对方解除本合同。"],
+      ["permission-keyi", "乙方离职后可以对甲方的商业秘密保密。"],
+      ["prohibition-bude", "乙方不得在家工作。"],
+    ]),
+  },
+  {
+    id: "en-paraphrases",
+    language: "en",
+    mind: "Duties and permissions",
+    sentences: paraphrases([
+      [
+        "shall",
+        "The Employee shall keep the Company's confidential information secret during and after employment.",
+      ],
+      ["can", "Up to 5 unused days can be carried over into the next year."],
+      [
+        "entitled-company",
+        "The Company is entitled to pay salary in lieu of notice instead of requiring the Employee to work the notice period.",
+      ],
+      [
+        "entitled-holiday",
+        "The Employee is entitled to 27 working days of paid holiday a year, on top of public holidays.",
+      ],
+    ]),
+  },
+  {
+    id: "zh-paraphrases",
+    language: "zh-CN",
+    mind: "义务与许可",
+    sentences: paraphrases([
+      ["xu", "乙方每周可在家工作两天，需事先与主管商定。"],
+      ["ying", "乙方在职期间及离职后均应对甲方的商业秘密保密。"],
+      ["yingdang", "试用期满后，任何一方应当提前三个月书面通知对方，方可解除本合同。"],
+      ["bixu", "乙方在职期间及离职后都必须对甲方的商业秘密保密。"],
+      ["keyi", "甲方可以提前24小时通知乙方在居家工作日到岗。"],
+      ["bude", "乙方在职期间及离职后均不得泄露甲方的商业秘密。"],
     ]),
   },
   {
