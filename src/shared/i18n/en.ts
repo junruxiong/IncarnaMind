@@ -3412,6 +3412,11 @@ export const en = {
   "export.comment.sentence.contradicted.plain": "Contradicted by your Documents.",
   "export.comment.sentence.unsupported": "Unsupported: I didn’t find this in “{scope}”.",
   "export.comment.sentence.citedCaseUnchecked": "Cited case not checked: not in the Documents.",
+  "export.comment.sentence.ownWorkings": "Unsupported: only your own working file says this.",
+  "export.comment.sentence.unsupported.citation":
+    "Unsupported: your Citation supports {covered}, not the parts about {uncovered}.",
+  "export.comment.sentence.unsupported.citations":
+    "Unsupported: your Citations support {covered}, not the parts about {uncovered}.",
   "export.comment.sentence.unsupported.differs":
     "Unsupported: your Documents say something different (“{quote}”, {source})",
   "export.comment.sentence.unsupported.covers":

@@ -18,7 +18,7 @@ export interface RepeatRow extends RepeatResult {
 const OUTCOMES: readonly Outcome[] = [
   "supported",
   "partly",
-  "not-found",
+  "absent",
   "differs",
   "contradicted",
   "not-checked",
@@ -27,9 +27,7 @@ const OUTCOMES: readonly Outcome[] = [
 
 /** The verdict behind an outcome: the three cards of an unsupported sentence are one verdict. */
 export const verdictOf = (outcome: Outcome) =>
-  outcome === "partly" || outcome === "differs" || outcome === "not-found"
-    ? "unsupported"
-    : outcome;
+  outcome === "partly" || outcome === "differs" || outcome === "absent" ? "unsupported" : outcome;
 
 export function meetsExpected(row: Pick<RepeatRow, "outcome" | "expected">): boolean {
   const verdict = verdictOf(row.outcome);
@@ -59,8 +57,10 @@ export interface GroupSummary {
   sentences: SentenceSummary[];
   /** Supported, for a sentence its Documents don't state. */
   falseSupported: number;
-  /** Not found, for a sentence its Documents state. */
-  notFoundOnStated: number;
+  /** Absent, for a sentence its Documents state. */
+  absentOnStated: number;
+  /** The partly-supported card, for a sentence whose topic no Document is about. */
+  partlyOnAbsent: number;
   /** Repeats whose verdicts differ from the one before on any sentence, of those that follow one. */
   disagreeing: number;
   followed: number;
@@ -118,9 +118,10 @@ export function summarise(rows: readonly RepeatRow[]): GroupSummary[] {
       falseSupported: group.filter(
         (row) => !STATED.has(row.expected) && row.outcome === "supported",
       ).length,
-      notFoundOnStated: group.filter(
-        (row) => STATED.has(row.expected) && row.outcome === "not-found",
-      ).length,
+      partlyOnAbsent: group.filter((row) => row.kind === "absent" && row.outcome === "partly")
+        .length,
+      absentOnStated: group.filter((row) => STATED.has(row.expected) && row.outcome === "absent")
+        .length,
       disagreeing: pairs.filter(([before, after]) => verdictsIn(before) !== verdictsIn(after))
         .length,
       followed: pairs.length,
@@ -143,15 +144,16 @@ export function report(
     ...summaries.flatMap((group) => [
       `## ${group.set} · ${group.model} · ${group.repeats} checks`,
       "",
-      "| Sentence | Kind | Expected | Supported | Partly | Not found | Differs | Contradicted | Not checked | Same verdict |",
+      "| Sentence | Kind | Expected | Supported | Partly | Absent | Differs | Contradicted | Not checked | Same verdict |",
       "|---|---|---|---|---|---|---|---|---|---|",
       ...group.sentences.map(
         (each) =>
-          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes["not-found"]} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
+          `| ${each.key} | ${each.kind} | ${each.expected} | ${each.outcomes.supported} | ${each.outcomes.partly} | ${each.outcomes["absent"]} | ${each.outcomes.differs} | ${each.outcomes.contradicted} | ${each.outcomes["not-checked"] + each.outcomes["no-mark"]} | ${each.steady} of ${each.repeats} |`,
       ),
       "",
       `- False Supported: ${group.falseSupported}`,
-      `- Not found, for a sentence they state: ${group.notFoundOnStated}`,
+      `- Absent, for a sentence they state: ${group.absentOnStated}`,
+      `- The partly-supported card, for a sentence whose topic they don't hold: ${group.partlyOnAbsent}`,
       `- Checks whose verdicts differ from the one before: ${group.disagreeing} of ${group.followed}`,
       "",
       ...(group.misses.length > 0

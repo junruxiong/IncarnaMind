@@ -1097,6 +1097,27 @@ describe("A sentence the Documents state only part of, with no Citation", () => 
     expect((await shownChecks(core, client))[0]?.shown).toEqual({ state: "supported" });
   });
 
+  test("a sentence with its own Citations asks for no quote: its card shows them", async () => {
+    const model = checkingModel(
+      { [STAFF]: { reply: { text: `Verdict: unsupported${PARTLY}` }, judgement: "neither" } },
+      [],
+      JSON.stringify({ passage: "P1", location: null, quote: MOON }),
+    );
+    const { core } = await setUpWithDocuments(model, [TIDES]);
+
+    const result = await core.checkClaim({
+      claim: STAFF,
+      cited: [{ documentName: "Tides", quote: MOON }],
+    });
+
+    expect(result).toMatchObject({
+      verdict: "unsupported",
+      unsupported: { covered: "spring tides at new and full moon" },
+    });
+    expect(result.verdict === "unsupported" && result.unsupported?.quoted).toBeFalsy();
+    expect(asked(model, "named the part of it that a Passage does state")).toBe(0);
+  });
+
   test("a nearest line that says something different still comes first", async () => {
     const { core, client, check } = await mindWith(
       [CONTRADICTED],

@@ -65,35 +65,40 @@ const row = (repeat: number, key: string, outcome: Outcome): RepeatRow => {
 };
 
 describe("the repeated checks", () => {
-  test("name an Unsupported card by what it shows: a quoted part, a different line, or not found", () => {
+  test("name an Unsupported card by what it shows: a quoted part, a different line, or absent", () => {
     const partly = { reason: null, covered: "two days a week", uncovered: "all staff" };
     expect(outcomeOf(mark({ unsupported: { ...partly, quoted: QUOTE } }))).toBe("partly");
-    expect(outcomeOf(mark({ unsupported: partly }))).toBe("not-found");
+    expect(outcomeOf(mark({ unsupported: partly }))).toBe("absent");
     expect(outcomeOf(mark({ evidence: QUOTE, unsupported: { ...partly, quoted: QUOTE } }))).toBe(
       "differs",
     );
-    expect(outcomeOf(mark({}))).toBe("not-found");
+    expect(outcomeOf(mark({}))).toBe("absent");
     expect(outcomeOf(mark({ state: "supported" }))).toBe("supported");
     expect(outcomeOf(mark({ state: "not-checked", reason: "failed" }))).toBe("not-checked");
     expect(outcomeOf(undefined)).toBe("no-mark");
   });
 
-  test("count false Supported, not found on a stated sentence, and checks that differ from the one before", () => {
+  test("count false Supported, absent on a stated sentence, and checks that differ from the one before", () => {
     const [summary] = summarise([
       row(1, "notice", "supported"),
-      row(1, "car", "not-found"),
+      row(1, "car", "absent"),
       row(2, "notice", "partly"),
-      row(2, "car", "not-found"),
-      row(3, "notice", "not-found"),
+      row(2, "car", "absent"),
+      row(3, "notice", "absent"),
       row(3, "car", "supported"),
     ]);
 
-    expect(summary).toMatchObject({ repeats: 3, falseSupported: 1, notFoundOnStated: 1 });
+    expect(summary).toMatchObject({
+      repeats: 3,
+      falseSupported: 1,
+      absentOnStated: 1,
+      partlyOnAbsent: 0,
+    });
     expect(summary?.disagreeing).toBe(2);
     expect(summary?.followed).toBe(2);
     expect(summary?.sentences.find((each) => each.key === "notice")).toMatchObject({
       steady: 2,
-      outcomes: { supported: 1, partly: 1, "not-found": 1 },
+      outcomes: { supported: 1, partly: 1, absent: 1 },
     });
     expect(summary?.misses.map((each) => [each.repeat, each.key])).toEqual([
       [2, "notice"],

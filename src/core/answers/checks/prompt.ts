@@ -39,7 +39,8 @@ const reply = (language: Language) =>
     'Scope: same or wider. "wider" when the sentence names the Passage\'s own party or term in general words, a wider group than the Passage\'s ("tenants" for "the Tenant"); "same" otherwise. The Passage\'s own word for its party ("the Tenant" for "the Tenant"), a name for it or another word for the very same party ("Ms Patel" for "the Tenant") is "same".',
     'Topic: found or not found. "found" when a Passage is about the sentence\'s own subject and detail, even when it gives another value or only part of it; "not found" when none is, though one may be about a neighbouring topic (rent, for a parking fee).',
     `Then, for supported or contradicted, one plain sentence in ${LANGUAGE_NAMES[language]}, whatever language the Documents and the User's sentence are in, saying what the Document says, with the marker [^1] at its end. For contradicted, name the thing, and give the Document's value and the sentence's.`,
-    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say and, when a cited Passage states part of the sentence's own claim, two last lines: "Covered: " and a short phrase in ${LANGUAGE_NAMES[language]} for what it states ("the speed comparison"), then "Not covered: " and the topics it doesn't, as a phrase of the same kind ("memory and robustness"). Part of the claim means the same subject and the same detail; a Passage on a neighbouring topic states none of it (rent states nothing of a parking fee), and then there are no such lines.`,
+    `For unsupported, one plain sentence in ${LANGUAGE_NAMES[language]} saying what the Documents don't say.`,
+    `Add two last lines, "Covered: " and "Not covered: ", only when a Passage states part of what this sentence itself says: the same subject and the same detail, the sentence saying more than the Passage (a wider group, an added condition, more days). "Covered: " is a short phrase in ${LANGUAGE_NAMES[language]} for that part ("the speed comparison"), "Not covered: " for the rest, as a phrase of the same kind ("memory and robustness"). A Passage about a neighbouring thing (the rent for a service charge, another period, site or person) states no part of the sentence: then write neither line.`,
     `For supported with "Scope: wider", the same two last lines: "Covered: " and what the Passage states for its own party, then "Not covered: " and the wider group.`,
     "Write nothing else.",
   ].join("\n");
@@ -158,7 +159,7 @@ export const EVIDENCE_INSTRUCTIONS = [
 export const COVERED_EVIDENCE_INSTRUCTIONS = [
   "You checked a sentence the User wrote against Passages from the User's Documents, found it unsupported, and named the part of it that a Passage does state.",
   `Give the Passage that states that part now: the Passage's id, where the quote is as the Passage names it, and ${QUOTE}.`,
-  'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. If no Passage states it, reply {"passage": null}.',
+  'Reply with one JSON object and nothing else: {"passage": "P1", "location": "…", "quote": "…"}. A Passage about a neighbouring thing doesn\'t state it: if no Passage states it, reply {"passage": null}.',
 ].join("\n");
 
 /** The request for that record: the sentence, the verdict, the part covered if asked for, and the Passages the check read. */
