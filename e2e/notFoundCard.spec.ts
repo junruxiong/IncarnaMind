@@ -56,13 +56,13 @@ const LANGUAGES = {
     kept: "Kept as your view",
   },
   "zh-CN": {
-    cut: "删除这句话",
+    cut: "删除这句",
     keep: "保留为我的观点",
     searchAll: "搜索全部文档",
     findSources: "查找资料",
     searchWeb: "联网搜索",
     remove: "移除标记",
-    cutDone: "已删除这句话",
+    cutDone: "已删除这句",
     kept: "已保留为你的观点",
   },
 } as const;
@@ -223,6 +223,13 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(await claimIds()).toEqual(ids);
     await expect(marks.nth(2)).toHaveAttribute("data-check", "unsupported");
     expect(await cursorOf(editor)).toBe(cursor);
+    // Redo does it again as one step, and Undo takes it back again.
+    await window.keyboard.press("ControlOrMeta+Shift+z");
+    await expect.poll(() => wordsOf(lines.nth(0))).toBe(`${OWN} ${ELSEWHERE}`);
+    await expect(marks).toHaveCount(3);
+    await undo();
+    await expect.poll(() => wordsOf(lines.nth(0))).toBe(allFour);
+    await expect(marks).toHaveCount(4);
 
     // From ⌘K, in a sentence that is its whole paragraph: the paragraph goes too; Undo, from the line, brings it back.
     await clickEndOf(window, lines.nth(1));
