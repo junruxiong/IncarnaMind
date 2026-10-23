@@ -49,6 +49,7 @@ import {
 } from "./changes";
 import { core, files } from "./core";
 import { LIBRARY_DELETED } from "./deletedItems";
+import { isSearchable } from "./documentStatus";
 import { applyAssignments, applyDocumentChanges, createDocumentUpdates } from "./documentUpdates";
 import { describeError, errorMessage } from "./errors";
 import { languageNow } from "./i18n";
@@ -1779,11 +1780,14 @@ const madeExamples = (state: Pick<AppState, "examples" | "otherExamples">): Exam
 export const exampleMindIds = (state: Pick<AppState, "examples" | "otherExamples">): string[] =>
   allExamples(state).flatMap((each) => (each.mindId ? [each.mindId] : []));
 
-/** Ticks "Add your Documents" once there are Documents of the User's own, or Connectors. */
+const readOwnDocument = (document: Document, state: AppState) =>
+  isSearchable(document.status) && isOwnDocument(document, allExamples(state));
+
+/** Ticks "Add your Documents" once a Document of the User's own has been read, or there are Connectors. */
 function tickIndexed(connectors: number): void {
   const state = useAppStore.getState();
   const { documents, updateGettingStarted } = state;
-  if (connectors > 0 || documents.some((each) => isOwnDocument(each, allExamples(state))))
+  if (connectors > 0 || documents.some((each) => readOwnDocument(each, state)))
     updateGettingStarted({ indexed: true });
 }
 
@@ -1819,7 +1823,7 @@ followLayout(
 core.on("document.status", (changed) => {
   documentUpdates.upsert([changed]);
   const state = useAppStore.getState();
-  if (isOwnDocument(changed, allExamples(state))) state.updateGettingStarted({ indexed: true });
+  if (readOwnDocument(changed, state)) state.updateGettingStarted({ indexed: true });
 });
 
 // The examples made, opened again or removed: their Mind and Linked folder show "Example".

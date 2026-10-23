@@ -181,8 +181,12 @@ export interface CreateMindInput {
  *   `claimCheck` mark, and the `unsupported` reason a check gives (#1072),
  *   which an older version's editor would strip, so the sentence would count
  *   and be checked again. Older content is version 25 content as it is.
+ * - 26: a check made in the Search scope the User set for the Mind (#1623):
+ *   `chosen` in the `claimCheck` mark's `scope`. An older version would read
+ *   it as made in the Mind's Folder or in every Document, and say so on its
+ *   card. Older content is version 26 content as it is.
  */
-export const CONTENT_SCHEMA_VERSION = 25;
+export const CONTENT_SCHEMA_VERSION = 26;
 
 /**
  * The key, in the Mind's settings map (`MIND_SETTINGS_FIELD`), of the content
@@ -2032,7 +2036,7 @@ export interface GettingStarted {
   started: boolean;
   /** The User opened a Citation's card. */
   citationChecked: boolean;
-  /** The User added Documents of their own, or connected an app. */
+  /** A Document of the User's own has been read, not only added, or the User connected an app. */
   indexed: boolean;
   /** The User asked a Question of their own, not the example's. */
   askedOwn: boolean;
@@ -2076,6 +2080,11 @@ export interface DeviceSettings {
   suggestionOffers: number;
   /** What a Meeting records unless the start block says otherwise: the computer's sound too ("Me and them"), or only the microphone. */
   meetingSystemAudio: boolean;
+  /**
+   * The source a failed model download's line picked on this device (#1578), leading the others.
+   * "auto" by default: the probe orders them.
+   */
+  modelSource: ModelSourceChoice;
   /**
    * Where meeting audio is transcribed, once the User has chosen: at first run (Change on the
    * Meetings job) or in Settings. Null: not chosen, so this computer, and a first Meeting may
@@ -2488,6 +2497,10 @@ export interface DocumentScanProgress {
  * - "skipped": the Document has no text to tag (processing failed, or found none).
  * - "stopped": Tagging with AI is stopped where it is, in its Folder or Not in
  *   a Folder (see `stopTagging`): nothing is sent until it is turned back on.
+ * - "off": the Document came in while automatic tagging and sorting was off
+ *   (`LibrarySettings.automatic`, off for a cloud model until the User turns
+ *   it on): nothing is sent for it, and turning the switch on doesn't tag
+ *   it. A re-tag the User asks for does.
  */
 export type TaggingState =
   | "pending"
@@ -2497,7 +2510,8 @@ export type TaggingState =
   | "no-tags"
   | "failed"
   | "skipped"
-  | "stopped";
+  | "stopped"
+  | "off";
 
 /** Who put a Tag on a Document: automatic tagging, or the User. */
 export type TagSource = "automatic" | "user";
@@ -2760,6 +2774,19 @@ export interface SaveWebPageInput {
    * `UserSettings.keepWebPageLook` says. Ignored with `html`.
    */
   keepLook?: boolean;
+  /**
+   * Local mode is on and the User let this one page be fetched ("Fetch this
+   * page once"): without it, an address that isn't saved yet isn't fetched in
+   * Local mode, and the result says why ("local-mode"). It doesn't turn Local
+   * mode off.
+   */
+  localModeOnce?: boolean;
+}
+
+/** What `fetchWebPageAgain` takes besides the Document. */
+export interface FetchWebPageAgainOptions {
+  /** As `SaveWebPageInput.localModeOnce`. */
+  localModeOnce?: boolean;
 }
 
 /**
@@ -2779,10 +2806,17 @@ export type WebPageLook =
 /**
  * Why a page's look couldn't be kept: "timed-out", it didn't load in 30
  * seconds; "unreachable", it couldn't be loaded; "too-large", its PDF is over
- * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "failed",
+ * 50 MB; "stopped", IncarnaMind stopped while making it, twice; "local-mode",
+ * "Keep everything on this computer" is on, so the page wasn't loaded; "failed",
  * anything else.
  */
-export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "stopped" | "failed";
+export type WebPageLookFailure =
+  | "timed-out"
+  | "unreachable"
+  | "too-large"
+  | "stopped"
+  | "local-mode"
+  | "failed";
 
 /**
  * Why a web page wasn't saved, or wasn't fetched again:
@@ -2802,6 +2836,9 @@ export type WebPageLookFailure = "timed-out" | "unreachable" | "too-large" | "st
  * - "too-many-redirects": it redirected more than web search's fetcher follows.
  * - "not-from-search": web search fetches only the pages its search returned
  *   in the same Answer, and this wasn't one.
+ * - "local-mode": "Keep everything on this computer" is on, so nothing was
+ *   fetched: the site would have seen the request, and the address can name
+ *   a matter. The User can let this one page go (`localModeOnce`).
  */
 export type WebPageFailureReason =
   | "invalid-address"
@@ -2816,7 +2853,8 @@ export type WebPageFailureReason =
   | "not-text"
   | "not-public"
   | "too-many-redirects"
-  | "not-from-search";
+  | "not-from-search"
+  | "local-mode";
 
 export interface WebPageFailure {
   reason: WebPageFailureReason;
@@ -3676,7 +3714,23 @@ export interface EmbeddingModelError {
   kind: "network" | "integrity" | "storage" | "load";
   /** Technical detail in English, for logs and tooltips. */
   message: string;
+  /** A download every source failed (#1578): what each one said, in the order tried. */
+  sources?: { source: ModelSourceId; message: string }[];
 }
+
+/**
+ * Where the built-in models download from (#1578): Hugging Face, IncarnaMind's copy on
+ * ModelScope, hf-mirror.com, IncarnaMind's copy on Cloudflare R2.
+ */
+export type ModelSourceId = "huggingface" | "modelscope" | "hf-mirror" | "r2";
+
+/** The source the User picked on a failed download's line; "auto" tries them all in the probe's order. */
+export type ModelSourceChoice = "auto" | "huggingface" | "modelscope";
+export const MODEL_SOURCE_CHOICES: readonly ModelSourceChoice[] = [
+  "auto",
+  "huggingface",
+  "modelscope",
+];
 
 export interface EmbeddingModelStatus {
   /** The model's name, e.g. "multilingual-e5-small". */
@@ -4873,15 +4927,17 @@ export interface CheckClaimInput {
 }
 
 /**
- * Where a sentence's check searched: the Mind's Folder (null for a Mind in
- * none, which searches every Document), or every Document (`widened`)
- * because the User asked ("Search all Documents") or the Mind's Folder held
- * no Document (#1359). A Mind moved to another Folder since needs its
- * sentences checked again; one whose check was widened doesn't.
+ * Where a sentence's check searched: the Search scope the User set for the
+ * Mind (`chosen`, #1623), else the Mind's Folder (null for a Mind in none,
+ * which searches every Document), or every Document (`widened`) because the
+ * User asked ("Search all Documents") or the Mind's Folder held no Document
+ * (#1359). A Mind moved to another Folder since needs its sentences checked
+ * again, unless they were checked in its chosen scope or widened.
  */
 export interface ClaimCheckScope {
   folderId: string | null;
   widened: boolean;
+  chosen?: SearchScope;
 }
 
 /**
@@ -4962,8 +5018,17 @@ export type CheckSentencesResult =
   | { kind: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was sent: local mode is on, and the model isn't on this computer. */
   | { kind: "local-mode" }
-  /** Nothing was sent: the scope holds no Document with text to check against. */
-  | { kind: "no-documents"; folderId: string | null }
+  /**
+   * Nothing was sent: the scope holds no Document with text to check against. `chosen`: that
+   * scope is the Search scope the User set for the Mind, while other Documents are there; its
+   * items may be deleted, or, `onlyLeftOut`, hold only what the check leaves out (the file the
+   * Mind was made from).
+   */
+  | {
+      kind: "no-documents";
+      folderId: string | null;
+      chosen?: { scope: SearchScope; onlyLeftOut: boolean };
+    }
   /** The selection holds no sentence to check, or isn't in the Mind any more. */
   | { kind: "nothing" }
   /** Nothing was sent: every sentence of the selection holds changes still waiting. */
@@ -6224,6 +6289,9 @@ export const dataKinds = [
   "references",
   "connector-search",
   "meeting-audio",
+  "document-names",
+  "other-minds",
+  "live-transcript",
 ] as const;
 
 export type DataKind = (typeof dataKinds)[number];
@@ -6279,6 +6347,12 @@ export type DataKind = (typeof dataKinds)[number];
  *   voices included, to the cloud transcription service the User chose in
  *   Settings › Meetings or on the first-meeting sheet (#141). Choosing it
  *   allows it; none in local mode.
+ * - "scan-images": when Organize or the Library's automatic grouping meets a
+ *   PDF with no text after reading and OCR (a scan), up to 3 of its page
+ *   images, to the service of the model that reads them (the chosen model's,
+ *   else the image model's). Not allowed by choosing the provider (#1613):
+ *   the User allows it here, in Settings › Privacy, and without it the scan
+ *   stays unsorted. A model on this computer needs no consent.
  */
 export const dataFlowIds = [
   "chat",
@@ -6297,22 +6371,23 @@ export const dataFlowIds = [
   "web-search",
   "connector-registry",
   "transcription",
+  "scan-images",
 ] as const;
 
 export type DataFlowId = (typeof dataFlowIds)[number];
 
 /**
- * The flows choosing the chat model's provider allows (ADR-0022): everything
- * that sends to it, as the line above "Use this provider" says. That line is
- * made from this list, so a flow added here needs its words (`chosenFlowLines`).
+ * The flows choosing the chat model's provider allows (ADR-0022): what runs
+ * by itself, as the line above "Use this provider" says. That line is made from
+ * this list, so a flow added here needs its words (`chosenFlowLines`). Tagging and
+ * sorting Documents aren't in it: the User turns them on (Settings › Tagging) or
+ * asks for them, and that is their consent (#1617).
  */
 export const CHOSEN_PROVIDER_FLOWS = [
   "chat",
   "checks",
   "suggestions",
   "edits",
-  "tagging",
-  "classification",
 ] as const satisfies readonly DataFlowId[];
 
 export type ChosenProviderFlow = (typeof CHOSEN_PROVIDER_FLOWS)[number];
@@ -6492,6 +6567,10 @@ export interface PageSetup {
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
  *   once, when a Meeting is first transcribed on this computer (#136), and the
  *   two models that tell its speakers apart (#138), when one is first recorded.
+ * - "model-source-modelscope", "model-source-hf-mirror", "model-source-copy": where else a
+ *   built-in model's files may come from when Hugging Face doesn't give them (#1578):
+ *   IncarnaMind's copy on ModelScope (whose front page the probe asks whenever a model
+ *   downloads), hf-mirror.com, and IncarnaMind's own copy on Cloudflare R2, once it exists.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
@@ -6514,6 +6593,9 @@ export const networkTrafficIds = [
   "reranking-model",
   "text-recognition-model",
   "transcription-model",
+  "model-source-modelscope",
+  "model-source-hf-mirror",
+  "model-source-copy",
   "ollama-pull",
   "chatgpt-sign-in",
   "claude-sign-in",
@@ -8408,6 +8490,8 @@ export interface CoreApi {
   stopTagging(): Promise<(string | null)[]>;
   /** Turns automatic Tagging with AI on, or stops it, in a Folder or Not in a Folder (null). */
   setTaggingWithAi(folderId: string | null, on: boolean): Promise<void>;
+  /** Closes the Library's one-time line that automatic tagging and sorting went off (`LibrarySnapshot.automaticOffNotice`). */
+  dismissAutomaticOffNotice(): Promise<void>;
   /**
    * A manual choice, including Not in a Folder (null), wins over in-flight classification.
    * Returns the assignment before, for `restoreAssignment` (null: it had none).
@@ -8473,7 +8557,8 @@ export interface CoreApi {
    * Document's Passages and text, a Tag's links), keeping each one's id and when it was
    * deleted, so a later sync can pass the
    * deletion on. They can't be restored afterwards. Throws for one not deleted. Never
-   * touches the User's files. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
+   * touches the User's files; a copy the old layout made in the data folder (ADR-0010) goes
+   * with its Document. Done by itself at start-up `RECENTLY_DELETED_DAYS` after.
    */
   deletePermanently(refs: DeletedRef[]): Promise<void>;
 
@@ -8722,9 +8807,10 @@ export interface CoreApi {
    * page that changed becomes a new version. Citations keep pointing at the
    * version they quote. One that can't be fetched now leaves the Document as
    * it was: the result says why. Throws NotFoundError for an unknown
-   * Document, and InvalidInputError for one that isn't a web page.
+   * Document, and InvalidInputError for one that isn't a web page. In Local
+   * mode nothing is fetched unless `localModeOnce` says the User let it.
    */
-  fetchWebPageAgain(documentId: string): Promise<WebPageResult>;
+  fetchWebPageAgain(documentId: string, options?: FetchWebPageAgainOptions): Promise<WebPageResult>;
   /**
    * Documents that are not deleted, missing ones included, most recently
    * added first. With a Folder, only the Documents in it, and in its
@@ -10411,6 +10497,7 @@ const methods: Record<CoreApiMethod, true> = {
   classifyDocuments: true,
   stopTagging: true,
   setTaggingWithAi: true,
+  dismissAutomaticOffNotice: true,
   assignDocumentGroup: true,
   acceptAssignments: true,
   rejectAssignments: true,

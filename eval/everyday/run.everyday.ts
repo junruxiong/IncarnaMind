@@ -396,6 +396,7 @@ test("everyday requests", async () => {
     if (only === "hard") return each.hard === true;
     if (only === "research") return each.research === true;
     if (only === "dates") return each.library === "dated";
+    if (only === "chinese") return each.language === "zh-CN";
     return only.split(",").includes(each.id);
   });
   const runs = Number(process.env.INCARNAMIND_EVAL_EVERYDAY_RUNS ?? "3") || 3;
