@@ -104,11 +104,8 @@ async function harbourNotes(window: Page) {
 
 const marks = (window: Page) => window.getByTestId("claim-mark");
 
-test("Check this Mind from ⌘K: the estimate first on a cloud model, then every claim marked, the headings, questions and opinions not; an edited claim is checked again alone", async () => {
-  await writeFile(join(sources, "Tides.pdf"), TIDES);
-  const { app, window } = await launchApp(dataDir, { fakeChat: true });
-  await dismissChatSetup(window);
-  await acceptPlainTextKeys(window);
+/** A model billed per token, whose requests the cost meter counts, with the checks allowed to use it. */
+async function useCloudChatModel(window: Page) {
   await window.evaluate(async () => {
     const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
     const provider = await core.saveChatProvider({
@@ -122,6 +119,22 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
       }
     }
   });
+}
+
+/** The requests made to cloud models this month, as the cost meter counts them. */
+const modelRequests = (window: Page) =>
+  window.evaluate(async () => {
+    const core = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    const { providers } = await core.getCostSummary();
+    return providers.reduce((sum, each) => sum + each.requests, 0);
+  });
+
+test("Check this Mind from ⌘K: the estimate first on a cloud model, then every claim marked, the headings, questions and opinions not; an edited claim is checked again alone", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await acceptPlainTextKeys(window);
+  await useCloudChatModel(window);
   await setWindowSize(app, window, 1440, 900);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   await harbourNotes(window);
@@ -168,7 +181,7 @@ test("Check this Mind from ⌘K: the estimate first on a cloud model, then every
   await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
   await expect(marks(window).and(window.locator('[data-check="unsupported"]'))).toHaveCount(11);
   await expect(marks(window)).toHaveCount(15);
-  await expect(again).toHaveAttribute("title", "Nothing changed: checks every sentence");
+  await expect(again).toHaveAttribute("title", "Nothing changed");
 
   // ⌘K's "Check this Mind" is that same action; "Check every sentence again" is the whole Mind.
   await slideSelect(window, first, "Puffins");
@@ -237,12 +250,11 @@ test("In Chinese and a narrow window, from the Mind's tab menu: a model on this 
   const widen = health.getByTestId("checks-uncovered").getByTestId("checks-check-all");
   await expect(widen).toHaveText("对照全部文档核对");
   await pointAndClick(window, widen);
-  // The claims aren't sorted again: the ask comes at once.
-  await expect(ask).toContainText("要对照你的文档，核对这个 Mind 中的 15 条说法吗？");
-  await pointAndClick(window, ask.getByTestId("mind-check-check"));
+  // The claims are named already and a model on this computer is free: it checks at once, asking nothing.
+  await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
+  await expect(ask).toHaveCount(0);
   await expect(window.getByTestId("badge-stop")).toHaveCount(0);
   await expect(health.getByTestId("health-checked-all")).toBeVisible();
-  await expect(marks(window).and(window.locator('[data-check="supported"]'))).toHaveCount(3);
   await expect(marks(window).and(window.locator('[data-check="contradicted"]'))).toHaveCount(1);
   await expect(widen).toHaveCount(0);
   await expect(marks(window)).toHaveCount(15);
@@ -291,4 +303,83 @@ test("when the provider can't be reached while the claims are named, Try again n
   await expect(marks(window)).toHaveCount(0);
   await pointAndClick(window, ask.getByTestId("mind-check-check"));
   await expect(marks(window)).toHaveCount(15);
+});
+
+test("Check this Mind with nothing changed sends nothing: the marks stay and the card says since when, with Check every sentence again, which checks for real; in English and Chinese", async () => {
+  await writeFile(join(sources, "Tides.pdf"), TIDES);
+  const { app, window } = await launchApp(dataDir, { fakeChat: true });
+  await dismissChatSetup(window);
+  await acceptPlainTextKeys(window);
+  await useCloudChatModel(window);
+  await setWindowSize(app, window, 1440, 900);
+  await addDocuments(window, [join(sources, "Tides.pdf")]);
+  await harbourNotes(window);
+
+  const card = await checkCard(window);
+  await pointAndClick(window, card.getByTestId("badge-check-mind"));
+  await pointAndClick(window, card.getByTestId("mind-check-ask").getByTestId("mind-check-check"));
+  await expect(card.getByTestId("health-checked-all")).toContainText("Checked 15 claims, ");
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
+  await expect(marks(window)).toHaveCount(15);
+  const verdicts = () =>
+    marks(window).evaluateAll((all) =>
+      all.map((each) => `${each.getAttribute("data-check")}: ${each.textContent}`),
+    );
+  const checked = await verdicts();
+  const sent = await modelRequests(window);
+  expect(sent).toBeGreaterThan(0);
+
+  // Again: no model is asked, no question, no run; the marks are as they were, and the card says why.
+  const again = card.getByTestId("badge-check-mind");
+  await pointAndClick(window, again);
+  const unchanged = card.getByTestId("mind-check-unchanged");
+  await expect(unchanged).toContainText("Nothing changed since ");
+  await expect(unchanged).toHaveAttribute("role", "status");
+  await expect(card.getByTestId("mind-check-ask")).toHaveCount(0);
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
+  await expect(window.getByTestId("badge-progress")).toHaveCount(0);
+  expect(await verdicts()).toEqual(checked);
+  expect(await modelRequests(window)).toBe(sent);
+  await screenshot(window, "mind-check-unchanged-en");
+
+  // The action is the line's own button, reached from the keyboard, and checks every sentence for real.
+  const every = unchanged.getByTestId("mind-check-every");
+  await expect(every).toHaveText("Check every sentence again");
+  await window.keyboard.press("Shift+Tab");
+  await expect(every).toBeFocused();
+  await window.keyboard.press("Enter");
+  const ask = card.getByTestId("mind-check-ask");
+  await expect(ask).toContainText("Check this Mind’s 15 claims against your Documents?");
+  await expect(unchanged).toHaveCount(0);
+  expect(await modelRequests(window)).toBe(sent);
+  await pointAndClick(window, ask.getByTestId("mind-check-check"));
+  await expect.poll(() => modelRequests(window)).toBeGreaterThan(sent);
+  await expect(window.getByTestId("badge-stop")).toHaveCount(0);
+  await expect(marks(window)).toHaveCount(15);
+  await expect(unchanged).toHaveCount(0);
+
+  // An edit makes a sentence to check; the same words again, and nothing changed.
+  const editor = window.getByTestId("mind-editor");
+  const first = editor.locator(":scope > p").first();
+  await slideSelect(window, first, "Penguins");
+  await window.keyboard.type("Puffins");
+  await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(1);
+  const editedCard = await checkCard(window);
+  await expect(editedCard.getByTestId("badge-check-mind")).toHaveAttribute(
+    "title",
+    "1 changed sentence",
+  );
+  await slideSelect(window, first, "Puffins");
+  await window.keyboard.type("Penguins");
+  await expect(marks(window).and(window.locator('[data-check="needs-recheck"]'))).toHaveCount(0);
+
+  await setLanguage(window, "zh-CN");
+  const reopened = await checkCard(window);
+  const sentAgain = await modelRequests(window);
+  await pointAndClick(window, reopened.getByTestId("badge-check-mind"));
+  await expect(unchanged).toContainText(/^自 .+ 起没有改动/);
+  await expect(unchanged.getByTestId("mind-check-every")).toHaveText("重新核对每一句");
+  expect(await modelRequests(window)).toBe(sentAgain);
+  await screenshot(window, "mind-check-unchanged-zh");
+  await app.close();
 });

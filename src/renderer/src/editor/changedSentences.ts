@@ -7,8 +7,8 @@ const IDLE_MS = 300;
 
 /**
  * How many sentences "Check this Mind" would check now, the ones changed since
- * the last check, as the Mind is edited; 0 when nothing changed (it then checks
- * every sentence), null until known. Not counted while a check runs.
+ * the last check or not checked, as the Mind is edited; 0 when nothing changed
+ * (it then checks nothing), null until known. Not counted while a check runs.
  */
 export function useChangedSentences(doc: Y.Doc, mindId: string, paused: boolean): number | null {
   const [count, setCount] = useState<number | null>(null);
@@ -42,7 +42,7 @@ export function useChangedSentences(doc: Y.Doc, mindId: string, paused: boolean)
   return count;
 }
 
-/** What "Check this Mind" would check: the changed sentences, or every one when nothing changed. */
+/** What "Check this Mind" would check: the changed sentences, or nothing. */
 export function changedTitle(t: Translate, changed: number): string {
   if (changed === 0) return t("mindCheck.changed.none");
   return t(changed === 1 ? "mindCheck.changed.one" : "mindCheck.changed", { count: changed });

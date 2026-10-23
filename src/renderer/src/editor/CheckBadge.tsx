@@ -22,7 +22,7 @@ import { changedTitle, useChangedSentences } from "./changedSentences";
 import { shownClaims } from "./claimChecks";
 import { HEALTH_PARTS } from "./healthCounts";
 import { CheckMarkIcon, ClaimMarkIcon } from "./icons";
-import { MindCheckAsk, useMindCheckProgress } from "./MindCheckLine";
+import { MindCheckAsk, MindUnchanged, useMindCheckProgress } from "./MindCheckLine";
 import { HealthCard, PartMark, useHealth } from "./NoteHealth";
 import { Popover } from "./Popover";
 import { useVerifyState, VerifyCard, verifyDone } from "./VerifyLine";
@@ -162,30 +162,34 @@ function CheckActions({
   const running = useChecks((state) => state.running[mindId] !== undefined);
   const changed = useChangedSentences(doc, mindId, running);
   const askingContradictions = useContradictions((state) => state.asking[mindId] !== undefined);
+  const unchanged = useMindCheck((state) => state.unchanged[mindId]);
   if (askingMind) return <MindCheckAsk mindId={mindId} />;
   if (askingContradictions) return <ContradictionAsk doc={doc} mindId={mindId} />;
   return (
-    <div className="check-card-actions">
-      <button
-        type="button"
-        data-testid="badge-check-mind"
-        disabled={running}
-        title={changed === null ? undefined : changedTitle(t, changed)}
-        className={buttonStyle("primary", "sm")}
-        onClick={() => void startCheckThisMind(mindId)}
-      >
-        {t("mindCheck.command")}
-      </button>
-      <button
-        type="button"
-        data-testid="badge-check-contradictions"
-        disabled={running}
-        className="check-card-link"
-        onClick={() => void startContradictionCheck(mindId)}
-      >
-        {t("contradictions.command")}
-      </button>
-    </div>
+    <>
+      {unchanged && changed === 0 && <MindUnchanged mindId={mindId} since={unchanged.since} />}
+      <div className="check-card-actions">
+        <button
+          type="button"
+          data-testid="badge-check-mind"
+          disabled={running}
+          title={changed === null ? undefined : changedTitle(t, changed)}
+          className={buttonStyle("primary", "sm")}
+          onClick={() => void startCheckThisMind(mindId)}
+        >
+          {t("mindCheck.command")}
+        </button>
+        <button
+          type="button"
+          data-testid="badge-check-contradictions"
+          disabled={running}
+          className="check-card-link"
+          onClick={() => void startContradictionCheck(mindId)}
+        >
+          {t("contradictions.command")}
+        </button>
+      </div>
+    </>
   );
 }
 

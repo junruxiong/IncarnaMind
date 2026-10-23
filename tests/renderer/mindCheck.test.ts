@@ -5,6 +5,7 @@ const bridge = vi.hoisted(() => ({
   planMindCheck: vi.fn<CoreBridge["planMindCheck"]>(),
   estimateRun: vi.fn<CoreBridge["estimateRun"]>(),
   checkMind: vi.fn<CoreBridge["checkMind"]>(),
+  findMindClaims: vi.fn<CoreBridge["findMindClaims"]>(),
 }));
 vi.mock("../../src/renderer/src/core", () => ({ core: bridge }));
 vi.mock("../../src/renderer/src/store", () => ({
@@ -15,9 +16,15 @@ vi.mock("../../src/renderer/src/store", () => ({
 vi.mock("../../src/renderer/src/checks", () => ({
   useChecks: { getState: () => ({ running: {} }) },
   dismissCheckProblem: vi.fn(),
+  setCheckCardOpen: vi.fn(),
   setCheckProblem: vi.fn(),
   setCheckRunning: vi.fn(),
   setCheckSmallModel: vi.fn(),
+}));
+
+vi.mock("../../src/renderer/src/layoutSlice", () => ({
+  frontTabOfMind: () => ({ id: "tab" }),
+  groupsMerged: () => false,
 }));
 
 const plan: MindCheckPlan = {
@@ -44,7 +51,7 @@ beforeEach(async () => {
   bridge.estimateRun.mockResolvedValue(estimate);
   bridge.checkMind.mockResolvedValue({ kind: "cancelled" });
   const { useMindCheck } = await import("../../src/renderer/src/mindCheck");
-  useMindCheck.setState({ asking: {} });
+  useMindCheck.setState({ asking: {}, unchanged: {} });
 });
 
 describe("Asking before checking against Documents added since", () => {
@@ -86,5 +93,53 @@ describe("Asking before checking against Documents added since", () => {
     await startMindCheck("mind", "added");
     expect(bridge.checkMind).toHaveBeenCalledOnce();
     expect(useMindCheck.getState().asking.mind).toBeUndefined();
+  });
+});
+
+describe("Check this Mind", () => {
+  const SINCE = "2026-10-02T14:20:00.000Z";
+
+  test("when nothing changed it asks no model and opens the card on the line that says so", async () => {
+    bridge.planMindCheck.mockResolvedValue({ kind: "unchanged", since: SINCE });
+    const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    const { setCheckCardOpen, setCheckProblem, setCheckRunning } = await import(
+      "../../src/renderer/src/checks"
+    );
+    await startCheckThisMind("mind");
+    expect(bridge.planMindCheck.mock.calls).toEqual([["mind", "changed", false]]);
+    expect(bridge.findMindClaims).not.toHaveBeenCalled();
+    expect(bridge.estimateRun).not.toHaveBeenCalled();
+    expect(bridge.checkMind).not.toHaveBeenCalled();
+    expect(setCheckRunning).not.toHaveBeenCalled();
+    expect(setCheckProblem).not.toHaveBeenCalled();
+    expect(useMindCheck.getState().unchanged.mind).toEqual({ since: SINCE });
+    expect(setCheckCardOpen).toHaveBeenCalledWith("tab", true);
+  });
+
+  test("what changed is checked as before, and the line goes", async () => {
+    const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    useMindCheck.setState({ unchanged: { mind: { since: SINCE } } });
+    await startCheckThisMind("mind");
+    expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "changed" }));
+    expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
+  });
+
+  test("a Mind with no claim says so, not that nothing changed", async () => {
+    bridge.planMindCheck.mockResolvedValue({ kind: "nothing" });
+    const { startCheckThisMind, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    const { setCheckProblem } = await import("../../src/renderer/src/checks");
+    await startCheckThisMind("mind");
+    expect(setCheckProblem).toHaveBeenCalledWith("mind", { kind: "no-claims" });
+    expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
+    expect(bridge.checkMind).not.toHaveBeenCalled();
+  });
+
+  test("Check every sentence again checks for real, and the line goes", async () => {
+    const { startMindCheck, useMindCheck } = await import("../../src/renderer/src/mindCheck");
+    useMindCheck.setState({ unchanged: { mind: { since: SINCE } } });
+    await startMindCheck("mind", "all");
+    expect(bridge.planMindCheck).toHaveBeenCalledWith("mind", "all", false);
+    expect(bridge.checkMind).toHaveBeenCalledWith(expect.objectContaining({ mode: "all" }));
+    expect(useMindCheck.getState().unchanged.mind).toBeUndefined();
   });
 });

@@ -1,13 +1,14 @@
 /**
  * Check this Mind (#737), the window's side: "Check this Mind" (the check
  * badge's card, ⌘K, the Mind's menu) checks what changed since the last
- * check, or every sentence that makes a claim when nothing did; "Check every
- * sentence again" (⌘K) always checks them all. When the model is to name the
- * claims, it does that first, with Stop, and the card then asks with their
- * number and, billed per token, the estimate (#973); a run that only checks
- * again asks so when it is large, and, for the Documents added since (#993),
- * whatever their number. Plans and models on this computer run without
- * asking. While it runs, the badge counts the claims checked, with Stop.
+ * check; when nothing did it sends nothing and says so in the card, whose
+ * "Check every sentence again" (also ⌘K) checks them all for real. When the
+ * model is to name the claims, it does that first, with Stop, and the card
+ * then asks with their number and, billed per token, the estimate (#973); a
+ * run that only checks again asks so when it is large, and, for the
+ * Documents added since (#993), whatever their number. Plans and models on
+ * this computer run without asking. While it runs, the badge counts the
+ * claims checked, with Stop.
  */
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
@@ -16,6 +17,7 @@ import type { CheckMindMode, MindCheckPlan, MindCheckRun } from "../../core/api"
 import { mindCheckOf, observeMindCheck } from "../../shared/mindCheck";
 import {
   dismissCheckProblem,
+  setCheckCardOpen,
   setCheckProblem,
   setCheckRunning,
   setCheckSmallModel,
@@ -24,11 +26,14 @@ import {
 import { core } from "./core";
 import { type EstimateLine, estimateLine } from "./cost";
 import { languageNow, translateNow } from "./i18n";
+import { frontTabOfMind, groupsMerged } from "./layoutSlice";
 import { useAppStore } from "./store";
 
 interface MindCheckState {
   /** By Mind: the question asked before a run billed per token, with its estimate. */
   asking: Readonly<Record<string, Asking>>;
+  /** By Mind: Check this Mind found nothing changed, and when its oldest check still holding was made (null if unknown). */
+  unchanged: Readonly<Record<string, { since: string | null }>>;
 }
 
 interface Asking {
@@ -47,14 +52,22 @@ interface Asking {
 /** A run that only checks again asks first, with the estimate, when it checks this many or more. */
 const ASK_FROM = 10;
 
-export const useMindCheck = create<MindCheckState>()(() => ({ asking: {} }));
+export const useMindCheck = create<MindCheckState>()(() => ({ asking: {}, unchanged: {} }));
 
 export const dismissMindCheck = (mindId: string) =>
   useMindCheck.setState((state) => {
     const asking = { ...state.asking };
+    const unchanged = { ...state.unchanged };
     delete asking[mindId];
-    return { asking };
+    delete unchanged[mindId];
+    return { asking, unchanged };
   });
+
+/** Opens the Mind's check badge card in the tab in front, where the Mind is shown. */
+export function showCheckCard(mindId: string): void {
+  const tab = frontTabOfMind(useAppStore.getState().layout, mindId, groupsMerged());
+  setCheckCardOpen(tab?.id ?? mindId, true);
+}
 
 /** The Mind's last whole-Mind check, as it changes. */
 export function useMindCheckRun(doc: Y.Doc): MindCheckRun | null {
@@ -149,17 +162,16 @@ export function startMindCheck(
   );
 }
 
-/** "Check this Mind": what changed since the last check, or, when nothing did, every sentence. */
+/** "Check this Mind": what changed since the last check; when nothing did, no check, and the card says so. */
 export function startCheckThisMind(mindId: string): Promise<void> {
-  return start(mindId, async (): Promise<Planned> => {
-    const changed = await core.planMindCheck(mindId, "changed", false);
-    if (changed.kind !== "nothing") return { mode: "changed", allDocuments: false, plan: changed };
-    return {
-      mode: "all",
+  return start(
+    mindId,
+    async (): Promise<Planned> => ({
+      mode: "changed",
       allDocuments: false,
-      plan: await core.planMindCheck(mindId, "all", false),
-    };
-  });
+      plan: await core.planMindCheck(mindId, "changed", false),
+    }),
+  );
 }
 
 /**
@@ -172,6 +184,15 @@ async function askOrCheck(
   allDocuments: boolean,
   plan: MindCheckPlan,
 ): Promise<void> {
+  if (plan.kind === "unchanged") {
+    dismissMindCheck(mindId);
+    dismissCheckProblem(mindId);
+    useMindCheck.setState((state) => ({
+      unchanged: { ...state.unchanged, [mindId]: { since: plan.since } },
+    }));
+    showCheckCard(mindId);
+    return;
+  }
   if (plan.kind !== "ready") {
     dismissMindCheck(mindId);
     setCheckProblem(mindId, plan.kind === "nothing" ? { kind: "no-claims" } : plan);
