@@ -1,6 +1,14 @@
 import { type Editor, isMacOS } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
-import { Fragment, type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  Fragment,
+  type KeyboardEvent,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import type { ShortcutKeys } from "../../../shared/commands";
 import { keysHere } from "../commands/keymap";
 import { keysOn, pressed } from "../commands/keys";
@@ -53,6 +61,20 @@ const withoutPlace = ({ from: _from, to: _to, ...rest }: ReviewItem): Shown => r
 const cardIn = (list: HTMLElement | null, id: string) =>
   list?.querySelector<HTMLButtonElement>(`[data-review-id="${CSS.escape(id)}"]`) ?? null;
 
+function focusCard(
+  list: RefObject<HTMLElement | null>,
+  fallback: RefObject<HTMLElement | null>,
+  id: string | null,
+): void {
+  // Once the list has drawn the card selected next, which may be new.
+  requestAnimationFrame(() => {
+    const button = id ? cardIn(list.current, id) : null;
+    const target = button ?? list.current?.querySelector("[data-review-id]") ?? fallback.current;
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    button?.scrollIntoView({ block: "nearest" });
+  });
+}
+
 const ACCEPT_KEYS = "CmdOrCtrl+Enter";
 const REJECT_KEYS = "CmdOrCtrl+Backspace";
 
@@ -102,17 +124,6 @@ export function ReviewPane({
   const list = useRef<HTMLUListElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
 
-  const focusCard = (id: string | null) => {
-    // Once the list has drawn the card selected next, which may be new.
-    requestAnimationFrame(() => {
-      const button = id ? cardIn(list.current, id) : null;
-      const target =
-        button ?? list.current?.querySelector("[data-review-id]") ?? closeButton.current;
-      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
-      button?.scrollIntoView({ block: "nearest" });
-    });
-  };
-
   const opened = pane?.opened ?? 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `opened` is what asks for it.
   useLayoutEffect(() => {
@@ -139,6 +150,22 @@ export function ReviewPane({
   // biome-ignore lint/correctness/useExhaustiveDependencies: new `items` mean the change may have moved: washed again where it is.
   useEffect(() => washSelected(editor, selected), [editor, selected, items]);
   useEffect(() => () => washSelected(editor, null), [editor]);
+
+  // Undo brings back the change just decided: it is the one selected again, so ⌘↵ after ⌘Z acts on it.
+  const undone = pane?.decided ?? null;
+  useEffect(() => {
+    if (
+      !undone ||
+      !items.some(
+        (item) => item.id === undone && item.kind === "change" && item.state === "waiting",
+      )
+    )
+      return;
+    const inPane = list.current?.contains(document.activeElement) ?? false;
+    selectCard(editor, mindId, undone, { scroll: true });
+    useReviewPanes.getState().update(mindId, { decided: null });
+    if (inPane) focusCard(list, closeButton, undone);
+  }, [undone, items, editor, mindId]);
 
   useEffect(() => {
     const showCard = (id: string) => {
@@ -179,7 +206,7 @@ export function ReviewPane({
   };
 
   const decide = (outcome: "accept" | "reject") => {
-    focusCard(decideSelected(editor, mindId, outcome));
+    focusCard(list, closeButton, decideSelected(editor, mindId, outcome));
   };
 
   const onListKey = (event: KeyboardEvent<HTMLUListElement>) => {

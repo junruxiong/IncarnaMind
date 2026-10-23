@@ -277,8 +277,10 @@ test("Accept and Reject on the selected card act at once with Undo, from the mou
   await expect(supply).toHaveAttribute("data-state", "waiting");
   await expect(editor.locator("ins.proposal-theirs", { hasText: "and Gdańsk" })).toHaveCount(1);
 
-  // ⌘⌫ in the pane rejects the selected change; ⌘Z there takes it back.
-  await notice.locator("[data-review-id]").focus();
+  // The change Undo brought back is selected again. ↓, and ⌘⌫ rejects the next; ⌘Z takes it back.
+  await expect(supply).toHaveAttribute("data-selected", "true");
+  await window.keyboard.press("ArrowDown");
+  await expect(notice).toHaveAttribute("data-selected", "true");
   await window.keyboard.press("ControlOrMeta+Backspace");
   await expect(notice).toHaveAttribute("data-state", "rejected");
   await expect(editor.locator("p", { hasText: "1.3 Northwind" })).toContainText(
@@ -288,9 +290,9 @@ test("Accept and Reject on the selected card act at once with Undo, from the mou
   await expect(cards.nth(2).locator("[data-review-id]")).toBeFocused();
   await window.keyboard.press("ControlOrMeta+z");
   await expect(notice).toHaveAttribute("data-state", "waiting");
-  // ⌘↵ accepts it.
-  await window.keyboard.press("ArrowUp");
+  // The change Undo brought back is selected again, so ⌘↵ accepts that one.
   await expect(notice).toHaveAttribute("data-selected", "true");
+  await expect(notice.locator("[data-review-id]")).toBeFocused();
   await window.keyboard.press("ControlOrMeta+Enter");
   await expect(notice).toHaveAttribute("data-state", "accepted");
 

@@ -18,6 +18,8 @@ export interface ReviewPaneState {
   /** The author shown (`authorKey`); null for everyone. */
   who: string | null;
   selected: string | null;
+  /** The change decided last from the pane: selected again if Undo makes it wait again. */
+  decided: string | null;
   /** Counts the times it was asked to open, so it takes the focus each time. */
   opened: number;
 }
@@ -29,7 +31,14 @@ interface ReviewPanes {
   update(mindId: string, patch: Partial<ReviewPaneState>): void;
 }
 
-const CLOSED: ReviewPaneState = { over: false, filter: null, who: null, selected: null, opened: 0 };
+const CLOSED: ReviewPaneState = {
+  over: false,
+  filter: null,
+  who: null,
+  selected: null,
+  decided: null,
+  opened: 0,
+};
 
 /** Which Minds show their reviewing pane (#697), and what it shows. */
 export const useReviewPanes = create<ReviewPanes>((set) => ({
