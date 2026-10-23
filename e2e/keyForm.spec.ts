@@ -930,6 +930,17 @@ for (const { id, tongue, made } of [
       expect(new Set(await hostsAsked(app))).toEqual(new Set([hostOfRegion(id, opens)]));
       expect(await savedRegions(window, id)).toEqual([]);
 
+      // A key edited after a refusal is not refused yet: the line and its button go, and nothing is sent.
+      const field = form.getByLabel(/^(API key|API 密钥)/);
+      const asked = (await hostsAsked(app)).length;
+      await field.fill(`${theKey}x`);
+      await expect(send).toHaveCount(0);
+      await expect(refused).toHaveCount(0);
+      expect((await hostsAsked(app)).length).toBe(asked);
+      await field.fill(theKey);
+      await pointAndClick(window, form.getByTestId("provider-use-key"));
+      await expect(send).toBeVisible();
+
       const before = (await hostsAsked(app)).length;
       if (tongue === "zh-CN") {
         // By keyboard: the button is the next stop after Use this key, and Enter presses it.
@@ -985,6 +996,30 @@ test("a region picked by hand before sending keeps the typed key and decides the
     await expect.poll(() => savedRegions(window, "kimi")).toEqual(["cn"]);
     expect(new Set(await hostsAsked(app))).toEqual(new Set([hostOfRegion("kimi", "cn")]));
     expect(await form.getByTestId("provider-send-other-region").count()).toBe(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a key that names another service, then Use it anyway, brings back the service and the region picked by hand", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    const card = await openKeyForm(window);
+    await pointAndClick(window, card.getByTestId("setup-key"));
+    const form = card.getByTestId("provider-form");
+    await chooseProvider(form, "kimi");
+    await expect(regionOf(form)).toHaveValue("intl");
+    await pointAndClick(window, form.getByRole("radio", { name: "China" }).locator(".."));
+    await expect(regionOf(form)).toHaveValue("cn");
+
+    await form.getByLabel(/^API key/).fill(KEYS.anthropic);
+    await expect(checked(form)).toHaveAccessibleName("Anthropic");
+    await expect(form.getByTestId("provider-region")).toHaveCount(0);
+    await pointAndClick(window, form.getByTestId("provider-key-anyway"));
+    await expect(checked(form)).toHaveAccessibleName(/^Kimi/);
+    await expect(regionOf(form)).toHaveValue("cn");
   } finally {
     await app.close();
   }

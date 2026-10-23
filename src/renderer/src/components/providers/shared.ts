@@ -108,10 +108,7 @@ export function providerLabel(provider: ChatProvider, t: Translate, language: La
 export const serviceName = (provider: ChatProvider, t: Translate, language: Language) =>
   provider.service?.name ?? providerLabel(provider, t, language);
 
-/**
- * The region a provider with both China and International opens on: the interface's language
- * says which host is the likelier first choice, and the User changes it with one click.
- */
+/** The region a provider with both China and International opens on: the interface language's. */
 export function defaultRegion(catalogId: string, language: Language): string {
   const ids = catalogProvider(catalogId)?.endpoints.map((each) => each.id) ?? [];
   const own = language === "zh-CN" ? "cn" : "intl";

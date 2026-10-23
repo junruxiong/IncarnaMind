@@ -210,7 +210,9 @@ export function ProviderForm({
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
-  const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
+  const [switchedFrom, setSwitchedFrom] = useState<{ kind: CatalogId; region: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     core.getSecretStorage().then(setSecretStorage, () => undefined);
@@ -322,14 +324,22 @@ export function ProviderForm({
 
   const choose = (
     next: CatalogId,
-    { keepKey = false, from = null }: { keepKey?: boolean; from?: CatalogId | null } = {},
+    {
+      keepKey = false,
+      from = null,
+      region,
+    }: {
+      keepKey?: boolean;
+      from?: { kind: CatalogId; region: string } | null;
+      region?: string;
+    } = {},
   ) => {
     // A key typed for one provider is never sent to another, unless it was pasted for this one.
     if (next !== kind && !keepKey) key.clear();
     setKind(next);
     setSwitchedFrom(from);
     if (more.includes(next) || !ROW[language].includes(next)) setMoreOpen(true);
-    setEndpointId(defaultRegion(next, language));
+    setEndpointId(region ?? defaultRegion(next, language));
     setFieldValue(fieldDefault(next));
     setModelId(suggestedModel(next));
     setOtherModel(false);
@@ -345,13 +355,16 @@ export function ProviderForm({
     const { key: given, stray } = checkApiKey(value);
     // Spaces around the same key change nothing, and leave an agreement to use it where it was.
     if (given === key.text) return;
+    // A refusal is about the key that was sent: a changed key is not refused yet.
+    setTest(null);
+    setError(null);
     setSwitchedFrom(null);
     const named =
       only || kind === null || kind === "openai-compatible" || local || stray !== null
         ? null
         : serviceOfKey(given);
-    if (named !== null && named !== kind && offered.includes(named)) {
-      choose(named, { keepKey: true, from: kind });
+    if (named !== null && kind !== null && named !== kind && offered.includes(named)) {
+      choose(named, { keepKey: true, from: { kind, region: endpointId } });
     }
   };
 
@@ -462,6 +475,12 @@ export function ProviderForm({
     : t("providers.form.badKey", { provider: providerName, site });
   const otherRegion =
     refusedOn && catalog ? catalog.endpoints.find((each) => each.id !== refusedOn.id) : undefined;
+  const sendToWhere =
+    otherRegion &&
+    t("providers.form.sendTo.aria", {
+      region: regionName(otherRegion, t, language),
+      host: siteOf(otherRegion.baseUrl),
+    });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -666,10 +685,10 @@ export function ProviderForm({
                 onAnyway={() => keyCheck.agree()}
                 {...(switchedFrom !== null && {
                   from: {
-                    name: shortName(switchedFrom),
+                    name: shortName(switchedFrom.kind),
                     back: () => {
-                      choose(switchedFrom, { keepKey: true });
-                      keyCheck.agree(switchedFrom);
+                      choose(switchedFrom.kind, { keepKey: true, region: switchedFrom.region });
+                      keyCheck.agree(switchedFrom.kind);
                     },
                   },
                 })}
@@ -823,10 +842,8 @@ export function ProviderForm({
                         label: t("providers.form.sendTo", {
                           region: regionName(otherRegion, t, language),
                         }),
-                        ariaLabel: t("providers.form.sendTo.aria", {
-                          host: siteOf(otherRegion.baseUrl),
-                          region: regionName(otherRegion, t, language),
-                        }),
+                        ariaLabel: sendToWhere,
+                        title: sendToWhere,
                         testId: "provider-send-other-region",
                         onClick: () => sendTo(otherRegion),
                       },
