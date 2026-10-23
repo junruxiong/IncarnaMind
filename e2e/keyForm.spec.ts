@@ -516,6 +516,68 @@ test("Kimi's form opens on the region of the interface's language: International
   }
 });
 
+test("a key refused on the chosen region says which host refused it, in English and Chinese, and only that host is asked (#1650)", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    await app.evaluate(() => {
+      const asked: string[] = [];
+      (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot = asked;
+      const original = globalThis.fetch;
+      globalThis.fetch = (input, init) => {
+        const url = new URL(
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+        );
+        if (!/^(api\.moonshot\.|dashscope)/.test(url.host)) return original(input, init);
+        if (url.host.startsWith("api.moonshot.")) asked.push(url.host);
+        return Promise.resolve(
+          Response.json({ error: { message: "Invalid Authentication" } }, { status: 401 }),
+        );
+      };
+    });
+    const askedMoonshot = () =>
+      app.evaluate(() => (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot);
+
+    const settings = await openSettings(window, "models");
+    const form = await addProviderForm(settings, "kimi");
+    const refused = form.getByTestId("connection-test");
+    await form.getByLabel(/^API key/).fill(KEYS.bare);
+    await form.getByTestId("provider-use-key").click();
+    await expect(refused).toContainText(
+      "International: api.moonshot.ai refused this key. Check it on platform.kimi.ai.",
+    );
+    await language(window, "zh-CN");
+    await expect(refused).toContainText(
+      "国际：api.moonshot.ai 拒绝了这个密钥。请到 platform.kimi.ai 检查。",
+    );
+    await language(window, "en");
+    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
+
+    await app.evaluate(() => {
+      (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot.length = 0;
+    });
+    await form.getByRole("combobox", { name: /^Region/ }).selectOption("cn");
+    await form.getByLabel(/^API key/).fill(KEYS.bare);
+    await form.getByTestId("provider-use-key").click();
+    await expect(refused).toContainText(
+      "China: api.moonshot.cn refused this key. Check it on platform.kimi.com.",
+    );
+    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.cn"]));
+
+    // A region's own label may carry brackets: the line does not wrap it in more.
+    await settings.getByTestId("models-back").click();
+    const qwen = await addProviderForm(settings, "qwen");
+    await qwen.getByLabel(/^API key/).fill(KEYS.bare);
+    await qwen.getByTestId("provider-use-key").click();
+    await expect(qwen.getByTestId("connection-test")).toContainText(
+      "China (Beijing): dashscope.aliyuncs.com refused this key. Check it on bailian.console.aliyun.com.",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
 for (const height of [560, 700]) {
   test(`in a window ${height}px high, the line that explains the grey button is in view, not under the card's foot`, async () => {
     const { app, window } = await launchApp(dataDir);
@@ -812,25 +874,21 @@ async function refusingAddress(): Promise<string> {
   return `http://127.0.0.1:${port}/v1`;
 }
 
-for (const { value, connect, connecting, tags, keyTags, unreachable } of [
+for (const { value, connect, connecting, unreachable } of [
   {
     value: "en",
     connect: "Connect server",
     connecting: "Connecting…",
-    tags: "Tagging starts when you connect the server.",
-    keyTags: "Tagging starts when you save the key.",
     unreachable: "Couldn’t reach the server. Check its URL and your connection.",
   },
   {
     value: "zh-CN",
     connect: "连接服务器",
     connecting: "正在连接…",
-    tags: "连接服务器后就开始打标签。",
-    keyTags: "保存密钥后就开始打标签。",
     unreachable: "无法连接到服务器。请检查地址和网络连接。",
   },
 ] as const) {
-  test(`a server that needs no key says Connect server, and tagging starts once it is connected; a refused address keeps the form for the next try (${value})`, async () => {
+  test(`a server that needs no key says Connect server; a refused address keeps the form for the next try (${value})`, async () => {
     const fake = await keylessServer();
     const refused = await refusingAddress();
     const { app, window } = await launchApp(dataDir);
@@ -844,8 +902,6 @@ for (const { value, connect, connecting, tags, keyTags, unreachable } of [
       const key = form.locator('input[type="password"]');
       const button = form.getByTestId("provider-use-key");
       await expect(button).toHaveText(connect);
-      await expect(form.getByText(tags)).toBeVisible();
-      await expect(form.getByText(keyTags)).toHaveCount(0);
 
       await address.fill(refused);
       await model.fill("any");
@@ -857,7 +913,6 @@ for (const { value, connect, connecting, tags, keyTags, unreachable } of [
       await expect(model).toHaveValue("any");
       await expect(key).toHaveValue("");
       await expect(button).toHaveText(connect);
-      await expect(form.getByText(tags)).toBeVisible();
       if (process.env.INCARNAMIND_SCREENSHOTS) {
         await window.screenshot({
           path: `${process.env.INCARNAMIND_SCREENSHOTS}/keyless-server-refused-${value}.png`,

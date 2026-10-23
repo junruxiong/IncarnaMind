@@ -139,6 +139,7 @@ import {
 } from "../skills/scripts";
 import { scriptCallInput, skillTools } from "../skills/tools";
 import { asksForSources } from "../sources/intent";
+import { inFlow } from "../timing/flows";
 import {
   COMMAND_TOOLS,
   DOCUMENT_TOOLS,
@@ -2318,7 +2319,17 @@ export function createAnswers(options: AnswersOptions) {
       settleMinds();
       finish(outcome);
     };
-    run().catch((error: unknown) => {
+    // An Answer inside another flow (a comparison's cell, a check's sentence) is that flow's step.
+    const flow = help
+      ? "call-help"
+      : input.toolSet === "check"
+        ? "check"
+        : input.task
+          ? "task-answer"
+          : outside
+            ? "outside-agent"
+            : "question";
+    inFlow(flow, run).catch((error: unknown) => {
       options.reportError(error);
       settleMinds();
       finish({ status: "failed", error: classifyProviderError(error) });

@@ -52,7 +52,6 @@ import { KeyCheckLine, useKeyCheck } from "./keyCheck";
 import { LocalServerLine, useLocalServer } from "./LocalServerLine";
 import { SendsLine } from "./SendsLine";
 import { defaultRegion, keyProviderName, testErrorKey, useProviderKey } from "./shared";
-import { useJevSettings } from "./useJevSettings";
 
 type CatalogId = string;
 
@@ -171,15 +170,9 @@ export function ProviderForm({
   const [modelId, setModelId] = useState(refused?.modelId ?? suggestedModel(first));
   const [busy, setBusy] = useState<"saving" | null>(null);
   const [test, setTest] = useState<ConnectionTestResult | null>(null);
-  const [jev] = useJevSettings();
+  // The region a result is about: the form may be on another by the time a slow test answers.
+  const [testedRegion, setTestedRegion] = useState<string | null>(null);
   const hasDefault = useAppStore((state) => (state.settings?.user.chatModel ?? null) !== null);
-  // Automatic tags with this key's provider unless a Jev key comes first, or nothing may leave the computer.
-  const tagsAutomatically =
-    useAppStore(
-      (state) =>
-        (state.library?.settings.classifier.kind ?? "automatic") === "automatic" &&
-        state.embedding?.localOnly !== true,
-    ) && !jev?.enabled;
   const [error, setError] = useState<string | null>(null);
   const [secretStorage, setSecretStorage] = useState<SecretStorageStatus | null>(null);
   const [switchedFrom, setSwitchedFrom] = useState<CatalogId | null>(null);
@@ -358,6 +351,7 @@ export function ProviderForm({
     setBusy("saving");
     setError(null);
     setTest(null);
+    setTestedRegion(endpoint?.id ?? null);
     try {
       const result = await core.testChatConnection(request);
       if (!result.ok) {
@@ -398,6 +392,15 @@ export function ProviderForm({
   };
   const site = siteOf(endpoint?.keyUrl ?? catalog?.keyUrl);
   const providerName = kind ? keyProviderName(kind, t, language) : "";
+  const refusedOn =
+    catalog && catalog.endpoints.length > 1 ? endpointOf(catalog, testedRegion) : undefined;
+  const badKeyLine = refusedOn
+    ? t("providers.form.badKeyAt", {
+        host: siteOf(refusedOn.baseUrl),
+        region: refusedOn.label[words],
+        site: siteOf(refusedOn.keyUrl ?? catalog?.keyUrl),
+      })
+    : t("providers.form.badKey", { provider: providerName, site });
   const listed = server.status?.running ? server.status.models : [];
   const choices =
     kind && kind !== "openai-compatible" ? (local ? listed : catalogMenu(kind, endpoint?.id)) : [];
@@ -689,7 +692,6 @@ export function ProviderForm({
                   ? (hostOf(baseUrl) ?? t("providers.kind.openai-compatible"))
                   : providerName
               }
-              tagsStartOn={tagsAutomatically ? (keyRequired ? "key" : "server") : undefined}
               dataUse={catalog && dataUseOf(catalog, away)}
             />
           )}
@@ -725,9 +727,7 @@ export function ProviderForm({
                 <TestResult
                   result={test}
                   model={shownName(modelId)}
-                  {...(test.error.kind === "auth" && site
-                    ? { line: t("providers.form.badKey", { provider: providerName, site }) }
-                    : {})}
+                  {...(test.error.kind === "auth" && site ? { line: badKeyLine } : {})}
                   {...(test.error.kind === "data-retention" && {
                     action: {
                       label: t("answer.error.chooseModel"),
@@ -768,19 +768,9 @@ export function KeyRefusedLine({ id, refused }: { id: string; refused: KeyRefusa
 
 /**
  * Above the button that chooses the chat model's provider: what goes to it.
- * Choosing it is the consent for all of that (ADR-0022). `tagsStartOn`: the
- * Tagging setting is Automatic, so tagging with it starts once its key is
- * saved, or once a server that needs no key is connected.
+ * Choosing it is the consent for all of that (ADR-0022).
  */
-export function ProviderSendsLine({
-  provider,
-  dataUse,
-  tagsStartOn,
-}: {
-  provider: string;
-  dataUse?: DataUse;
-  tagsStartOn?: "key" | "server";
-}) {
+export function ProviderSendsLine({ provider, dataUse }: { provider: string; dataUse?: DataUse }) {
   const t = useT();
   const language = useLanguage();
   const words = language === "zh-CN" ? "zh" : "en";
@@ -790,13 +780,6 @@ export function ProviderSendsLine({
   return (
     <div className="flex flex-col">
       <SendsLine provider={provider} />
-      {tagsStartOn && (
-        <p className="text-[12px] leading-5 text-ink-meta">
-          {t(
-            tagsStartOn === "key" ? "providers.sends.tagsOnSave" : "providers.sends.tagsOnConnect",
-          )}
-        </p>
-      )}
       {summary && (
         <p data-testid="provider-data-use" className={`${hintClass} mt-0`}>
           {summary}
