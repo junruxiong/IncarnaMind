@@ -1832,7 +1832,7 @@ export const zhCN = {
   "providers.form.pricing": "价格",
   "providers.form.keyPage": "打开{provider}的密钥页面",
   "providers.form.keyPages": "{provider}各地域的密钥页面：",
-  "providers.form.regionNote": "{provider}的密钥只能在创建它的地域使用。各地域的密钥页面：",
+  "providers.form.regionNote": "{provider}的密钥只能在创建它的地域使用：",
   "providers.form.modelsAndPrices": "模型和价格",
   "providers.form.baseUrl": "API 地址",
   "providers.form.baseUrlHint": "例如 https://api.deepseek.com/v1 或 http://localhost:1234/v1",

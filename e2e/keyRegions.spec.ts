@@ -147,9 +147,7 @@ test("a key no region takes shows the region choice and where each region makes 
 
     await expect(problem).toContainText("This key isn’t valid for Kimi");
     await expect(region).toHaveValue("intl");
-    await expect(note).toContainText(
-      "A Kimi key works only in the region it was made in. Each region’s key page:",
-    );
+    await expect(note).toContainText("Kimi keys work only in the region that made them:");
     await expect(note.getByRole("link")).toHaveText(["China ↗", "International ↗"]);
     await expect(note.getByRole("link").first()).toHaveAttribute(
       "href",
@@ -167,7 +165,7 @@ test("a key no region takes shows the region choice and where each region makes 
 
     await language(window, "zh-CN");
     await expect(problem).toContainText("这个密钥对 Kimi");
-    await expect(note).toContainText("Kimi 的密钥只能在创建它的地域使用。各地域的密钥页面：");
+    await expect(note).toContainText("Kimi 的密钥只能在创建它的地域使用：");
     await expect(note.getByRole("link")).toHaveText(["中国 ↗", "国际 ↗"]);
     if (process.env.INCARNAMIND_SCREENSHOTS) {
       await settings.screenshot({

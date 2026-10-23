@@ -1901,8 +1901,7 @@ export const en = {
   "providers.form.pricing": "Pricing",
   "providers.form.keyPage": "Open {provider}’s key page",
   "providers.form.keyPages": "{provider}’s key pages, by region:",
-  "providers.form.regionNote":
-    "A {provider} key works only in the region it was made in. Each region’s key page:",
+  "providers.form.regionNote": "{provider} keys work only in the region that made them:",
   "providers.form.modelsAndPrices": "Models and prices",
   "providers.form.baseUrl": "Server URL",
   "providers.form.baseUrlHint":
