@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { ModelSourceChoice } from "../../src/core";
+import { silentLogger } from "../../src/core/activityLog";
 import { BUILT_IN_EMBEDDING_MODEL } from "../../src/core/embedding";
 import { downloadModel, ModelDownloadError } from "../../src/core/embedding/download";
 import {
@@ -12,6 +13,11 @@ import {
   PROBE_KEPT_MS,
 } from "../../src/core/embedding/modelSources";
 import type { Language } from "../../src/core/language";
+import {
+  createSpeakerModel,
+  SPEAKER_EMBEDDING,
+  SPEAKER_SEGMENTATION,
+} from "../../src/core/transcription/speakerModel";
 import { createTempDataFolder, LOCAL_FETCH, startCore } from "../helpers/core";
 import {
   createControlledEmbedder,
@@ -390,5 +396,35 @@ describe("A built-in model downloads from the next source when one fails (#1578)
       `${folder}/tokenizer.json`,
     ]);
     core.close();
+  });
+
+  // protects=the models that tell a Meeting's speakers apart take the same sources as the others, so a User where Hugging Face fails still gets them; fails_when=they ask Hugging Face alone, or the copy's file isn't the one installed; no_claim=the speaker pass itself, which its own test covers.
+  test("the speaker models take the next source when Hugging Face serves a wrong file", async () => {
+    const segmentation = await startModelServer({ [SPEAKER_SEGMENTATION.file]: 2048 });
+    const embedding = await startModelServer({ [SPEAKER_EMBEDDING.file]: 2048 });
+    segmentation.behave(SPEAKER_SEGMENTATION.file, { corrupt: true });
+    const copy = await startModelServer(
+      {},
+      { server: segmentation, folder: SPEAKER_SEGMENTATION.folder },
+    );
+    const model = createSpeakerModel({
+      dataDir: await mkdtemp(join(tmpdir(), "incarnamind-speakers-")),
+      source: { segmentation: segmentation.source, embedding: embedding.source },
+      sources: sourcesWith(LOCAL_FETCH, {
+        copies: { modelscope: { url: `${copy.source.baseUrl}{folder}/` } },
+      }),
+      log: silentLogger,
+    });
+    const files = await model.files();
+    model.close();
+    expect(new Uint8Array(await readFile(files.segmentation))).toEqual(
+      segmentation.contents.get(SPEAKER_SEGMENTATION.file),
+    );
+    expect(new Uint8Array(await readFile(files.embedding))).toEqual(
+      embedding.contents.get(SPEAKER_EMBEDDING.file),
+    );
+    expect(copy.requests.map((each) => each.path)).toContain(
+      `${SPEAKER_SEGMENTATION.folder}/${SPEAKER_SEGMENTATION.file}`,
+    );
   });
 });

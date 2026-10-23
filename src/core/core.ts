@@ -2897,6 +2897,7 @@ export function createCore(adapters: CoreAdapters): Core {
     adapters.speakerSeparator &&
     createSpeakerModel({
       dataDir,
+      sources: modelSources,
       ...(adapters.speakerModelSource && { source: adapters.speakerModelSource }),
       log: adapters.log ?? silentLogger,
     });
