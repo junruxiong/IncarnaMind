@@ -554,13 +554,16 @@ test("a Kimi key refused on the chosen region says which host refused it, in Eng
     await language(window, "en");
     expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
 
+    await app.evaluate(() => {
+      (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot.length = 0;
+    });
     await form.getByRole("combobox", { name: /^Region/ }).selectOption("cn");
     await form.getByLabel(/^API key/).fill(KEYS.bare);
     await form.getByTestId("provider-use-key").click();
     await expect(refused).toContainText(
       "api.moonshot.cn (China) refused this key. Check it on platform.kimi.com.",
     );
-    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai", "api.moonshot.cn"]));
+    expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.cn"]));
   } finally {
     await app.close();
   }
