@@ -94,7 +94,7 @@ export const STEPS: readonly Step[] = [
     id: "live",
     name: "Live tests on Claude",
     provider: "anthropic",
-    minutes: 45,
+    minutes: 40,
     results: "vitest",
     command: (folder) => vitestRun("tests/live", folder),
     env: (key) => ({
@@ -106,7 +106,7 @@ export const STEPS: readonly Step[] = [
     id: "everyday",
     name: "Everyday requests on Claude Haiku 5.5",
     provider: "anthropic",
-    minutes: 150,
+    minutes: 100,
     results: "everyday",
     command: () => ["npm", "run", "eval:everyday"],
     env: (key) => ({
@@ -120,7 +120,7 @@ export const STEPS: readonly Step[] = [
     id: "kimi-live",
     name: "Kimi International answers",
     provider: "kimi",
-    minutes: 15,
+    minutes: 10,
     results: "vitest",
     command: (folder) => vitestRun("tests/live/providers.live.test.ts", folder),
     env: (key) => ({ MOONSHOT_API_KEY: key, KIMI_REGION: "intl" }),
@@ -129,7 +129,7 @@ export const STEPS: readonly Step[] = [
     id: "kimi-everyday",
     name: "Everyday requests in Chinese on Kimi K2.6",
     provider: "kimi",
-    minutes: 90,
+    minutes: 60,
     results: "everyday",
     command: () => ["npm", "run", "eval:everyday"],
     env: (key) => ({
@@ -171,6 +171,8 @@ export interface Attempt {
   outOfCredit: boolean;
   /** The step didn't run, and why. */
   skipped?: string;
+  /** The night was cancelled while it ran. */
+  cancelled?: true;
 }
 
 type Execute = (
@@ -268,8 +270,13 @@ function failureLine(log: string): string {
 export function summary(
   results: readonly Result[],
   date: string,
+  /** The steps the night means to run, and why it is unfinished when it is: what isn't in `results` is listed as not run. */
+  night: { planned?: readonly Step[]; unfinished?: string } = {},
 ): { text: string; passed: boolean } {
   const steps = [...new Set(results.map((result) => result.step))];
+  const waiting = (night.planned ?? []).filter((step) => !steps.includes(step));
+  const unfinished =
+    night.unfinished ?? (waiting.length > 0 ? "the night ended before every step ran" : null);
   const rows: string[] = [];
   const sections: string[] = [];
   const notes = new Set<string>();
@@ -293,7 +300,13 @@ export function summary(
     const failing = last.cases.filter((each) => !each.passed).length;
     const minutes = (tries.reduce((sum, attempt) => sum + attempt.seconds, 0) / 60).toFixed(1);
     const skippedCases = last.skippedCases ? ` (${last.skippedCases} skipped)` : "";
-    const outcome = last.skipped ? "**not run**" : ok ? "passed" : "**failed**";
+    const outcome = last.cancelled
+      ? "**cancelled**"
+      : last.skipped
+        ? "**not run**"
+        : ok
+          ? "passed"
+          : "**failed**";
     rows.push(
       `| ${step.name} | ${last.secret} | ${outcome} | ${last.cases.length - failing} of ${last.cases.length}${skippedCases} | $${dollars.toFixed(2)} | ${minutes} min |`,
     );
@@ -322,10 +335,19 @@ export function summary(
           ]),
     );
   }
+  for (const step of waiting) rows.push(`| ${step.name} | – | **not run** | – | – | – |`);
+  const verdict = unfinished
+    ? passed
+      ? "No step that ran has failed."
+      : "A step has failed."
+    : passed
+      ? "Every step passed."
+      : "A step failed.";
   const text = [
     `# Nightly real-model checks, ${date}`,
     "",
-    `${passed ? "Every step passed." : "A step failed."} Spend: $${total.toFixed(2)}${unpriced > 0 ? ` and ${unpriced.toLocaleString("en")} tokens of models the catalog has no price for` : ""}, counted from every request's tokens at the catalog's prices (the provider's console has the exact bill).`,
+    ...(unfinished ? [`**Unfinished: ${unfinished}.**`, ""] : []),
+    `${verdict} Spend: $${total.toFixed(2)}${unpriced > 0 ? ` and ${unpriced.toLocaleString("en")} tokens of models the catalog has no price for` : ""}, counted from every request's tokens at the catalog's prices (the provider's console has the exact bill).`,
     "",
     ...[...notes].map((note) => `- ${note}`),
     ...(notes.size > 0 ? [""] : []),
@@ -335,7 +357,7 @@ export function summary(
     "",
     ...sections,
   ].join("\n");
-  return { text, passed };
+  return { text, passed: passed && !unfinished };
 }
 
 function readJson(path: string): unknown {
@@ -400,7 +422,16 @@ const everydayReports = () => {
   );
 };
 
-export function executeIn(out: string, env: Readonly<Record<string, string | undefined>>): Execute {
+/** The step that is running, for a night that is cancelled to stop it. */
+export interface Running {
+  current: { step: Step; secret: string; begun: number; stop(): void } | null;
+}
+
+export function executeIn(
+  out: string,
+  env: Readonly<Record<string, string | undefined>>,
+  running: Running = { current: null },
+): Execute {
   const preload = pathToFileURL(join(ROOT, "scripts", "usageTally.ts")).href;
   return (step, secret) => {
     const folder = join(out, step.id, secret);
@@ -428,6 +459,7 @@ export function executeIn(out: string, env: Readonly<Record<string, string | und
           // It has already ended.
         }
       };
+      running.current = { step, secret, begun, stop: () => stopGroup("SIGKILL") };
       const timer = setTimeout(() => {
         log += `\nStopped after ${step.minutes} minutes.\n`;
         stopGroup("SIGTERM");
@@ -444,6 +476,7 @@ export function executeIn(out: string, env: Readonly<Record<string, string | und
       }
       const finish = (exitCode: number) => {
         clearTimeout(timer);
+        running.current = null;
         for (const name of everydayReports()) {
           if (before.has(name)) continue;
           cpSync(join(ROOT, "eval", "results", name), join(folder, "everyday"), {
@@ -480,6 +513,92 @@ function removeKeys(folder: string, keys: readonly string[]): void {
 /** The most a night may spend, in dollars, before it starts no further step. */
 const DEFAULT_MAX_USD = 10;
 
+/**
+ * Runs the steps and writes the report after each. A night that is cancelled (SIGINT or SIGTERM,
+ * as the runner sends when a job is) stops the step's whole process group, writes the report
+ * with the steps that never ran listed, and exits with an error.
+ */
+export async function runNight({
+  steps,
+  env,
+  out,
+}: {
+  steps: readonly Step[];
+  env: Record<string, string | undefined>;
+  out: string;
+}): Promise<{ text: string; passed: boolean }> {
+  const limit = Number(env.NIGHTLY_MAX_USD) > 0 ? Number(env.NIGHTLY_MAX_USD) : DEFAULT_MAX_USD;
+  mkdirSync(out, { recursive: true });
+  const keys = Object.values(SECRETS)
+    .flat()
+    .map((name) => env[name])
+    .filter((key): key is string => Boolean(key));
+  const date = new Date().toISOString().slice(0, 10);
+  const resultsOf = (attempts: readonly Attempt[]): Result[] =>
+    attempts.map((attempt) => {
+      const folder = join(out, attempt.step.id, attempt.secret);
+      const { cases, skipped } = casesOf(attempt.step, folder);
+      return { ...attempt, cases, skippedCases: skipped, usage: readUsage(folder) };
+    });
+  const write = (attempts: readonly Attempt[], unfinished?: string) => {
+    const night = summary(resultsOf(attempts), date, {
+      planned: steps,
+      ...(unfinished && { unfinished }),
+    });
+    const text = withoutKeys(night.text, keys);
+    writeFileSync(join(out, "summary.md"), text);
+    removeKeys(out, keys);
+    return { text, passed: night.passed };
+  };
+  const running: Running = { current: null };
+  let done: readonly Attempt[] = [];
+  const cancelled = () => {
+    const step = running.current;
+    step?.stop();
+    const attempts = [...done];
+    if (step) {
+      attempts.push({
+        step: step.step,
+        secret: step.secret,
+        exitCode: 1,
+        log: "",
+        seconds: (Date.now() - step.begun) / 1000,
+        outOfCredit: false,
+        cancelled: true,
+      });
+    }
+    const { text } = write(
+      attempts,
+      step ? `cancelled during ${step.step.name}` : "cancelled between steps",
+    );
+    if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
+    console.log(text);
+    process.exit(1);
+  };
+  process.on("SIGINT", cancelled);
+  process.on("SIGTERM", cancelled);
+  const attempts = await runSteps(steps, executeIn(out, env, running), {
+    after: (each) => {
+      done = [...each];
+      write(each);
+    },
+    stop: (each) => {
+      const spent = resultsOf(each).reduce(
+        (sum, result) => sum + spendOf(result.usage, result.step.provider).dollars,
+        0,
+      );
+      return spent > limit
+        ? `the night has spent $${spent.toFixed(2)}, over its $${limit} limit`
+        : null;
+    },
+  });
+  process.off("SIGINT", cancelled);
+  process.off("SIGTERM", cancelled);
+  const night = write(attempts);
+  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${night.text}\n`);
+  return night;
+}
+
 async function main(): Promise<void> {
   const env: Record<string, string | undefined> = { ...process.env };
   for (const name of Object.values(SECRETS).flat()) env[name] = env[name]?.trim();
@@ -500,43 +619,9 @@ async function main(): Promise<void> {
     console.error(`${env.GITHUB_ACTIONS ? "::error::" : ""}${missingMessage(missing)}`);
     process.exit(1);
   }
-  const limit = Number(env.NIGHTLY_MAX_USD) > 0 ? Number(env.NIGHTLY_MAX_USD) : DEFAULT_MAX_USD;
   const out = resolve(ROOT, env.NIGHTLY_OUT ?? join("eval", "results", "nightly-real-model"));
-  mkdirSync(out, { recursive: true });
-  const keys = Object.values(SECRETS)
-    .flat()
-    .map((name) => env[name])
-    .filter((key): key is string => Boolean(key));
-  const date = new Date().toISOString().slice(0, 10);
-  const resultsOf = (attempts: readonly Attempt[]): Result[] =>
-    attempts.map((attempt) => {
-      const folder = join(out, attempt.step.id, attempt.secret);
-      const { cases, skipped } = casesOf(attempt.step, folder);
-      return { ...attempt, cases, skippedCases: skipped, usage: readUsage(folder) };
-    });
-  // The summary is written after every step, so a night that is cut off leaves its report.
-  const write = (attempts: readonly Attempt[]) => {
-    const text = withoutKeys(summary(resultsOf(attempts), date).text, keys);
-    writeFileSync(join(out, "summary.md"), text);
-    removeKeys(out, keys);
-    return text;
-  };
-  const attempts = await runSteps(steps, executeIn(out, env), {
-    after: write,
-    stop: (done) => {
-      const spent = resultsOf(done).reduce(
-        (sum, result) => sum + spendOf(result.usage, result.step.provider).dollars,
-        0,
-      );
-      return spent > limit
-        ? `the night has spent $${spent.toFixed(2)}, over its $${limit} limit`
-        : null;
-    },
-  });
-  const night = summary(resultsOf(attempts), date);
-  const text = write(attempts);
-  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
-  console.log(text);
+  const night = await runNight({ steps, env, out });
+  console.log(night.text);
   process.exit(night.passed ? 0 : 1);
 }
 

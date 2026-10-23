@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   type Attempt,
@@ -163,6 +166,57 @@ describe("a night that goes wrong", () => {
     const result = await executeIn(folder, { PATH: process.env.PATH })(hanging, "NIGHTLY_KIMI_KEY");
     expect(result.exitCode).not.toBe(0);
     expect(result.log).toContain("Stopped after 0.002 minutes.");
+  });
+
+  // protects=a night that is cancelled stops the step's whole process group, writes a report that says it is unfinished and lists the steps that never ran, and exits with an error; fails_when=the child keeps running with its key, the report says every step passed, or nothing is written; no_claim=what the runner does after its grace period.
+  test("a cancelled night leaves an honest report and no process behind", async () => {
+    const out = await createTempDataFolder();
+    const driver = new URL("./nightlyDriver.ts", import.meta.url).pathname;
+    const resolver = new URL("../../scripts/tsResolve.mjs", import.meta.url).pathname;
+    const night = spawn(
+      process.execPath,
+      ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--import", resolver, driver],
+      { env: { PATH: process.env.PATH, NIGHTLY_OUT: out }, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const exited = new Promise<number | null>((done) => night.on("close", (code) => done(code)));
+    const childPid = await new Promise<number>((found) => {
+      let heard = "";
+      night.stdout.on("data", (chunk: Buffer) => {
+        heard += chunk.toString();
+        const pid = /child (\d+)/.exec(heard)?.[1];
+        if (pid) found(Number(pid));
+      });
+    });
+    night.kill("SIGTERM");
+    expect(await exited).toBe(1);
+    const report = await readFile(join(out, "summary.md"), "utf8");
+    expect(report).toContain("**Unfinished: cancelled during A step that never ends.**");
+    expect(report).toContain("| A step that never ends | NIGHTLY_KIMI_KEY | **cancelled** |");
+    expect(report).toContain("| A step after it | – | **not run** |");
+    expect(report).not.toContain("Every step passed");
+    expect(report).not.toContain("a-key");
+    // The step's process is gone, though the night was told to stop only once.
+    await expect
+      .poll(() => {
+        try {
+          process.kill(childPid, 0);
+          return "running";
+        } catch {
+          return "gone";
+        }
+      })
+      .toBe("gone");
+  });
+
+  // protects=the steps' own limits fit in the job's, with room for installing and caching; fails_when=a step's limit is raised past what the job allows, so the job's end cuts a night off with no report; no_claim=none beyond protects.
+  test("the steps' limits fit in the job's", async () => {
+    const workflow = await readFile(
+      new URL("../../.github/workflows/nightly-real-model.yml", import.meta.url),
+      "utf8",
+    );
+    const job = Number(/timeout-minutes: (\d+)/.exec(workflow)?.[1]);
+    const steps = STEPS.reduce((sum, step) => sum + step.minutes, 0);
+    expect(steps + 15).toBeLessThanOrEqual(job);
   });
 
   const none = (over: Partial<Result>): Result => ({

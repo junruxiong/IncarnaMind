@@ -59,9 +59,7 @@ jobs:
           NIGHTLY_KIMI_KEY: ${{ secrets.NIGHTLY_KIMI_KEY }}
           NIGHTLY_STEPS: ${{ inputs.steps }}
           INCARNAMIND_EVAL_EVERYDAY: ${{ inputs.requests }}
-      # Saved even when a night is red, so the next one doesn't download the models again.
       - name: Keep the models and the fetched Documents
-        if: always()
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/incarnamind-eval
