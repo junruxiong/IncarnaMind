@@ -473,6 +473,7 @@ export function createDocuments(options: DocumentsOptions) {
   const log = options.log ?? silentLogger;
   const vectors = createVectorIndex(db, model);
   const legacyFolder = join(dataDir, "documents");
+  const isLegacyCopy = (path: string) => path !== legacyFolder && isInside(legacyFolder, path);
   const { textRecognition } = options;
   /** Where reading each Document's scanned pages is, while its job reads them (#397). */
   const scanProgress = new Map<string, DocumentScanProgress>();
@@ -1319,9 +1320,10 @@ export function createDocuments(options: DocumentsOptions) {
 
   // Startup: Documents copied into the data folder by the old layout (before
   // ADR-0010) are files kept there, until the User links their originals.
-  // Each copy gets its kind's extension, so another app can open it.
+  // Each copy gets its kind's extension, so another app can open it. One
+  // deleted then can still be restored, so it gets its path too.
   for (const row of db.all<{ id: string; content_hash: string; kind: string }>(
-    "SELECT id, content_hash, kind FROM documents WHERE deleted_at IS NULL AND path IS NULL",
+    "SELECT id, content_hash, kind FROM documents WHERE path IS NULL AND purged_at IS NULL",
   )) {
     const bare = join(legacyFolder, row.content_hash);
     const extension = DOCUMENT_EXTENSIONS[row.kind as DocumentKind]?.[0];
@@ -2427,11 +2429,11 @@ export function createDocuments(options: DocumentsOptions) {
     },
 
     /**
-     * Removes Documents from the index, all in one step, or none when one isn't found. The
-     * User's files aren't touched; only copies the old layout made in the data folder go with
-     * them.
+     * Removes Documents from the index, all in one step, or none when one isn't found. No file
+     * is touched: a copy the old layout made in the data folder goes once its Document is
+     * deleted permanently (`dropPurged`).
      */
-    async delete(idsInput: unknown): Promise<string[]> {
+    delete(idsInput: unknown): string[] {
       const ids = [...new Set((Array.isArray(idsInput) ? idsInput : [idsInput]).map(parseId))];
       const rows = ids.map((id) => {
         const row = find(id);
@@ -2439,11 +2441,6 @@ export function createDocuments(options: DocumentsOptions) {
         return row;
       });
       removeFromIndex(ids, now());
-      for (const row of rows) {
-        if (row.path !== legacyFolder && isInside(legacyFolder, row.path)) {
-          await rm(row.path, { force: true }).catch(reportError);
-        }
-      }
       // Once a Linked folder, not once a Document: 1,700 Documents took 90 s one by one (#1349).
       for (const linkedFolderId of new Set(rows.map((row) => row.linked_folder_id))) {
         library.documentsChanged(linkedFolderId);
@@ -2510,6 +2507,7 @@ export function createDocuments(options: DocumentsOptions) {
     /** Picks up Documents `restore` brought back where they were, and announces them. */
     restored(ids: readonly string[]): void {
       const linkedFolders = new Set<string | null>();
+      const copies: string[] = [];
       for (const id of ids) {
         const row = find(id);
         if (!row) continue;
@@ -2526,8 +2524,30 @@ export function createDocuments(options: DocumentsOptions) {
         }
         if (!(row.status === "embedding" && embedding.enqueue(id))) announce(id);
         if (row.status === "waiting-for-model") model.ensure();
+        if (isLegacyCopy(row.path)) copies.push(row.path);
       }
       for (const linkedFolderId of linkedFolders) library.documentsChanged(linkedFolderId);
+      // Builds before #1432 removed the copy at delete: one gone shows missing now, not when opened.
+      if (copies.length > 0) library.check(copies).catch(reportError);
+    },
+
+    /**
+     * Removes the old layout's copies of Documents deleted permanently, each once no Document
+     * that can still come back has it. Again at each start, for a quit that cut it short.
+     */
+    async dropPurged(): Promise<void> {
+      const copies = db
+        .all<{ path: string }>(
+          `SELECT DISTINCT path FROM documents
+           WHERE purged_at IS NOT NULL AND path IS NOT NULL AND linked_folder_id IS NULL`,
+        )
+        .map((row) => row.path)
+        .filter(
+          (path) =>
+            isLegacyCopy(path) &&
+            !db.get("SELECT 1 FROM documents WHERE path = ? AND purged_at IS NULL", [path]),
+        );
+      await Promise.all(copies.map((path) => rm(path, { force: true }).catch(reportError)));
     },
 
     /**
