@@ -86,11 +86,14 @@ for (const [width, language, line, reload] of [
     await expect(window.getByTestId("assistant")).toBeVisible();
     await screenshot(window, `card-failed-${language}-${width}`);
     // The error is in the log with its stack, as one nothing caught is.
-    const log = await readFile(join(dataDir, "logs", "incarnamind.log"), "utf8");
-    expect(log).toMatch(
-      /ERROR window\.panel-failed panel=card caught=boundary error="Error: The card panel was made to fail\."/,
-    );
-    expect(log).toContain("component stack:");
+    const readLog = () =>
+      readFile(join(dataDir, "logs", "incarnamind.log"), "utf8").catch(() => "");
+    await expect
+      .poll(readLog)
+      .toMatch(
+        /ERROR window\.panel-failed panel=card caught=boundary error="Error: The card panel was made to fail\."/,
+      );
+    await expect.poll(readLog).toContain("component stack:");
 
     await card.getByTestId("panel-reload").click();
 
