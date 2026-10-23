@@ -57,7 +57,7 @@ jobs:
               heavy=false
             fi
             # Only a change to what the packaged transcription check covers runs it.
-            if [ -z "$files" ] || echo "$files" | grep -qE '^(src/core/(transcription|meetings)/|src/core/embedding/download\.ts$|src/main/meetings/|src/main/transcriber(Process)?\.ts$|src/(preload|shared)/capture\.ts$|src/renderer/capture(/|\.html$)|build/entitlements\.mac\.plist$|electron-builder\.yml$|electron\.vite\.config\.ts$|package(-lock)?\.json$|e2e/app\.ts$|e2e/packaged/|tests/fixtures/speech/|\.github/(actions/packaged-transcription/|workflows/ci\.yml$))'; then
+            if [ -z "$files" ] || echo "$files" | grep -qE '^(src/core/(transcription|meetings)/|src/core/embedding/download\.ts$|src/main/meetings/|src/main/transcriber(Process)?\.ts$|src/main/speaker(Process|Separator)\.ts$|src/(preload|shared)/capture\.ts$|src/renderer/capture(/|\.html$)|build/entitlements\.mac\.plist$|electron-builder\.yml$|electron\.vite\.config\.ts$|package(-lock)?\.json$|e2e/app\.ts$|e2e/packaged/|tests/fixtures/speech/|\.github/(actions/packaged-transcription/|workflows/ci\.yml$))'; then
               packaged=true
             fi
           fi
@@ -132,6 +132,10 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The runners' apt mirror stalls for tens of minutes some days: give up on a stalled connection and try again.
+      - name: Make apt give up on a stalled mirror
+        run: |
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-timeouts >/dev/null
       - name: Install LibreOffice Writer
         run: |
           sudo apt-get update
@@ -167,6 +171,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Make apt give up on a stalled mirror
+        run: |
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-timeouts >/dev/null
       - name: Install LibreOffice Calc
         run: |
           sudo apt-get update
@@ -195,7 +202,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.heavy == 'true' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A shard's specs take about 20 minutes; the rest is for a slow package mirror.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -223,13 +231,17 @@ jobs:
         run: |
           sudo chown root:root node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+      - name: Make apt give up on a stalled mirror
+        run: |
+          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "20";\nAcquire::https::Timeout "20";\n' | sudo tee /etc/apt/apt.conf.d/99ci-timeouts >/dev/null
       # Chinese faces, as a Linux system with Chinese has (DESIGN.md, Typography): the runner has
       # none, so a printed PDF would hold no Chinese for the export specs to read back.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-noto-cjk
       # ffmpeg makes the feel check's films into videos (e2e/feel.ts). Without it the frames are
-      # kept, so a mirror that fails here doesn't fail the check.
+      # kept, so a mirror that fails here, or is slow, doesn't fail the check or take the specs' time.
       - name: Install ffmpeg for the feel check's videos
         continue-on-error: true
+        timeout-minutes: 3
         run: |
           for attempt in 1 2 3; do
             sudo apt-get install -y -qq --no-install-recommends ffmpeg && exit 0

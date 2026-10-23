@@ -411,7 +411,7 @@ describe("A reply that claims a change no call made", { timeout: 30_000 }, () =>
     expect(shownWithChanges(client).slice(-2)).toEqual(["+ Risks", "+ The supplier is late."]);
   });
 
-  // protects=a reply that still claims a change no call made is shown flagged; fails_when=it is shown as if the change were made; no_claim=none beyond protects.
+  // protects=a reply that still claims a change no call made is shown flagged, for the line under it (#1559); fails_when=it is shown as if the change were made, or is lost; no_claim=how the line reads.
   test("still claiming it, the reply is flagged", async () => {
     const model = scriptedModel((): ScriptedReply => ({ text: CLAIM }));
     const { core, mind } = await setUp(model);
@@ -827,7 +827,7 @@ describe("The assistant's own text already in the Mind (#1061)", { timeout: 30_0
         requested: "edit",
       });
       expect(lastResult(model)).toContain("applies in the Mind at once");
-      expect(lastResult(model)).toContain("don't describe it");
+      expect(lastResult(model)).toContain("don't repeat the new text");
       expect(shownWithChanges(client).slice(-2)).toEqual([`- ${summary}`, `+ ${longer}`]);
       client.doc.transact(() => resolveProposals(client.blocks, () => true, "accept"));
       await client.settled();
