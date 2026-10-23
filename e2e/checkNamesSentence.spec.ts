@@ -40,6 +40,7 @@ const SENTENCES = {
     notChecked: "The model was not able to check this one.",
     recheck: "Gulls circle the pier at dusk.",
     recheckWas: "Gulls circled the pier at dusk.",
+    cited: "Harbours publish times of high water every 12 months.",
   },
   "zh-CN": {
     supported:
@@ -49,6 +50,7 @@ const SENTENCES = {
     notChecked: "模型这次没能核对这一句。",
     recheck: "海鸥黄昏时在码头上空盘旋。",
     recheckWas: "海鸥黄昏时曾在码头上空盘旋。",
+    cited: "港口每 12 个月公布一次高潮时间。",
   },
 } as const;
 
@@ -148,6 +150,10 @@ for (const language of ["en", "zh-CN"] as const) {
           ...checked("check-5", "supported", words.recheckWas, { evidence: passage }),
           text: words.recheck,
         }),
+        paragraph(checked("check-6", "supported", words.cited, { evidence: passage }), {
+          type: "citation",
+          attrs: passage,
+        }),
       ],
     );
     const marks = window.getByTestId("claim-mark");
@@ -178,7 +184,7 @@ for (const language of ["en", "zh-CN"] as const) {
           Math.max(...boxes.map((each) => each.bottom)) >= words.bottom,
       };
     };
-    await expect(marks).toHaveCount(5);
+    await expect(marks).toHaveCount(6);
 
     const metaInk = await tokenColor(window, "--color-ink-meta");
     const accent = await tokenColor(window, "--color-accent");
@@ -240,6 +246,20 @@ for (const language of ["en", "zh-CN"] as const) {
       await expect(outlined).toHaveCount(0);
       await expect(mark).not.toHaveAttribute("data-open", "true");
     }
+
+    await pointAndClick(window, marks.nth(5));
+    await expect(card).toHaveAttribute("data-check", "supported");
+    await expect(card.getByTestId("claim-already-cited")).toBeVisible();
+    await expect(card.getByTestId("claim-sentence")).toHaveText(`“${words.cited}”`);
+    expect(
+      await card
+        .getByTestId("claim-badge")
+        .evaluate((title) => title.nextElementSibling?.getAttribute("data-testid")),
+    ).toBe("claim-sentence");
+    expect((await outlinesWords(paragraphOf(words.cited))).encloses).toBe(true);
+    await screenshot(window, `card-already-cited-${language}-900`);
+    await window.keyboard.press("Escape");
+    await expect(card).toHaveCount(0);
 
     const edited = `${words.recheck.slice(0, 2)}EDITED${words.recheck.slice(2)}`;
     await editor.evaluate((dom, sentence) => {
