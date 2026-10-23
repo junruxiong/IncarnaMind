@@ -9383,7 +9383,7 @@
     .comparison-cell:is([data-status="waiting"], [data-status="writing"])
     > .comparison-cell-stopped,
   .comparison-cell[data-status="failed"] > .comparison-cell-problem {
-    display: inline-flex;
+    display: flex;
     align-items: flex-start;
     gap: 6px;
   }

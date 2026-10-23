@@ -212,12 +212,15 @@ test("a cell reads, then shows its words as they arrive and its checked Citation
   await expect(cells.first()).toHaveAttribute("data-status", "writing");
   await expect(cells.first().locator(".comparison-cell-reading")).toHaveText("Reading…");
   await expect(cells.first()).toHaveAttribute("aria-busy", "true");
+  const readingHeight = (await cells.first().boundingBox())?.height;
 
   // Then its words, with the status line unchanged and no Citation yet.
   await expect(cells.first()).toHaveAttribute("data-streaming", "true");
   await expect(cells.first().locator(".comparison-cell-content")).toContainText("90 days");
   await expect(cells.first().locator(".comparison-cell-reading")).toBeHidden();
   await expect(cells.first().locator(".citation-marker")).toHaveCount(0);
+  // The row holds its height as the label gives way to words.
+  expect((await cells.first().boundingBox())?.height).toBe(readingHeight);
   await expect(progress).toHaveAttribute("role", "status");
   await expect(progress).toContainText("0 of 3 cells");
 
@@ -241,6 +244,7 @@ test("a cell reads, then shows its words as they arrive and its checked Citation
     await expect(cell).toHaveAttribute("data-status", "done");
     await expect(cell).not.toHaveAttribute("aria-busy", "true");
   }
+  expect((await cells.first().boundingBox())?.height).toBe(readingHeight);
 });
 
 test("in Chinese, at a narrow width and with reduced motion, a cell reads without a pulse and its words stay inside it", async () => {

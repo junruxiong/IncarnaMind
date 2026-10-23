@@ -344,6 +344,38 @@ describe("Compare Documents", () => {
       expect(firstCell(missing.client)).toMatchObject({ status: "failed", problem: "not-found" });
     });
 
+    test("a cell that streamed ends as the cell written without streaming does", async () => {
+      const shape = (cell: ShownCell | undefined) => ({
+        status: cell?.status,
+        text: cell?.text,
+        citations: cell?.citations.map(
+          ({ check, quote, location, documentName, pageFrom, pageTo }) => ({
+            check,
+            quote,
+            location,
+            documentName,
+            pageFrom,
+            pageTo,
+          }),
+        ),
+      });
+      const held = await holdLastRequest("90 days [^1]", 12);
+      await vi.waitFor(() => expect(firstCell(held.client)?.text).toBe("90 days"));
+      held.release();
+      await held.ended;
+      await held.client.settled();
+
+      const plain = await setUpWithDocuments(cellModel(), SUPPLIERS);
+      await compare(plain.core, plain.client, {
+        mindId: plain.mind.id,
+        documentIds: [plain.documents[0]?.id ?? ""],
+        questions: ["Termination notice"],
+      });
+
+      expect(shape(firstCell(held.client))).toEqual(shape(firstCell(plain.client)));
+      expect(shape(firstCell(plain.client)).citations).toHaveLength(1);
+    });
+
     test("Chinese words stream as English ones do", async () => {
       const { client, release, ended } = await holdLastRequest("通知期为 90 天 [^1]", 14);
       await vi.waitFor(() => {
