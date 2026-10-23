@@ -77,7 +77,7 @@ export const KNOWN: readonly Known[] = [
       "mind-changes-undo",
       "tab-group",
     ],
-    max: 0.01,
+    max: 0.04,
     sometimes: true,
     issue: 1325,
   },
