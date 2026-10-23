@@ -2163,17 +2163,19 @@ export const en = {
   "consent.flow.chat": "Chat",
   "consent.flow.chat.purpose": "answer your Questions",
   "consent.data.blocks": "This Mind’s text, Notes and earlier Answers, minus excluded Notes",
-  "consent.data.passages": "passages from your Documents that match the Question",
+  "consent.data.passages":
+    "passages from your Documents that match the Question, with their Documents’ names and pages",
   "consent.data.tool-results": "Results of Connectors and Skill scripts an Answer uses",
   "consent.flow.tagging": "Automatic Tags",
   "consent.flow.tagging.purpose": "tag your Documents automatically",
   "consent.data.tags": "The names and descriptions of your Tags",
   "consent.data.document-excerpts":
-    "Each tagged Document’s name, type and a short excerpt of its start",
+    "Each Document’s name and type and an excerpt of its start (about 1,500 tokens), with a deck’s slide titles or a workbook’s sheet names",
   "consent.data.page-images": "A scan with no text: up to 3 page images, if the model reads images",
   "consent.flow.embeddings": "Document search",
   "consent.flow.embeddings.purpose": "search your Documents by their meaning",
-  "consent.data.document-text": "The full text of every Document, as it is processed",
+  "consent.data.document-text":
+    "The text of every Document, each Passage with its Document’s name, again when you change the model",
   "consent.data.verified-document": "The sentences of a document you verify, to find claims",
   "consent.data.queries": "Your searches: each Question’s words, or what an Answer searches for",
   "consent.flow.suggestions": "Writing suggestions",
@@ -2339,6 +2341,12 @@ export const en = {
   "privacy.flows.allow": "Allow",
   "privacy.flows.partly": "Some uses aren’t allowed yet",
   "privacy.flows.stopped": "Stopped allowing {service}",
+  "privacy.flows.stopFlow": "Stop allowing {flow}",
+  "privacy.flows.allowFlow": "Allow {flow}",
+  "privacy.flows.chatMore": "Chat sends more than its line names.",
+  "privacy.flows.chatMore.details":
+    "Up to 50 Document names, another Mind a Question names, and the live Transcript while a Meeting records.",
+  "privacy.flows.stoppedFlow": "Stopped allowing {flow} for {service}",
   "privacy.traffic.title": "Other network traffic",
   "privacy.traffic.intro": "These services receive nothing of yours.",
   "privacy.traffic.on": "On",
@@ -2358,7 +2366,7 @@ export const en = {
     "Downloads the built-in ordering model once, when there are Documents to search, and its GPU version if your computer can use it.",
   "privacy.traffic.transcription-model": "Speech model download",
   "privacy.traffic.transcription-model.tip":
-    "The speech model for meetings is downloaded once, the first time a meeting is transcribed. Nothing you say is sent.",
+    "The speech model for meetings, and the models that tell speakers apart, are downloaded once, the first time a meeting is recorded or transcribed. Nothing you say is sent.",
   "privacy.traffic.ollama-pull": "Local model downloads",
   "privacy.traffic.ollama-pull.tip":
     "When you choose a local model, Ollama downloads it from its library.",
@@ -2375,7 +2383,8 @@ export const en = {
   "privacy.traffic.remote-connectors.tip":
     "Connects to your remote Connectors’ servers to list their Tools, and to the sign-in services they name. What their Tools are sent is the Connectors flow above.",
   "privacy.skills.title": "Skill scripts",
-  "privacy.skills.body": "Skill scripts run here and can send what they read. Each run asks first.",
+  "privacy.skills.body":
+    "Skill scripts run here and can send what they read. Each asks before it runs, unless you set it to Always allow.",
   "privacy.aiUse.title": "AI use record",
   "privacy.aiUse.body": "Records what AI wrote and checked.",
   "privacy.aiUse.private": "No text, and never sent.",

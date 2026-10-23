@@ -6490,7 +6490,8 @@ export interface PageSetup {
  * - "text-recognition-model": downloads the built-in text recognition
  *   model's files (#397), once, when the first scanned page needs reading.
  * - "transcription-model": downloads the speech-to-text model and Silero VAD,
- *   once, when a Meeting is first transcribed on this computer (#136).
+ *   once, when a Meeting is first transcribed on this computer (#136), and the
+ *   two models that tell its speakers apart (#138), when one is first recorded.
  * - "ollama-pull": Ollama downloads a model from its registry, when the User picks local models.
  * - "chatgpt-sign-in": Sign in with ChatGPT, refreshing it, signing out, and
  *   reading OpenAI's signing keys; listed once the User has signed in.
