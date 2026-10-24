@@ -2,7 +2,10 @@ import { type Editor, getSchema, type JSONContent } from "@tiptap/core";
 import { EditorState, type Transaction } from "@tiptap/pm/state";
 import { describe, expect, test, vi } from "vitest";
 import { CITATION_NODE, type CitationAttributes } from "../../src/core/api";
-import { citationNumbersPlugin } from "../../src/renderer/src/editor/citationNumbers";
+import {
+  citationNumbersPlugin,
+  numberedCitations,
+} from "../../src/renderer/src/editor/citationNumbers";
 import type { ShownClaim } from "../../src/renderer/src/editor/claimChecks";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
 
@@ -10,7 +13,9 @@ vi.mock("../../src/renderer/src/core", () => ({ core: {} }));
 vi.mock("../../src/renderer/src/editWithAi", () => ({ resolveProposalsIn: vi.fn() }));
 vi.mock("../../src/renderer/src/modelInUse", () => ({ modelInUseOf: vi.fn() }));
 
-const { addAsCitation } = await import("../../src/renderer/src/checks");
+const { addAsCitation, replaceCitation, widenCitation } = await import(
+  "../../src/renderer/src/checks"
+);
 
 const schema = getSchema(noteExtensions());
 
@@ -101,5 +106,81 @@ describe("Add as Citation", () => {
     const { editor } = editorHolding(null);
     expect(addAsCitation(editor, claimFound({ quote: LINE }))).toBe(true);
     expect(countCitations(editor.state)).toBe(1);
+  });
+
+  test("adds nothing when the sentence's Citation doesn't hold and would be replaced", () => {
+    const { editor } = editorHolding({ check: "not-found", checkReason: "quote-not-on-pages" });
+    expect(addAsCitation(editor, claimFound({ quote: "Probation lasts three months." }))).toBe(
+      false,
+    );
+    expect(countCitations(editor.state)).toBe(1);
+  });
+});
+
+const onlyCitation = (state: EditorState) => {
+  const [citation] = numberedCitations(state);
+  if (!citation) throw new Error("No Citation.");
+  return citation;
+};
+
+const foundEvidence = (over: Partial<CitationAttributes>) => {
+  const evidence = claimFound(over).check.evidence;
+  if (!evidence) throw new Error("The check found nothing.");
+  return evidence;
+};
+
+describe("Widen the Citation and Replace the Citation", () => {
+  test("widening keeps the one Citation and takes the whole clause's words, Place and version", () => {
+    const { editor } = editorHolding({});
+    expect(
+      widenCitation(editor, {
+        citation: onlyCitation(editor.state),
+        evidence: foundEvidence({
+          quote: LINE,
+          pageFrom: 5,
+          pageTo: 5,
+          location: { kind: "page", from: 5, to: 5 },
+          contentHash: "v2",
+        }),
+      }),
+    ).toBe(true);
+    expect(countCitations(editor.state)).toBe(1);
+    expect(onlyCitation(editor.state).attributes).toMatchObject({
+      documentId: "contract",
+      quote: LINE,
+      pageFrom: 5,
+      pageTo: 5,
+      location: { kind: "page", from: 5, to: 5 },
+      contentHash: "v2",
+      check: "found",
+      checkReason: null,
+    });
+  });
+
+  test("replacing keeps the one Citation and points it at the Passage the check found", () => {
+    const { editor } = editorHolding({ check: "not-found", checkReason: "quote-not-on-pages" });
+    expect(
+      replaceCitation(editor, {
+        citation: onlyCitation(editor.state),
+        evidence: foundEvidence({
+          quote: "Probation lasts three months.",
+          pageFrom: 6,
+          pageTo: 6,
+          location: { kind: "page", from: 6, to: 6 },
+          contentHash: "v3",
+        }),
+      }),
+    ).toBe(true);
+    expect(countCitations(editor.state)).toBe(1);
+    expect(onlyCitation(editor.state).attributes).toMatchObject({
+      documentId: "contract",
+      quote: "Probation lasts three months.",
+      pageFrom: 6,
+      pageTo: 6,
+      location: { kind: "page", from: 6, to: 6 },
+      contentHash: "v3",
+      check: "found",
+      checkReason: null,
+    });
   });
 });
