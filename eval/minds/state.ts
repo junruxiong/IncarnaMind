@@ -1,0 +1,164 @@
+/**
+ * Minds as the evaluation reads them from the core, and the three things a
+ * User does with an Answer's card: Accept all, Reject all and Undo. They are
+ * applied to a copy of each Mind with the functions the card uses
+ * (src/renderer/src/mindChanges.ts), not through the window.
+ */
+import * as Y from "yjs";
+import {
+  BLOCK_ID_ATTRIBUTE,
+  type Core,
+  MIND_CONTENT_FIELD,
+  MIND_PROPOSAL_REQUESTS_FIELD,
+  type ProposalRef,
+} from "../../src/core";
+import { plainText } from "../../src/core/mindText";
+import type { ChangedMind } from "../../src/renderer/src/changedMinds";
+import { holdsOnlyItsTitle } from "../../src/shared/madeMind";
+import { decideProposals, pendingProposals } from "../../src/shared/proposals";
+import { connectToMind } from "../../tests/helpers/mindClient";
+import { heading, note, shownWithChanges, writeMind } from "../../tests/helpers/minds";
+import type { SeedMind } from "./cases";
+
+/** A paragraph or heading, wherever it sits in a Block, keyed by its Block and its place in it. */
+export interface Unit {
+  key: string;
+  type: "paragraph" | "heading";
+  text: string;
+}
+
+export interface BlockState {
+  id: string;
+  type: string;
+  level: number | null;
+  text: string;
+}
+
+export interface MindState {
+  id: string;
+  title: string;
+  blocks: BlockState[];
+  units: Unit[];
+  /** The Mind with its waiting changes marked, one line a paragraph. */
+  shown: string;
+  pending: number;
+}
+
+function unitsOf(blockId: string, element: Y.XmlElement): Unit[] {
+  const found: Unit[] = [];
+  const visit = (each: Y.XmlElement) => {
+    if (each.nodeName === "paragraph" || each.nodeName === "heading") {
+      found.push({
+        key: `${blockId}#${found.length}`,
+        type: each.nodeName,
+        text: plainText(each),
+      });
+      return;
+    }
+    for (const child of each.toArray()) if (child instanceof Y.XmlElement) visit(child);
+  };
+  visit(element);
+  return found;
+}
+
+export async function readState(core: Core, mindId: string, title: string): Promise<MindState> {
+  const { state } = await core.openMind(mindId);
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, state);
+  const fragment = doc.getXmlFragment(MIND_CONTENT_FIELD);
+  const blocks: BlockState[] = [];
+  const units: Unit[] = [];
+  for (const block of fragment.toArray()) {
+    if (!(block instanceof Y.XmlElement)) continue;
+    const id = String(block.getAttribute(BLOCK_ID_ATTRIBUTE) ?? "");
+    const level = Number(block.getAttribute("level"));
+    blocks.push({
+      id,
+      type: block.nodeName,
+      level: block.nodeName === "heading" && Number.isFinite(level) ? level : null,
+      text: plainText(block),
+    });
+    units.push(...unitsOf(id, block));
+  }
+  return {
+    id: mindId,
+    title,
+    blocks,
+    units,
+    shown: shownWithChanges({ blocks: fragment }).join("\n"),
+    pending: pendingProposals(fragment).length,
+  };
+}
+
+/** Every Mind there is, in the order the core lists them. */
+export async function readWorkspace(core: Core): Promise<MindState[]> {
+  const minds = await core.listMinds();
+  return Promise.all(minds.map((mind) => readState(core, mind.id, mind.title)));
+}
+
+export async function seedWorkspace(core: Core, seeds: readonly SeedMind[]): Promise<void> {
+  for (const seed of seeds) {
+    const mind = await core.createMind({ title: seed.title });
+    const client = await connectToMind(core, mind.id);
+    writeMind(
+      client,
+      seed.blocks.map((line) => (line.startsWith("## ") ? heading(2, line.slice(3)) : note(line))),
+    );
+    await client.settled();
+  }
+}
+
+/** What Accept all or Reject all did, and how to take it back. */
+export interface Decided {
+  /** How many changes it took in the Minds it reached. */
+  count: number;
+  undo(): Promise<void>;
+}
+
+/**
+ * Accept all or Reject all on an Answer's card: each row's changes in its
+ * Mind, one Undo for all of them. Rejecting a Mind the Answer made removes it
+ * once nothing else is in it, and Undo brings it back.
+ */
+export async function decideAll(
+  core: Core,
+  rows: readonly ChangedMind[],
+  outcome: "accept" | "reject",
+): Promise<Decided> {
+  const steps: { undo(): Promise<void> }[] = [];
+  let count = 0;
+  for (const row of rows) {
+    const client = await connectToMind(core, row.mindId);
+    const picked = (proposal: ProposalRef) => row.requests.includes(proposal.request);
+    if (!pendingProposals(client.blocks).some(picked)) continue;
+    const origin = { decided: row.mindId };
+    const manager = new Y.UndoManager(
+      [client.blocks, client.doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD)],
+      { trackedOrigins: new Set([origin]) },
+    );
+    client.doc.transact(() => {
+      count += decideProposals(client.blocks, picked, outcome).length;
+    }, origin);
+    await client.settled();
+    const undoText = async () => {
+      manager.undo();
+      await client.settled();
+    };
+    const title = (await core.listMinds()).find((mind) => mind.id === row.mindId)?.title ?? "";
+    if (outcome === "reject" && row.created && holdsOnlyItsTitle(client.blocks, title)) {
+      await core.deleteMind(row.mindId);
+      steps.push({
+        undo: async () => {
+          await core.restore([{ kind: "mind", id: row.mindId }]);
+          await undoText();
+        },
+      });
+    } else steps.push({ undo: undoText });
+  }
+  return {
+    count,
+    undo: async () => {
+      for (const step of [...steps].reverse()) await step.undo();
+    },
+  };
+}
