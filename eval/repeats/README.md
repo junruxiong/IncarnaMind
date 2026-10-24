@@ -59,36 +59,32 @@ npm run eval:repeats
 
 ## Results
 
-### 2026-10-24: a wrong figure for a general word, and "Employees" for "the Employee" (#1708)
+### 2026-10-24: a Supported reply with a wider scope keeps its partly-supported card (#1708)
 
-On the same Documents, Library and search as below. "Before" is the version below (#1668's, a9fcbe61a); "after" is this version, whose changes are:
+Claude Haiku 5.5 on the same Documents, Library and search as below, against `main` measured the same day with the same sentences (main's check, these sets). The change: a Supported reply with a wider scope that names its parts keeps the partly-supported card with the Passage it cited, also when its parts came from the request for them, and no nearest line is asked about. It changes no verdict: only the amber "says something different" card becomes the partly-supported one, and a request goes. In 169 such checks the nearest-line request was made 13 times (where the roles differ), against 130 of 174 on `main`, a median of 0.8 s each.
 
-- A sentence the check calls unsupported, whose reply says it names the Passage's party in general words (`Scope: wider`), and whose nearest line already gets the "says something different" card, has that line judged twice more at once: by the strict judgement, and by the same one after a line on whose detail it is (`Party: same` or `other`; another person, group, role, item or site is another party, another period is not). Only when both find another value of the line's own party is the sentence Contradicted, citing that line. Nothing else changes, and the Supported path asks nothing more.
-- `Scope` counts the Passage's own word in the plural as a wider group ("tenants").
-- A Supported reply with a wider scope keeps the partly-supported card with the Passage it cited, also when its parts came from the request for them: no nearest line is asked about.
-- New sets: near misses about another person or role, or "Staff" with a detail the agreement doesn't give (`en-near-misses`, `zh-near-misses`); faithful paraphrases with other duty and permission words (`en-paraphrases`, `zh-paraphrases`); and, in both conflict sets, duties and permissions in other words and a figure for 2026.
+New sets and members: near misses about another person or role, or "Staff" with a detail the agreement doesn't give (`en-near-misses`, `zh-near-misses`); paraphrases with other duty and permission words (`en-paraphrases`, `zh-paraphrases`); and, in both conflict sets, duties and permissions in other words and a figure for 2026, whose cases change in #1765.
 
-Claude Haiku 5.5, counts of checks; S Supported, C Contradicted, P partly supported, D a line that says something different:
+Counts of checks, this version and `main`. The first five rows are of this version; the others were measured with an earlier step of this branch still in it (a nearest line that could make a wider-scope sentence Contradicted, taken out since), which can only have added Contradicted:
 
-| Sentence | Before | After |
-|---|---|---|
-| 员工每年有15天带薪年休假。 | 39 C, 1 D of 40 | 39 C, 1 not checked (#1673) of 40; 20 C of 20 |
-| Holiday is 30 days a year plus public holidays. | 20 C of 20 | 20 C of 20 |
-| Employees may work from home two days a week. | 17 P, 3 S of 20 | 20 P of 20 |
-| 职工每周可在家工作两天。 | 17 P, 2 S, 1 D of 20 | 20 P of 20 |
-| Staff… / 员工… (four rows) | 10 P of 10 each | 20 P of 20 each, 员工 in `zh` 19 P, 1 S |
-| The paraphrases, the name and the agreement's own words (eight rows) | 10 to 20 S each | 20 S of 20 each |
-| 人力资源总监每年享有带薪年休假15天。 | 10 D of 10 | 20 D of 20 |
-| 员工的工资于每月最后一个工作日通过银行转账发放。 | 10 P of 10 | 20 P of 20 |
-| Staff may work from home on Mondays and Fridays. | 10 D of 10 | 17 D, 2 C, 1 P of 20 |
+| Sentences | Checks | This version | `main` |
+|---|---|---|---|
+| "Staff may work from home on Mondays and Fridays." Contradicted | 40 | 2 | 1 |
+| "Managers are entitled to 30 days of paid holiday per year." Contradicted | 40 | 2 | 7 |
+| "人力资源总监每年享有带薪年休假15天。" Contradicted | 40 | 1 | 2 |
+| "员工的工资于每月最后一个工作日通过银行转账发放。" Supported | 40 | 3 | 5 |
+| "乙方月工资为人民币一万八千元，通过银行转账发放。" Supported | 40 | 4 | 6 |
+| "Employees may work from home two days a week." Supported | 40 | 7 | 4 |
+| 职工, "Staff", 员工 for the Employee (three rows) Supported | 40 each | 0, 0, 1 | 0, 0, 0 |
+| "should" for "may" Supported | 40 | 39 | 39 |
+| Other duties for permissions and the reverse (must, shall, is entitled to, 需, 应当) Supported | 40 each | 1 of 200 | 4 of 200 |
+| The paraphrases, names and own words (eight rows) not Supported | 20 each | 3 of 160 | 2 of 160 |
+| Both conflict Minds, 10 checks of 58 sentences: Contradicted, Supported | 580 | 478, 12 | 484, 16 |
 
-- **The wrong figure:** in the Chinese holiday's misses the verdict was unsupported, all employees against one contract (`Scope: 员工, wider`). Asked alone, 20 times on the line the check read, the two judgements call it a conflict of the line's own party in 19 of 20 (Haiku 5.5) and 5 of 5 (Sonnet 5.5); the English holiday and both 2026 sentences 20 of 20 and 5 of 5. Near misses that reach the same path: "Staff may work from home on Mondays and Fridays." 1 of 40, five more (a condition, another role at home, 员工 with named days or bank transfer, 经理 at home) 0 of 20 each, Sonnet 0 of 5. Either judgement alone let near misses through: the strict one another person's or role's figure (Managers 20 of 20, 人力资源总监 18 of 20), the one with the party line an added detail (3 of 20).
-- **Near misses Contradicted at the first verdict** (#1718), not by the new path: Managers or 经理 at home, the Director or 人力资源总监 at home, a condition, 员工 with named days, between 1 and 7 of 10 with the new path on the earlier prompt. "Staff may work from home on Mondays and Fridays." 2 of 20 after, both by the first verdict and the strict judgement.
-- **Sonnet 5.5:** with the new path on the earlier prompt, the Chinese holiday Contradicted in 10 of 10 checks and the near-miss sets in none of 39; on this version, "Employees…" and 职工 partly in 5 of 5 each; on the version with the wordings below, both holidays and the Chinese 2026 sentence Contradicted in 10 of 10 and the near misses in none of 26.
-- **Not changed, measured:** "Up to 5 unused days should be carried over into the next year." Supported 9 of 10 on Haiku 5.5 and 10 of 10 on Sonnet 5.5 (#1766); "人力资源总监向乙方汇报。" Supported about 1 in 4 (#1766); "In 2026 the Employee was entitled to 25 days of paid holiday." Contradicted in 19 of 20 checks on Haiku 5.5 and 2 of 10 on Sonnet 5.5 before, whose verdict calls another period a near miss (#1765).
-- **Tried and taken back:** a `Roles` field that compares the parties even without a duty or permission word took the reversed reporting line from about 1 in 4 to about 1 in 10 and "should" for "may" to 6 of 20, but made the first verdict call "人力资源总监每年享有带薪年休假15天。" Contradicted (20 checks each): 0 before; 0 with the `Scope` change alone; 3 with that field alone; 4 with both; 9 with both and a wording for "requires or expects it where the other only allows it". Each change alone added about 1 in 10 near misses Contradicted or Supported, and together they compounded.
-- **Cost and time:** the new path runs only for an unsupported, wider-scope sentence whose nearest line differs (40 of 130 near-miss checks, none of 640 in the other sets): two requests at once, a median of 1.2 s more (90th percentile 1.7 s), about 2,000 input and 160 output tokens, $0.0003 a check on Haiku 5.5. A Supported reply with a wider scope makes one request fewer.
-- **Spend:** $9.06 in all: Haiku 5.5 $5.23 (the judgement trials $0.73 of it), Sonnet 5.5 $3.83 (the trials $0.45 of it).
+- The prompt is `main`'s, so differences in Supported are draws, not this change: "Employees…" Supported in 7 of 40 here and 4 of 40 on `main` come from first verdicts that call the plural the Employee itself ("Scope: Employees, same").
+- 均可 and 可以 for 须, and 应 for 可, were left out by the claims step in the smaller Minds; in the whole conflicts Mind, 10 checks: Supported 0 and 0, 1 and 1, 1 and 0.
+- Taken back on this branch: the nearest line that could make a wider-scope sentence Contradicted made "Staff may work from home on Mondays and Fridays." Contradicted in 3 of 40 checks through that path, against 1 of 40 on `main`; it can return with a test of the period and the party (#1765). A `Scope` clause counting the Passage's own word in the plural as wider made three Chinese duty-for-permission swaps Supported in 22 of 120 checks against 4 of 120. Two `Roles` wordings made near misses about another person Contradicted at the first verdict.
+- Spend: $11.51 in all over this work, Haiku 5.5 and Sonnet 5.5; this version's measurement $2.45.
 
 ### 2026-10-23: a Mind's chosen scope narrows its check (#1623)
 
