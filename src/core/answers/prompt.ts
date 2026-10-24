@@ -152,7 +152,7 @@ export function selectedTextBlock(
   quotes: readonly { documentName: string; quote: string; place: string | null; shown: string }[],
 ): string {
   const each = quotes.map((quote) => `${selected(quote, quote.place)}\n\n${quote.shown}`);
-  return `<selected-text>\nThe User selected these words in their Documents to ask about them, in <selected>: "this", "it", "这段", "这句" and the like in the Question mean them. Answer about them first, and cite them from the Passage that follows them, at the location their <selected> gives.\n\n${each.join("\n\n")}\n</selected-text>`;
+  return `<selected-text>\nThe User selected these words in their Documents to ask about them, in <selected>: "this", "it", "这段", "这句" and the like in the Question mean them. Answer about them, and cite them before anything else, from the Passage that follows them, at the location their <selected> gives.\n\n${each.join("\n\n")}\n</selected-text>`;
 }
 
 /** An earlier Question as its conversation's context reads it: the words it asked about, then its text. */
