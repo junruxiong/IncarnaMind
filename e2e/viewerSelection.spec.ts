@@ -66,7 +66,7 @@ test.afterEach(async () => {
   await removeDataFolder(sources);
 });
 
-/** The app with the paper beside a new Mind, its text typed so the cursor is in it. */
+/** The app with the paper beside a new Mind of two paragraphs, typed so the cursor has been in it. */
 async function paperBesideMind({ mind = true } = {}) {
   const path = join(sources, "Rate cuts.pdf");
   await writeFile(path, PAPER);
@@ -78,6 +78,8 @@ async function paperBesideMind({ mind = true } = {}) {
   if (mind) {
     await newMind(window);
     await window.keyboard.type("Margins");
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("Recovery");
   }
   await pointAndClick(
     window,
@@ -125,8 +127,18 @@ async function quoteIn(window: Page, text: RegExp): Promise<Locator> {
 const frontMindOrAny = (window: Page) =>
   window.locator('[data-testid="mind-pane"]:visible').first();
 
-test("selected text goes into the note as a quote whose Citation is found on the page it was selected on", async () => {
-  const { window, layer } = await paperBesideMind();
+/** The Mind's top-level Blocks, by kind. */
+const blockKinds = (window: Page) =>
+  frontMindOrAny(window)
+    .getByTestId("mind-editor")
+    .locator(":scope > *")
+    .evaluateAll((all) => all.map((block) => block.tagName.toLowerCase()));
+
+test("selected text goes into the note at its cursor as a quote whose Citation is found on the page it was selected on", async () => {
+  const { window, viewer, layer } = await paperBesideMind();
+  // The cursor in the first paragraph, then the focus on the viewer's own button.
+  await pointAndClick(window, frontMindOrAny(window).getByText("Margins", { exact: true }));
+  await pointAndClick(window, viewer.getByTestId("pdf-next-page"));
   // The same words are on page 1 too: the Citation must say page 2.
   await dragOver(window, layer(2), "Margins recover within two quarters.");
 
@@ -139,6 +151,7 @@ test("selected text goes into the note as a quote whose Citation is found on the
   await expect(citation).toHaveAttribute("aria-label", /p\. 2/);
   await expect(menuOf(window)).toHaveCount(0);
   await expect(window.getByTestId("undo-line")).toContainText("Added a quote to");
+  expect(await blockKinds(window)).toEqual(["p", "blockquote", "p"]);
 
   // ⌘Z in the Mind takes it back.
   await pointAndClick(window, frontMindOrAny(window).getByText("Margins", { exact: true }));
@@ -200,6 +213,23 @@ test("the keys reach the menu: ⌘/ moves into it, the arrows go through it, and
   await expect.poll(async () => (await copied())["text/plain"]).toContain("Grocers studied");
 });
 
+test("Shift and the arrows change the selection after a drag, and Add to note takes what they leave selected", async () => {
+  const { window, layer } = await paperBesideMind();
+  await dragOver(window, layer(1), "Grocers studied across the eleven");
+  await expect(menuOf(window)).toBeVisible();
+
+  // The focus is on the page's body after a drag: Shift and → take in " chains." too.
+  const selected = () => window.evaluate(() => String(globalThis.getSelection()).trim());
+  for (let key = 0; key < 12 && !(await selected()).endsWith("chains."); key++) {
+    await window.keyboard.press("Shift+ArrowRight");
+  }
+  expect(await selected()).toBe("Grocers studied across the eleven chains.");
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+
+  const quote = await quoteIn(window, /^Grocers studied across the eleven chains\./);
+  await expect(quote.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
+});
+
 test("with no Mind open, Add to note asks which Mind, and a new one opens beside the paper, in Chinese", async () => {
   const { window, layer } = await paperBesideMind({ mind: false });
   await setLanguage(window, "zh-CN");
@@ -216,12 +246,54 @@ test("with no Mind open, Add to note asks which Mind, and a new one opens beside
   const picker = window.getByTestId("add-to-picker");
   await expect(picker).toBeVisible();
   await expect(window.getByTestId("add-to-search")).toBeFocused();
+  // The words acted on stay drawn while the picker has the focus.
+  await expect
+    .poll(() => window.evaluate(() => CSS.highlights.get("viewer-held-selection")?.size ?? 0))
+    .toBe(1);
   await motionSettled(window);
   await pointAndClick(window, picker.locator('[data-target="new"]'));
 
   const quote = await quoteIn(window, /^Only three of them are in the panel\./);
   await expect(quote.getByTestId("citation-chip")).toHaveAttribute("data-check", "found");
   await expect(window.getByTestId("viewer")).toBeVisible();
+});
+
+test("words over more than two pages aren't added, and the notice says why", async () => {
+  const { window, viewer, layer } = await paperBesideMind();
+  for (const page of [1, 2, 3]) {
+    await viewer
+      .locator(`[data-page-number="${page}"]`)
+      .evaluate((each) => each.scrollIntoView({ block: "center" }));
+    await expect(layer(page)).toContainText(page === 3 ? "floating" : "Margins");
+  }
+  // From page 1 to page 3, as Shift and ↓ would select them: no drag holds three pages in view.
+  await viewer.evaluate((root) => {
+    const first = root.querySelector('[data-page-number="1"] .textLayer');
+    const last = root.querySelector('[data-page-number="3"] .textLayer');
+    if (!first || !last) throw new Error("The pages aren't drawn.");
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, last.childNodes.length);
+    globalThis.getSelection()?.removeAllRanges();
+    globalThis.getSelection()?.addRange(range);
+  });
+  await expect(menuOf(window)).toBeVisible();
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+
+  await expect(window.getByTestId("error-notice-message")).toContainText("two pages at most");
+  await expect(frontMindOrAny(window).locator("blockquote")).toHaveCount(0);
+});
+
+test("Esc in the Mind picker adds nothing and makes no Mind", async () => {
+  const { window, layer } = await paperBesideMind({ mind: false });
+  await dragOver(window, layer(1), "Grocers studied across the eleven chains.");
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+  await expect(window.getByTestId("add-to-search")).toBeFocused();
+
+  await window.keyboard.press("Escape");
+
+  await expect(window.getByTestId("add-to-picker")).toHaveCount(0);
+  await expect(window.locator('[data-testid="mind-pane"]')).toHaveCount(0);
 });
 
 const SCANS = join(__dirname, "../tests/fixtures/scans");

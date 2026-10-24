@@ -86,12 +86,17 @@ function putIn(
   mindId: string,
   quote: NodeJSON,
   atCursor: boolean,
+  made = false,
 ) {
   const ids = addInEditor(editor, [quote], atCursor, () => undefined);
   if (!ids) return;
   flashBlocks(editor, ids);
   const name = nameOf(mindId);
-  offerEditorUndo(editor, (t) => t("viewer.selection.added", { mind: name || t("mind.untitled") }));
+  offerEditorUndo(editor, (t) =>
+    made
+      ? t("viewer.selection.addedNew")
+      : t("viewer.selection.added", { mind: name || t("mind.untitled") }),
+  );
 }
 
 /** Whether Add to note has a Mind to add to without asking which: the one the assistant reads. */
@@ -113,14 +118,14 @@ export async function addSelectionToNote(
     const quote = await quoteOf(selection);
     if (!target || (target.kind === "mind" && read?.mindId === target.mindId)) {
       if (read && !read.editor.isDestroyed) {
-        putIn(read.editor, read.mindId, quote, read.cursorInMind());
+        putIn(read.editor, read.mindId, quote, read.cursorInMind() || read.cursorPlaced());
       }
       return;
     }
-    const mindId =
-      target.kind === "mind"
-        ? target.mindId
-        : (await core.createMind({ title: "", folderId: selection.document.folderId })).id;
+    const made = target.kind === "new";
+    const mindId = made
+      ? (await core.createMind({ title: "", folderId: selection.document.folderId })).id
+      : target.mindId;
     // Beside the Document, which stays in view.
     await useAppStore.getState().changeLayout({
       type: "open",
@@ -128,7 +133,26 @@ export async function addSelectionToNote(
       where: { in: "side" },
     });
     const editor = await whenMindEditor(mindId, MIND_OPEN_WAIT_MS);
-    if (editor) putIn(editor, mindId, quote, false);
+    if (editor) {
+      putIn(editor, mindId, quote, false, made);
+      return;
+    }
+    // A Mind a newer version wrote opens read-only, with no editor to take the quote.
+    const name = nameOf(mindId);
+    if (made) await core.deleteMind(mindId);
+    useNotices.getState().showError(
+      new Error(
+        made
+          ? translateNow("viewer.selection.notOpenedNew")
+          : translateNow("viewer.selection.notOpened", {
+              mind: name || translateNow("mind.untitled"),
+            }),
+      ),
+      {
+        label: (t) => t("viewer.selection.copy"),
+        run: () => copySelectionWithCitation(selection),
+      },
+    );
   } catch (error) {
     useAppStore.getState().reportError(error);
   }

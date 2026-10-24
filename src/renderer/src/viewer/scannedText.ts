@@ -15,7 +15,6 @@ export interface ScannedRun {
   text: string;
   /** Its box's corners as fractions of the page: top-left, top-right, bottom-right, bottom-left (x, y). */
   quad: readonly number[];
-  /** It ends its line. */
   breakAfter: boolean;
 }
 
