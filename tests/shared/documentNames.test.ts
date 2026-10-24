@@ -97,6 +97,15 @@ describe("where a Document comes from", () => {
     ).toBe("Transcript · Meeting, 19 October.vtt");
   });
 
+  test("a Document's name that already ends in the extension keeps one of it", () => {
+    expect(
+      sourceOf({
+        name: "Meeting.vtt",
+        path: "/data/Transcripts/2896a7b6-5f1e-4039-820a-55725dfb8a17.vtt",
+      }),
+    ).toBe("Meeting.vtt");
+  });
+
   test("a file the User named keeps its own name, and a web page its address", () => {
     expect(sourceOf({ name: "Copperleaf", path: "/Users/me/DPA - Copperleaf.docx" })).toBe(
       "DPA - Copperleaf.docx",

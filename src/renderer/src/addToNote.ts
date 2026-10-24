@@ -241,7 +241,7 @@ export async function openTable(added: AddedAnswer): Promise<void> {
   if (openingTable) return;
   openingTable = true;
   try {
-    const asked = cutTitle(added.conversation?.title || questionOf(added.answer)?.text || "");
+    const asked = added.conversation?.title || cutTitle(questionOf(added.answer)?.text ?? "");
     const taken = useAppStore.getState().minds.map((mind) => mindName(mind));
     const mind = await newMindFor(added, numberedName(asked, taken) ?? asked);
     await openBeside(mind.id);

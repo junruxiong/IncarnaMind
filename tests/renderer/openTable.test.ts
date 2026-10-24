@@ -105,6 +105,22 @@ describe("Open as a table", () => {
     await again;
   });
 
+  test("a name the User gave the conversation goes on the Mind whole", async () => {
+    const { openTable } = await import("../../src/renderer/src/addToNote");
+    const title =
+      "A conversation name the User gave, which runs past the sixty characters a title would cut at";
+    const opening = openTable({
+      answer,
+      conversation: { title } as never,
+      blocks: [table],
+    });
+    await vi.waitFor(() => expect(made).toHaveLength(1));
+    expect(made[0]).toMatchObject({ title });
+    await vi.waitFor(() => expect(calls).toContain("addToNote"));
+    fill.release();
+    await opening;
+  });
+
   test("its tab is opened before the table is put in, so the tab shows while a big table is still going in", async () => {
     const { openTable } = await import("../../src/renderer/src/addToNote");
     const opening = openTable({ answer, conversation: undefined, blocks: [table] });
