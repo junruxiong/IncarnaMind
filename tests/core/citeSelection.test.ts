@@ -274,6 +274,59 @@ describe("citeSelection", () => {
       expect(cited.location).toEqual({ kind: "lines", from: 3, to: 3 });
     });
 
+    // The words around a selection as the text view sends them: the file's own characters.
+    const aroundLine = (lines: readonly string[], line: number) => {
+      const source = lines.join("\n");
+      const start = lines.slice(0, line - 1).join("\n").length + (line > 1 ? 1 : 0);
+      const end = start + (lines[line - 1] ?? "").length;
+      return {
+        before: source.slice(Math.max(0, start - 80), start),
+        after: source.slice(end, end + 80),
+      };
+    };
+
+    // Matching passes over spacing: blank lines in the words before must not shift the selection
+    // onto the same short line next to it.
+    test("in a text file, a short line the next line repeats, blank lines before it", async () => {
+      const core = startCore(await createTempDataFolder());
+      const lines = ["", "", "Checked", "Checked", "Yes", "Done", "No", "Done", "OK", "OK", ""];
+      const document = await addPaper(core, Buffer.from(lines.join("\n")), "Checks.txt");
+
+      const cited = await core.citeSelection({
+        documentId: document.id,
+        parts: [{ unit: 1, text: "OK", ...aroundLine(lines, 9) }],
+      });
+
+      expect(cited).toMatchObject({ check: "found" });
+      expect(cited.location).toEqual({ kind: "lines", from: 9, to: 9 });
+    });
+
+    test.each([
+      [["", "", "", "OK", "", "OK", "Done", "", "No", "", ""]],
+      [["", "", "", "OK", "OK", "No", "OK", "", "No", "OK", "Yes"]],
+      [["", "", "Yes", "Yes", "OK", "", "Yes", "OK", "OK", "Yes", ""]],
+      [["", "", "OK", "Yes", "", "Done", "", "OK", "Done", "OK", "OK"]],
+    ])(
+      "in a text file of short repeated words, every line cites its own line: %j",
+      async (lines) => {
+        const core = startCore(await createTempDataFolder());
+        const document = await addPaper(core, Buffer.from(lines.join("\n")), "Answers.txt");
+
+        for (const [index, text] of lines.entries()) {
+          if (text === "") continue;
+          const cited = await core.citeSelection({
+            documentId: document.id,
+            parts: [{ unit: 1, text, ...aroundLine(lines, index + 1) }],
+          });
+          expect.soft(cited.location, `line ${index + 1}`).toEqual({
+            kind: "lines",
+            from: index + 1,
+            to: index + 1,
+          });
+        }
+      },
+    );
+
     // A text file's Units are blocks of 50 lines: at a block's edge, the words around the selection
     // are in the next block, and a place inside the block with the same nearer words must not win.
     test.each([50, 51, 100, 101])(

@@ -526,14 +526,13 @@ function placesIn(
     return spans.flatMap((span) => {
       const start = span[0]?.start ?? 0;
       const end = span.at(-1)?.end ?? 0;
-      const inside = placesOf(joined.slice(start, end), text, options);
-      const distance = (place: TextRange[]) => Math.abs((place[0]?.start ?? 0) - before.length);
-      const nearest = inside.reduce<TextRange[] | null>(
-        (best, place) => (best === null || distance(place) < distance(best) ? place : best),
-        null,
-      );
-      return nearest
-        ? [nearest.map((range) => ({ start: range.start + start, end: range.end + start }))]
+      const inSpan = joined.slice(start, end);
+      // Matching passes over spacing, so the words before end where they are found, not at their length.
+      const from =
+        before.trim() === "" ? 0 : (findQuote(inSpan, before, options)?.at(-1)?.end ?? 0);
+      const place = placesOf(inSpan, text, options).find((each) => (each[0]?.start ?? -1) >= from);
+      return place
+        ? [place.map((range) => ({ start: range.start + start, end: range.end + start }))]
         : [];
     });
   }
