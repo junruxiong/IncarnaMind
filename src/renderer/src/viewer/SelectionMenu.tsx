@@ -30,6 +30,18 @@ const inPopover = (target: EventTarget | null) =>
 
 const HELD = "viewer-held-selection";
 
+// Shift and the arrows change a selection a key at a time: it is read once they stop.
+const SETTLE_MS = 120;
+
+function rangeIn(section: HTMLElement): Range | null {
+  const selection = window.getSelection();
+  const range =
+    selection && !selection.isCollapsed && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : null;
+  return range && section.contains(range.commonAncestorContainer) ? range : null;
+}
+
 // Chromium draws no selection the focus has left: the words acted on are drawn in the
 // inactive-selection grey instead, as a Mind's are (#565).
 function drawHeld(range: Range | null): void {
@@ -52,7 +64,6 @@ export function SelectionMenu({
   reader,
 }: {
   document: Document;
-  /** The viewer it is the menu of. */
   section: HTMLElement | null;
   reader: SelectionReader;
 }) {
@@ -73,13 +84,11 @@ export function SelectionMenu({
 
   useEffect(() => {
     if (!section) return;
+    let pressed = false;
+    let settling: ReturnType<typeof setTimeout> | undefined;
     const read = () => {
-      const selection = window.getSelection();
-      const range =
-        selection && !selection.isCollapsed && selection.rangeCount > 0
-          ? selection.getRangeAt(0)
-          : null;
-      if (!range || !section.contains(range.commonAncestorContainer)) return;
+      const range = rangeIn(section);
+      if (!range) return;
       const { parts, shown } = reader(range);
       setHeld(
         parts.length > 0
@@ -92,37 +101,43 @@ export function SelectionMenu({
     };
     const onDown = (event: PointerEvent) => {
       if (inPopover(event.target)) return;
+      pressed = true;
       setOpen(false);
       setHeld(null);
+    };
+    const onReleased = () => {
+      pressed = false;
     };
     // Once the browser has settled the selection the press made.
     const onUp = (event: PointerEvent) => {
       if (event.button === 0 && !inPopover(event.target)) setTimeout(read);
     };
-    const onKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (event.shiftKey || event.key === "Shift") read();
-    };
     const onChange = () => {
       const selection = window.getSelection();
       if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
         if (!section.contains(selection.getRangeAt(0).commonAncestorContainer)) setHeld(null);
+        // After a drag the focus is on the page's body, which no key event of the viewer reaches.
+        else if (!pressed) {
+          clearTimeout(settling);
+          settling = setTimeout(read, SETTLE_MS);
+        }
         return;
       }
       const focused = window.document.activeElement;
-      if (inPopover(focused)) return;
-      if (typesInField(focused)) {
-        setOpen(false);
+      if (typesInField(focused) || inPopover(focused)) {
+        if (!inPopover(focused)) setOpen(false);
         setAway(true);
       } else setHeld(null);
     };
     section.addEventListener("pointerdown", onDown);
     section.addEventListener("pointerup", onUp);
-    section.addEventListener("keyup", onKeyUp);
+    window.addEventListener("pointerup", onReleased);
     window.document.addEventListener("selectionchange", onChange);
     return () => {
+      clearTimeout(settling);
       section.removeEventListener("pointerdown", onDown);
       section.removeEventListener("pointerup", onUp);
-      section.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("pointerup", onReleased);
       window.document.removeEventListener("selectionchange", onChange);
     };
   }, [section, document, reader]);
@@ -174,24 +189,36 @@ export function SelectionMenu({
     if (menu.current?.contains(window.document.activeElement)) focusBeforeMenu.current?.focus();
   }, []);
 
+  // What is selected when the User acts, should Shift have changed it since it was read.
+  const heldNow = useCallback((): Held | null => {
+    const range = section && rangeIn(section);
+    const { parts, shown } = range ? reader(range) : { parts: [], shown: undefined };
+    return range && parts.length > 0
+      ? { selection: { document, parts, shown }, range: range.cloneRange() }
+      : null;
+  }, [section, reader, document]);
+
   const actions = useMemo(
     () =>
       held && {
         addToNote: () => {
+          const now = heldNow() ?? held;
           if (addsWithoutAsking()) {
             close();
-            void addSelectionToNote(held.selection);
+            void addSelectionToNote(now.selection);
           } else {
+            if (now !== held) setHeld(now);
             setOpen(true);
             setPicking(true);
+            setAway(true);
           }
         },
         copy: () => {
           close();
-          void copySelectionWithCitation(held.selection);
+          void copySelectionWithCitation((heldNow() ?? held).selection);
         },
       },
-    [held, close],
+    [held, close, heldNow],
   );
   // Only while there is a selection: another Document's tab may hold one.
   useEffect(() => {

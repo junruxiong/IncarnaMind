@@ -1118,6 +1118,11 @@ export const en = {
   "viewer.selection.addToNote": "Add to note",
   "viewer.selection.copy": "Copy with citation",
   "viewer.selection.added": "Added a quote to “{mind}”",
+  "viewer.selection.addedNew": "Added a quote to a new Mind",
+  "viewer.selection.notOpened":
+    "The quote wasn’t added: “{mind}” didn’t open for changes. You can copy it with its citation instead.",
+  "viewer.selection.notOpenedNew":
+    "The quote wasn’t added: the new Mind didn’t open. You can copy it with its citation instead.",
   "viewer.selection.copied": "Copied with its citation",
   "viewer.selection.refused":
     "Couldn’t cite these words: the Document’s text where you selected them doesn’t have them.",

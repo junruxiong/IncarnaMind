@@ -34,6 +34,11 @@ export const readMindHandle: Handle<{
   doc: Y.Doc;
   /** Whether the Mind's cursor is where an Answer goes: else, at the Mind's end. */
   cursorInMind(): boolean;
+  /**
+   * Whether the User has put the cursor in the Mind since it opened: a quote from a Document
+   * beside it goes there, however the focus went to the Document (#101).
+   */
+  cursorPlaced(): boolean;
   /** Puts the focus back in the note, where its cursor was, or at its end. */
   returnToNote(): void;
 }> = { current: null };
