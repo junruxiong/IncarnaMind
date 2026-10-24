@@ -13,12 +13,14 @@ import {
   type CheckMindMode,
   type CheckSentencesResult,
   CITATION_NODE,
+  type CitationAttributes,
   CLAIM_CHECK_MARK,
   type ClaimCheckAction,
   type ProviderError,
 } from "../../core/api";
 import { core } from "./core";
 import { alreadyCitedBy } from "./editor/alreadyCited";
+import type { NumberedCitation } from "./editor/citationNumbers";
 import type { ShownClaim } from "./editor/claimChecks";
 import { selectionForEdit } from "./editor/editSelection";
 import { type BlockPlace, pendingIn, placeOnAccept, positionOf } from "./editor/proposalReview";
@@ -300,4 +302,45 @@ export function addAsCitation(editor: Editor, claim: ShownClaim): boolean {
   tr.insert(at, spaced ? [state.schema.text(" "), citation] : citation);
   editor.view.dispatch(tr);
   return true;
+}
+
+/** Gives an existing Citation other attributes where it stands: one step for ⌘Z. */
+function rewriteCitation(
+  editor: Editor,
+  citation: NumberedCitation,
+  change: Partial<CitationAttributes>,
+): boolean {
+  const { state } = editor;
+  const node = state.doc.nodeAt(citation.pos);
+  if (!node || node.type.name !== CITATION_NODE) return false;
+  editor.view.dispatch(
+    state.tr.setNodeMarkup(citation.pos, undefined, { ...node.attrs, ...change }),
+  );
+  return true;
+}
+
+/**
+ * Widens the sentence's Citation to the whole clause the check found, in
+ * place, so a check never adds a second Citation on the same words (#1620).
+ */
+export function widenCitation(
+  editor: Editor,
+  { citation, evidence }: { citation: NumberedCitation; evidence: CitationAttributes },
+): boolean {
+  return rewriteCitation(editor, citation, {
+    quote: evidence.quote,
+    check: "found",
+    checkReason: null,
+  });
+}
+
+/**
+ * Points the sentence's Citation that doesn't hold at the Passage the check
+ * found instead, again in place (#1620).
+ */
+export function replaceCitation(
+  editor: Editor,
+  { citation, evidence }: { citation: NumberedCitation; evidence: CitationAttributes },
+): boolean {
+  return rewriteCitation(editor, citation, { ...evidence, check: "found", checkReason: null });
 }
