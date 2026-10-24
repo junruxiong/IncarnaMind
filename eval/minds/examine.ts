@@ -26,6 +26,17 @@ export interface Examined {
   card: CardRow[];
 }
 
+/** What the User reads: the reply, and a question the assistant asked in its place. */
+export const saidOf = (answer: ConversationAnswer): string =>
+  [
+    answer.text,
+    ...answer.toolCalls.flatMap((call) =>
+      call.asked ? [call.asked.question, ...(call.asked.detail ? [call.asked.detail] : [])] : [],
+    ),
+  ]
+    .filter((part) => part.trim() !== "")
+    .join("\n");
+
 /** `judge` says which sentences of the reply claim a change the record doesn't show. */
 export async function examine(
   core: Core,
@@ -38,7 +49,8 @@ export async function examine(
   const waiting = await readWorkspace(core);
   const titleOf = (id: string) => waiting.find((mind) => mind.id === id)?.title ?? null;
   const calls = toolRecordLines(answer.toolCalls, titleOf, await changeStatesOf(core, rows));
-  const unbacked = await judge(answer.text, calls);
+  const said = saidOf(answer);
+  const unbacked = await judge(said, calls);
 
   const rejected = await decideAll(core, rows, "reject");
   const afterReject = await readWorkspace(core);
@@ -52,7 +64,7 @@ export async function examine(
   return {
     failures: [
       ...textFailures(each.expected, before, afterAccept),
-      ...unnamedFailure(each.expected, answer.text),
+      ...unnamedFailure(each.expected, said),
       ...cardFailures(rows, before, afterAccept),
       ...(unbacked.length > 0
         ? [

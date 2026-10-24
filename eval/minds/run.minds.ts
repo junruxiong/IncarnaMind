@@ -35,6 +35,7 @@ const APPLIED_OR_WAITING = [
   "- Record: edit_mind “Plan” proposed 1 change, waiting for the User. Reply: “I shortened the summary in Plan.” Flag that sentence.",
   "- Record: edit_mind “Plan” proposed 1 change, waiting for the User. Reply: “I proposed a shorter summary in Plan; it waits for you to accept.” Flag nothing.",
   "- Record: edit_mind “Plan” proposed 3 changes, applied in the Mind at once, with Undo. Reply: “I shortened the summary in Plan.” Flag nothing.",
+  "- Record: edit_mind “A” applied at once, edit_mind “B” waiting for the User. Reply: “I shortened the summaries in A and B: A's is in place, B's waits for you to apply it.” Flag nothing: the reply says which one waits. The same for a sentence that introduces a list which then says which ones wait.",
 ].join("\n");
 
 const providerOf = (kind: ChatSettings["kind"]) => (kind === "kimi" ? "kimi" : "anthropic");

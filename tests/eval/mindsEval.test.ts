@@ -127,6 +127,143 @@ describe("The evaluation of requests that change several Minds", { timeout: 60_0
     ]);
   });
 
+  // protects=a shortened summary must be at most the sentences asked for, shorter, and keep a fact, with the rest of the Mind unchanged; fails_when=a three-sentence or a longer summary passes; no_claim=none beyond protects.
+  test("a summary shortened to two sentences is held to its sentences and its length", async () => {
+    const summaries = {
+      onboarding:
+        "The team finished onboarding and fixed 14 of 20 bugs. The migration is on track for 20 March.",
+      September: "Revenue was €312,000, up 6%. The team has 23 people.",
+      "cash runway":
+        "The company has 118 customers and 19 months of cash. The Nordic launch moved to August.",
+    };
+    const shorten =
+      (monthly: string) =>
+      (call: ModelCall): ScriptedReply => {
+        const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(call.prompt)?.[1];
+        if (passage !== undefined) {
+          const key = Object.keys(summaries).find((word) => passage.includes(word));
+          return {
+            text: `## Summary\n\n${key === "September" ? monthly : summaries[key as keyof typeof summaries]}`,
+          };
+        }
+        return call.results.length === 0
+          ? {
+              calls: ["Weekly update", "Monthly report", "Board brief"].map((mind) => ({
+                tool: "edit_mind",
+                input: { mind, part: "Summary", instruction: "Two sentences." },
+              })),
+            }
+          : { text: "Shortened them." };
+      };
+
+    expect((await runScripted("shorten-three-en", shorten(summaries.September))).failures).toEqual(
+      [],
+    );
+
+    const three = await runScripted(
+      "shorten-three-en",
+      shorten("Revenue was €312,000. It was up 6%. The team has 23 people."),
+    );
+    expect(three.failures).toEqual([
+      {
+        kind: "wrong-text",
+        mind: "Monthly report",
+        why: "its section “Summary” has 3 sentences, not 2 or fewer",
+      },
+    ]);
+
+    const sentence = `Revenue for September was €312,000, ${"and the team grew again, ".repeat(10)}up 6%.`;
+    const longer = await runScripted("shorten-three-en", shorten(`${sentence} ${sentence}`));
+    expect(longer.failures).toEqual([
+      {
+        kind: "wrong-text",
+        mind: "Monthly report",
+        why: expect.stringContaining("is not shorter"),
+      },
+    ]);
+  });
+
+  // protects=a decision added to two sections must leave the text already there as it was; fails_when=a rewrite that joins the decision onto the line above passes; no_claim=none beyond protects.
+  test("a decision added beside the text already there leaves that text alone", async () => {
+    const adds = (call: ModelCall): ScriptedReply =>
+      call.results.length === 0
+        ? {
+            calls: [
+              {
+                tool: "add_to_mind",
+                input: {
+                  mind: "Project plan",
+                  after: "Milestones",
+                  content: "The beta opens to 50 customers.",
+                },
+              },
+              {
+                tool: "add_to_mind",
+                input: {
+                  mind: "Meeting notes",
+                  after: "Decisions",
+                  content: "Open the beta to 50 customers.",
+                },
+              },
+            ],
+          }
+        : { text: "Added it to both." };
+    const added = await runScripted("decision-two-en", adds);
+    expect(added.failures).toEqual([]);
+    expect(added.card).toEqual([
+      { mind: "Project plan", created: false, changed: 0, wrote: 1 },
+      { mind: "Meeting notes", created: false, changed: 0, wrote: 1 },
+    ]);
+
+    const joined = await runScripted("decision-two-en", (call) => {
+      const passage = /<passage>\n([\s\S]*?)\n<\/passage>/.exec(call.prompt)?.[1];
+      if (passage !== undefined) {
+        return {
+          text: passage
+            .replace(
+              "Hire a part-time designer.",
+              "Hire a part-time designer.Open the beta to 50 customers.",
+            )
+            .replace(
+              "Public launch on 1 March.",
+              "Public launch on 1 March.\n\nThe beta opens to 50 customers.",
+            ),
+        };
+      }
+      return call.results.length === 0
+        ? {
+            calls: [
+              {
+                tool: "edit_mind",
+                input: {
+                  mind: "Project plan",
+                  part: "Milestones",
+                  instruction: "Add the decision.",
+                },
+              },
+              {
+                tool: "edit_mind",
+                input: {
+                  mind: "Meeting notes",
+                  part: "Decisions",
+                  instruction: "Add the decision.",
+                },
+              },
+            ],
+          }
+        : { text: "Added it to both." };
+    });
+    expect(joined.failures).toEqual([
+      {
+        kind: "wrong-text",
+        mind: "Meeting notes",
+        why: expect.stringContaining(
+          "now reads “Hire a part-time designer.Open the beta to 50 customers.”",
+        ),
+      },
+    ]);
+  });
+
   // protects=a request for a Mind that is not there passes only when nothing changes and the reply names it; fails_when=a reply that never names the Mind passes, or a change to the open Mind goes unseen; no_claim=none beyond protects.
   test("a Mind that is not there is named, and nothing changes", async () => {
     const named = await runScripted("missing-mind-en", (call) =>

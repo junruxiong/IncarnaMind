@@ -109,8 +109,10 @@ function ruleFailure(rule: Rule, before: MindState, after: MindState): string | 
     if (sentences > rule.sentences) {
       return `its section “${rule.section}” has ${sentences} sentences, not ${rule.sentences} or fewer`;
     }
-    if (text.length >= textOf(was.body).length)
-      return `its section “${rule.section}” is not shorter`;
+    const length = textOf(was.body).length;
+    if (text.length >= length) {
+      return `its section “${rule.section}” is not shorter (${text.length} characters, it had ${length})`;
+    }
     if (!holds(text, rule.keeps)) {
       return `its section “${rule.section}” keeps none of ${rule.keeps.map((each) => `“${each}”`).join(", ")}`;
     }
@@ -120,8 +122,11 @@ function ruleFailure(rule: Rule, before: MindState, after: MindState): string | 
     (block) =>
       !now.body.some((other) => other.id === block.id && squash(other.text) === squash(block.text)),
   );
-  if (lost.length > 0)
-    return `text already in “${rule.section}” changed: “${squash(lost[0]?.text ?? "")}”`;
+  const [first] = lost;
+  if (first) {
+    const current = now.body.find((other) => other.id === first.id);
+    return `text already in “${rule.section}” changed: “${squash(first.text)}” now reads ${current ? `“${squash(current.text)}”` : "nothing"}`;
+  }
   const absent = missingFacts(text, rule.facts);
   if (absent.length > 0) {
     return `“${rule.section}” does not hold ${absent.map((each) => `“${each[0]}”`).join(", ")}`;
