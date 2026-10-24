@@ -1719,6 +1719,20 @@ export interface CitedSelection extends CitationRecheck {
 }
 
 /**
+ * Words the User selected in a Document to ask about ("Ask about this", #101), as
+ * `citeSelection` found them, kept with the Question.
+ */
+export interface AskedQuote {
+  documentId: string;
+  /** As the User saw it when they asked: it stays readable once the Document is deleted. */
+  documentName: string;
+  quote: string;
+  pageFrom: number | null;
+  pageTo: number | null;
+  location: CitationLocation | null;
+}
+
+/**
  * Text kept of a Document that left the index with its Linked folder: the
  * Units of one version that Citations pointed to when the folder was
  * unlinked. Kept so the Citations that quote it can still be checked (see
@@ -5615,6 +5629,8 @@ export interface ConversationQuestion {
   model: ChatModelChoice | null;
   /** The Skill forced on it, by name; null: none. */
   forcedSkill: string | null;
+  /** The words the User selected in Documents to ask about, in order; empty: none. */
+  quotes: AskedQuote[];
   /** ISO 8601, UTC. */
   createdAt: string;
 }
@@ -5704,6 +5720,12 @@ export interface AskInConversationInput {
    * its Search scope are left out.
    */
   onScreen?: string[] | null;
+  /**
+   * Words the User selected in Documents to ask about, which the Answer cites. Each is
+   * checked again where it was selected first: one not found there is neither kept nor
+   * sent (`leftOut`).
+   */
+  quotes?: AskedQuote[] | null;
   /** Its Search scope; none or null: every Document. */
   scope?: SearchScope | null;
   /** The model to answer with; none or null: the default. */
@@ -5727,8 +5749,18 @@ export interface ConversationAnswerInput {
 
 /** What asking in a conversation (or regenerating an Answer there) did. */
 export type ConversationAskResult =
-  /** The Answer is being written into the conversation, right after its Question. */
-  | { asked: true; conversation: Conversation; questionId: string; answerId: string }
+  /**
+   * The Answer is being written into the conversation, right after its Question.
+   * `leftOut`: the Question's quotes not sent, as their Document no longer has them where
+   * they were selected, or was deleted; absent: none.
+   */
+  | {
+      asked: true;
+      conversation: Conversation;
+      questionId: string;
+      answerId: string;
+      leftOut?: AskedQuote[];
+    }
   /** Nothing was kept or sent: Questions can't be asked yet, and `readiness` says why. */
   | { asked: false; reason: "not-ready"; readiness: Extract<ChatReadiness, { ready: false }> }
   /** Nothing was kept or sent: the Question forces a Skill (`skill`) that is off or gone. */

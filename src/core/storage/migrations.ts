@@ -1861,6 +1861,14 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX ai_timings_by_started_at ON ai_timings (started_at);
     `,
   },
+  {
+    version: 105,
+    description: "A Question keeps the words the User selected in Documents to ask about (#101)",
+    // JSON: a Question's quotes, each its Document, words and Location; NULL for none, and for an Answer.
+    sql: `
+      ALTER TABLE conversation_messages ADD COLUMN quotes TEXT;
+    `,
+  },
 ];
 
 /**

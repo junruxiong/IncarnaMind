@@ -50,7 +50,12 @@ import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
-import { citeSelection, recheckCitation, recheckKept } from "./answers/citations";
+import {
+  citeSelection,
+  recheckCitation,
+  recheckKept,
+  recheckWhereSelected,
+} from "./answers/citations";
 import {
   addCitedUnits,
   addCitedVersions,
@@ -1461,6 +1466,7 @@ export function createCore(adapters: CoreAdapters): Core {
         documents.searchableNames(documentIds ?? undefined, limit),
       searchableBySize: (documentIds) => documents.searchableBySize(documentIds ?? undefined),
       passagesBetween: (documentId, from, to) => documents.passagesBetween(documentId, from, to),
+      recheckWhereSelected: (quote) => recheckWhereSelected(documents, quote),
       searchableLanguages: (documentIds) => documents.searchableLanguages(documentIds ?? undefined),
       unread: (documentIds) => findUnreadDocuments(documents.unread(documentIds ?? undefined)),
       reading: (documentIds) =>
@@ -3492,6 +3498,7 @@ export function createCore(adapters: CoreAdapters): Core {
           scope: null,
           model: null,
           forcedSkill: null,
+          quotes: [],
         },
         null,
         null,

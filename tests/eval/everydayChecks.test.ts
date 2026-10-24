@@ -716,6 +716,47 @@ describe('What "this" means and adding the last Answer (#1334, #1734)', () => {
   });
 });
 
+describe("Asking about selected words (#101)", () => {
+  const quoted = {
+    documentId: "tutorial",
+    documentName: PAPERS[0]?.name ?? "",
+    quote: "Random neural networks learn in one pass.",
+    pageFrom: 3,
+    pageTo: 3,
+    location: { kind: "page", from: 3, to: 3 } as const,
+  };
+  const cited = (pageFrom: number, check: "found" | "not-found" = "found") => ({
+    documentId: "tutorial",
+    documentName: quoted.documentName,
+    marker: 1,
+    pageFrom,
+    pageTo: pageFrom,
+    check,
+  });
+  const failuresOf = (citations: ReturnType<typeof cited>[]) =>
+    requestFailures(
+      outcome({
+        expected: { write: false, cite: true, coverAll: false },
+        answer: {
+          text: citations.length > 0 ? "It means this.[^1]" : "It means this.",
+          citations,
+          toolCalls: [],
+          steps: null,
+        },
+        citedInMinds: [],
+        quoted,
+      }),
+    ).map((failure) => failure.kind);
+
+  // protects=the first Citation must be the selected words where they were selected, found; fails_when=another page, a Citation not found, or none passes; no_claim=how often a real model cites them, which the run measures.
+  test("its first Citation is the words selected, found where they were selected", () => {
+    expect(failuresOf([cited(3), cited(7)])).toEqual([]);
+    expect(failuresOf([cited(7), cited(3)])).toEqual(["not-quoted"]);
+    expect(failuresOf([cited(3, "not-found")])).toEqual(["not-quoted"]);
+    expect(failuresOf([])).toEqual(["no-citations", "not-quoted"]);
+  });
+});
+
 describe("Pass rates", () => {
   // protects=a request is held to its floor over its runs, per model, and runs are counted per language; fails_when=one failed run marks a request that meets its floor, or a request under it passes; no_claim=none beyond protects.
   test("per request against its floor, and per language", () => {

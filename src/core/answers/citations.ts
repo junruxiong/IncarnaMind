@@ -34,6 +34,7 @@ import {
   joinUnits,
   locationOf,
   numbersIn,
+  parseLocation,
   parseRequestedLocation,
   quoteInUnits,
   type RowsOrLines,
@@ -51,6 +52,7 @@ import { readableQuote, readableQuoteText } from "../../shared/readableQuote";
 import { foldRadicals, nameKey } from "../../shared/text";
 import { sameRun } from "../../shared/units";
 import {
+  type AskedQuote,
   type Citation,
   type CitationCheck,
   type CitationCheckReason,
@@ -381,7 +383,6 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
         range.pageTo === null ||
         (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
     );
-  // `found`: where a check placed the quote in the covered Units' joined text.
   const result = (
     check: CheckResult,
     range: PageRange,
@@ -667,6 +668,38 @@ export function citeSelection(
     return refused({ check: "not-found", checkReason: "too-many-pages" }, range, quote);
   }
   return citeIn(range, text);
+}
+
+/**
+ * Checks words the User selected to ask about (`AskedQuote`) against their Document's current
+ * version: found only at their Location on their Units, as `citeSelection` cited them, never
+ * moved to the same words elsewhere. Found, its quote is the Document's own words at that place,
+ * read as `citeSelection` reads them; else it is "". The words given are only looked for: what
+ * they hold that the matching passes over (location marks, say) never comes back.
+ */
+export function recheckWhereSelected(
+  documents: RecheckDocuments,
+  input: Pick<AskedQuote, "documentId" | "quote" | "pageFrom" | "pageTo" | "location">,
+): CitedSelection {
+  const cited = { pageFrom: input.pageFrom, pageTo: input.pageTo };
+  const contentHash = documents.currentVersion(input.documentId);
+  if (contentHash === null) return { ...removedFrom(cited), quote: "" };
+  const quote = cleanQuote(input.quote);
+  const version = currentVersion(documents, input.documentId, contentHash);
+  const covered = version.inRange(cited);
+  const wanted = JSON.stringify(parseLocation(input.location));
+  const options = { ...version.matching, numbers: numbersIn(covered) };
+  const place =
+    quote === "" || covered.length === 0 || covered.length > MAX_CITED_PAGES
+      ? undefined
+      : placesOf(joinUnits(covered).text, quote, options).find(
+          (found) => JSON.stringify(parseLocation(locationOf(covered, found))) === wanted,
+        );
+  const own = place ? foldRadicals(readableQuote(joinUnits(covered).text, place)) : "";
+  if (!place || !quoteInUnits(covered, cleanQuote(own), version.matching)) {
+    return { ...version.result(NOT_ON_PAGES, cited, quote), quote: "" };
+  }
+  return { ...version.result(FOUND, cited, own, place), quote: own };
 }
 
 /**
