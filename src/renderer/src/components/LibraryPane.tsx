@@ -148,12 +148,15 @@ export function LibraryPane() {
   );
   const folded = useLibraryFolds((state) => state.folded);
   const reviewOpen = useLibraryFolds((state) => state.reviewOpen);
-  // What waits for the User to accept, by Folder: shown only while the page isn't narrowed.
   const review = useMemo(
     () => toReviewOf(ordered, folders, snapshot?.assignments ?? []),
     [ordered, folders, snapshot?.assignments],
   );
   const reviewing = !narrowing && review.count > 0;
+  useEffect(() => {
+    useLibraryFolds.getState().setReviewShown(reviewing);
+    return () => useLibraryFolds.getState().setReviewShown(false);
+  }, [reviewing]);
   const reviewList = useMemo(
     () => (reviewing && reviewOpen ? reviewIds(review) : []),
     [review, reviewing, reviewOpen],

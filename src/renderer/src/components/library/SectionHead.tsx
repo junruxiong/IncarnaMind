@@ -33,7 +33,6 @@ export function SectionHead({
   name: ReactNode;
   count: number;
   tip?: string | undefined;
-  /** More to read after the count, which gives way before anything else does. */
   after?: ReactNode;
   end?: ReactNode;
   testId: string;

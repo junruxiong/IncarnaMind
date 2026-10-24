@@ -1,3 +1,4 @@
+import { useLibraryFolds } from "../libraryFolds";
 import { acceptSuggestions, rejectSuggestions, waitingIds } from "../suggestionReview";
 import type { Command, CommandContext } from "./registry";
 import { idsOf } from "./targets";
@@ -17,7 +18,6 @@ export const suggestionCommands: readonly Command[] = [
     group: "main",
     appliesTo: ["document"],
     when: (ctx) => waitingIn(ctx).length > 0,
-    // ⌘Z puts the suggestion back.
     reversible: true,
     async run(ctx) {
       return (await acceptSuggestions(waitingIn(ctx))) ?? undefined;
@@ -43,8 +43,11 @@ export const suggestionCommands: readonly Command[] = [
     // In the Library's lists only: ⌘↵ sends a Question or accepts a change where those are.
     shortcut: { keys: "CmdOrCtrl+Enter", list: true },
     group: "main",
+    // Never for suggestions out of sight: a search or filter hides To review's head.
     when: (ctx) =>
-      (ctx.surface === "library" || ctx.surface === "palette") && waitingIds().length > 0,
+      (ctx.surface === "library" || ctx.surface === "palette") &&
+      useLibraryFolds.getState().reviewShown &&
+      waitingIds().length > 0,
     reversible: true,
     async run() {
       return (await acceptSuggestions(waitingIds())) ?? undefined;

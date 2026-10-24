@@ -1,5 +1,3 @@
-/** To review's contents and its summary line. Pure: no store, no bridge, so the tests import it. */
-
 import type { Document, DocumentGroupAssignment, LibraryGroup } from "../../core/api";
 import type { MessageKey, MessageParams } from "../../shared/i18n";
 

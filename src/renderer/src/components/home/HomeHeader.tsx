@@ -67,8 +67,6 @@ export function HomeHeader({ now }: { now: Date }) {
                   <button
                     type="button"
                     data-testid={`home-need-${need.id}`}
-                    // Both are seen to in the Library: the Documents being read where they are, the
-                    // suggestions in To review.
                     onClick={() =>
                       useAppStore
                         .getState()

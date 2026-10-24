@@ -53,7 +53,6 @@ interface Placed {
   source: "automatic" | "user";
 }
 
-/** Where the core has each Document, by name. */
 async function placed(window: Page): Promise<Record<string, Placed>> {
   return (await coreOf(window)).evaluate(async (core) => {
     const [{ assignments, groups }, documents] = await Promise.all([
@@ -84,9 +83,14 @@ async function sorted(
   window: Page,
   paths: string,
   port: number,
-  { invoices = 8, chapters = 4 } = {},
+  { invoices = 8, chapters = 4, long = false } = {},
 ): Promise<void> {
   const files: string[] = [];
+  if (long) {
+    const path = join(paths, LONG_INVOICE);
+    await writeFile(path, "Invoice 2026-99 for dredging the east basin. Total due: 9,900.");
+    files.push(path);
+  }
   for (let at = 1; at <= invoices; at++) {
     const path = join(paths, `Invoice ${String(at).padStart(2, "0")}.txt`);
     await writeFile(path, `Invoice 2026-${at} for consulting. Total due: ${at}00.`);
@@ -111,13 +115,13 @@ async function sorted(
   await pointAndClick(window, window.getByTestId("library").getByTestId("library-organize"));
 }
 
-/** To review, as a whole, and the rows it lists, by Document name. */
+const LONG_INVOICE = "Invoice 99, dredging works at the Maasvlakte east basin, final account.txt";
+
 const reviewOf = (window: Page) => window.getByTestId("library-review");
 const reviewRow = (window: Page, name: string) =>
   reviewOf(window)
     .getByTestId("library-review-document")
     .filter({ has: window.getByRole("button", { name, exact: true }) });
-/** A Folder's section of the page, by name. */
 const sectionOf = (window: Page, name: string) =>
   window.getByTestId("library-section").filter({
     has: window.locator('[data-testid="library-section-name"]', {
@@ -153,7 +157,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     await setWindowSize(app, window, 1440, 900);
     await sorted(window, sources, (server.address() as AddressInfo).port);
 
-    // The summary says where they would go, and nothing has moved yet.
     const review = reviewOf(window);
     await expect(review).toBeVisible({ timeout: 30_000 });
     await expect(review.getByTestId("library-review-summary")).toHaveText(
@@ -166,7 +169,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     });
     await screenshot(window, "to-review-closed");
 
-    // Opened, it lists them by suggested Folder, each with its Folder to change and Accept.
     await pointAndClick(window, review.getByTestId("library-review-name"));
     const groups = review.getByTestId("library-review-group");
     await expect(groups).toHaveCount(2);
@@ -177,7 +179,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     await expect(first.getByTestId("review-accept")).toBeVisible();
     await screenshot(window, "to-review-open");
 
-    // Accept, with the mouse: the row leaves, the line says so, and ⌘Z and ⇧⌘Z take it back and do it again.
     await pointAndClick(window, first.getByTestId("review-accept"));
     await expect(first).toHaveCount(0);
     await expect.poll(() => countOf(window)).toBe(11);
@@ -212,7 +213,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     await window.keyboard.press("ControlOrMeta+Shift+z");
     await expect(third).toHaveCount(0);
 
-    // A Tag Organize wasn't sure of: ✓ keeps it, × takes it off.
     const four = reviewRow(window, "Invoice 04");
     const five = reviewRow(window, "Invoice 05");
     await pointAt(window, four);
@@ -227,7 +227,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     await window.keyboard.press("ControlOrMeta+Shift+z");
     await expect(five.getByTestId("tag-chip")).toHaveCount(0);
 
-    // Another Folder, by dragging the row onto it in the sidebar.
     const six = reviewRow(window, "Invoice 06");
     await dragOnto(
       window,
@@ -249,7 +248,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
       suggested: true,
     });
 
-    // And by ⇧⌘M, with the focus staying in the list.
     const seven = reviewRow(window, "Invoice 07");
     const afterSeven = await rowAfter(window, "Invoice 07");
     await seven.locator("[data-row-main]").focus();
@@ -265,7 +263,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     });
     await expect(afterSeven).toBeFocused();
 
-    // "Not this Folder", from the row's menu with the mouse: it stays out, and ⌘Z puts the suggestion back.
     const chapter = reviewRow(window, "Chapter 1");
     await pointAt(window, chapter);
     await pointAndClick(window, chapter.getByTestId("document-file-menu"));
@@ -285,7 +282,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
       suggested: true,
     });
 
-    // And with the keyboard: the menu key opens the row's menu.
     const chapterTwo = reviewRow(window, "Chapter 2");
     await chapterTwo.locator("[data-row-main]").focus();
     await window.keyboard.press("ContextMenu");
@@ -296,7 +292,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     await expect(chapterTwo).toHaveCount(0);
     expect((await placed(window))["Chapter 2"]).toMatchObject({ folder: null, suggested: false });
 
-    // Accept all, ⌘↵ with the focus in the list.
     const waiting = await countOf(window);
     expect(waiting).toBe(8);
     await reviewRow(window, "Invoice 08").locator("[data-row-main]").focus();
@@ -311,7 +306,6 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
       "Chapter 3": { folder: "Thesis", source: "user" },
       "Chapter 2": { folder: null, source: "automatic" },
     });
-    // The focus stays on the page, at its first row.
     await expect(window.getByTestId("library").locator("[data-tree-row]").first()).toBeFocused();
     // A Document the User put elsewhere since, by a change with no step, stays where they put it
     // when Accept all is taken back, and when it is done again.
@@ -373,7 +367,6 @@ test("To review holds at the narrowest window in Chinese, and accepts from the F
     );
     await screenshot(window, "to-review-zh-900");
 
-    // Nothing runs off the page or over its neighbour, at the narrowest window.
     const library = window.getByTestId("library");
     expect(await library.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
       true,
@@ -410,7 +403,6 @@ test("To review holds at the narrowest window in Chinese, and accepts from the F
     await expect(window.getByTestId("undo-line")).toContainText("已接受“Chapter 4”");
     await expect.poll(() => countOf(window)).toBe(11);
 
-    // ⌘K has it too.
     await runCommand(window, "library.acceptSuggestions", "接受全部推荐的文件夹");
     await expect(review).toHaveCount(0);
     await expect(window.getByTestId("undo-line")).toContainText("已接受 11 个");
@@ -431,7 +423,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
   try {
     await dismissChatSetup(window);
     await setWindowSize(app, window, 1440, 900);
-    // None: nothing has been sorted, so there is nothing to review.
     await sorted(window, sources, port, { invoices: 3, chapters: 1 });
     const review = reviewOf(window);
     await expect(review).toBeVisible({ timeout: 30_000 });
@@ -439,7 +430,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
       "Sorted 4 Documents: 3 → Finance, 1 → Thesis",
     );
 
-    // Organize's own Undo, while it is the next step: it puts all of them back, and ⇧⌘Z again.
     await pointAndClick(window, review.getByTestId("library-review-undo"));
     await expect(review).toHaveCount(0);
     expect(Object.values(await placed(window)).filter((each) => each.suggested)).toHaveLength(0);
@@ -448,7 +438,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
     await expect(review).toBeVisible();
     await expect.poll(() => countOf(window)).toBe(4);
 
-    // One Document deleted while it waits leaves the list; the others are still accepted.
     await pointAndClick(window, review.getByTestId("library-review-name"));
     await (await coreOf(window)).evaluate(async (core) => {
       const gone = (await core.listDocuments()).find((each) => each.name === "Invoice 01");
@@ -460,7 +449,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
       "Sorted 3 Documents: 2 → Finance, 1 → Thesis",
     );
 
-    // Quitting halfway: nothing is lost or half done, and what waited still waits.
     await forceQuit(app);
     ({ app, window } = await launchApp(dataDir));
     await window.getByTestId("open-library").click();
@@ -468,7 +456,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
     await expect.poll(() => countOf(window)).toBe(3);
     expect(Object.values(await placed(window)).filter((each) => each.suggested)).toHaveLength(3);
 
-    // Accept one, which is then the next step, so the Undo that took Organize back is gone.
     await pointAndClick(window, reviewOf(window).getByTestId("library-review-name"));
     await pointAndClick(window, reviewRow(window, "Chapter 1").getByTestId("review-accept"));
     await expect(reviewOf(window).getByTestId("library-review-undo")).toHaveCount(0);
@@ -476,7 +463,6 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
       "Sorted 2 Documents: 2 → Finance",
     );
 
-    // The last of them, with one, and the section goes.
     await pointAndClick(window, reviewRow(window, "Invoice 02").getByTestId("review-accept"));
     await pointAndClick(window, reviewRow(window, "Invoice 03").getByTestId("review-accept"));
     await expect(reviewOf(window)).toHaveCount(0);
@@ -504,7 +490,6 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
   try {
     await dismissChatSetup(window);
     await setWindowSize(app, window, 1440, 900);
-    // Home counts what waits once the User has a Mind of their own.
     await newMind(window, { title: true });
     await window.keyboard.type("Notes");
     await sorted(window, sources, (server.address() as AddressInfo).port, {
@@ -525,7 +510,6 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
     await window.keyboard.type("Home");
     await window.keyboard.press("Enter");
     await pointAndClick(window, window.getByTestId("home-need-suggestions"));
-    // The Library opens on To review, listing them.
     await expect(reviewOf(window).getByTestId("library-review-document")).toHaveCount(2);
     await expect(reviewOf(window).getByTestId("library-review-name")).toBeFocused();
 
@@ -546,14 +530,12 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
     await expect(reviewOf(window)).toHaveCount(0);
     expect(Object.values(await placed(window)).map((each) => each.folder)).toEqual([null, null]);
 
-    // Organize, asked again, doesn't offer Finance for either.
     const loose = window.getByTestId("library-section").filter({ hasText: "Not in a Folder" });
     await pointAndClick(window, loose.getByTestId("library-organize"));
     await expect(window.getByTestId("library-organizing")).toHaveCount(0, { timeout: 30_000 });
     expect(Object.values(await placed(window)).map((each) => each.folder)).toEqual([null, null]);
     await expect(reviewOf(window)).toHaveCount(0);
 
-    // Taking the turning down back brings both suggestions back.
     await leaveText(window);
     await window.keyboard.press("ControlOrMeta+z");
     await expect(reviewOf(window)).toBeVisible();
@@ -561,6 +543,120 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
       { folder: "Finance", suggested: true, source: "automatic" },
       { folder: "Finance", suggested: true, source: "automatic" },
     ]);
+  } finally {
+    server.close();
+    await app.close();
+  }
+});
+
+for (const [language, label] of [
+  ["en", "Accept"],
+  ["zh-CN", "接受"],
+] as const) {
+  test(`To review keeps every name whole when the page is narrow beside the viewer, with Folder and Accept under it (${language})`, async () => {
+    const { server } = await decisionServer((text) =>
+      text.includes("invoice") ? "Finance" : "Thesis",
+    );
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await dismissChatSetup(window);
+      if (language === "zh-CN") await setLanguage(window, "zh-CN");
+      await setWindowSize(app, window, 1440, 900);
+      await sorted(window, sources, (server.address() as AddressInfo).port, {
+        invoices: 2,
+        chapters: 1,
+        long: true,
+      });
+      const review = reviewOf(window);
+      await expect(review).toBeVisible({ timeout: 30_000 });
+      await pointAndClick(window, review.getByTestId("library-review-name"));
+      const long = reviewRow(window, LONG_INVOICE.replace(".txt", ""));
+      await pointAndClick(window, long.locator("[data-row-main]"));
+      await expect(window.getByTestId("viewer")).toBeVisible();
+      const library = window.getByTestId("library");
+      await expect.poll(async () => (await library.boundingBox())?.width ?? 0).toBeLessThan(500);
+      await screenshot(window, `to-review-narrow-${language}`);
+
+      expect(await library.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+      const box = async (target: Locator) => {
+        const found = await target.boundingBox();
+        if (!found) throw new Error("Not showing.");
+        return found;
+      };
+      for (const row of await review.getByTestId("library-review-document").all()) {
+        const [rowBox, name, folder, accept] = await Promise.all([
+          box(row),
+          box(row.getByTestId("library-document-name")),
+          box(row.getByTestId("review-folder")),
+          box(row.getByTestId("review-accept")),
+        ]);
+        // The name has the first line to itself, never squeezed to nothing.
+        expect(name.width).toBeGreaterThan(50);
+        expect(
+          await row
+            .getByTestId("library-document-name")
+            .evaluate((each) => each.scrollWidth <= each.clientWidth || each.clientWidth > 200),
+        ).toBe(true);
+        expect(folder.y).toBeGreaterThan(name.y + name.height - 1);
+        expect(accept.y).toBeGreaterThan(name.y + name.height - 1);
+        expect(folder.x + folder.width).toBeLessThanOrEqual(accept.x + 1);
+        expect(accept.x + accept.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+        expect(name.x + name.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+      }
+      await expect(long.getByTestId("review-accept")).toContainText(label);
+      // Accept still works from there.
+      await pointAndClick(window, long.getByTestId("review-accept"));
+      await expect(long).toHaveCount(0);
+    } finally {
+      server.close();
+      await app.close();
+    }
+  });
+}
+
+test("⌘↵ accepts nothing while a search hides To review, and ⌘K doesn't offer Accept all then", async () => {
+  const { server } = await decisionServer((text) =>
+    text.includes("invoice") ? "Finance" : "Thesis",
+  );
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await dismissChatSetup(window);
+    await setWindowSize(app, window, 1440, 900);
+    await sorted(window, sources, (server.address() as AddressInfo).port);
+    const review = reviewOf(window);
+    await expect(review).toBeVisible({ timeout: 30_000 });
+    const waiting = async () =>
+      Object.values(await placed(window)).filter((each) => each.suggested).length;
+    expect(await waiting()).toBe(12);
+
+    // The search shows one Document and hides the head, with the other eleven suggestions.
+    const library = window.getByTestId("library");
+    await pointAndClick(window, library.getByTestId("library-search"));
+    await window.keyboard.type("Chapter 1");
+    await expect(review).toHaveCount(0);
+    await expect(library.getByTestId("library-document")).toHaveCount(1);
+    await window.keyboard.press("ArrowDown");
+    await expect(library.getByTestId("library-document").locator("[data-row-main]")).toBeFocused();
+    await window.keyboard.press("ControlOrMeta+Enter");
+    await expect(window.getByTestId("undo-line")).not.toContainText("Accepted");
+    expect(await waiting()).toBe(12);
+    await window.keyboard.press("ControlOrMeta+k");
+    await window.keyboard.type("Accept all");
+    await expect(window.getByTestId("palette")).toBeVisible();
+    await expect(
+      window.getByTestId("palette").locator('[data-key="command:library.acceptSuggestions"]'),
+    ).toHaveCount(0);
+    await window.keyboard.press("Escape");
+
+    // With the search cleared, the head is back and the key works on what it shows.
+    await pointAndClick(window, library.getByTestId("library-search-clear"));
+    await expect(review).toBeVisible();
+    await review.getByTestId("library-review-name").focus();
+    await window.keyboard.press("ControlOrMeta+Enter");
+    await expect(window.getByTestId("undo-line")).toContainText("Accepted 12");
+    expect(await waiting()).toBe(0);
   } finally {
     server.close();
     await app.close();

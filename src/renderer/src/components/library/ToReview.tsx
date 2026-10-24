@@ -19,7 +19,6 @@ export function ToReview({
   suggestedIn,
 }: {
   review: Review;
-  /** The Suggested Folder a Document waits in, by its id. */
   suggestedIn(documentId: string): string | null;
 }) {
   const t = useT();

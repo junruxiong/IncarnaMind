@@ -32,6 +32,7 @@ import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 import {
   moveFromReview,
   REVIEW_COLUMNS,
+  REVIEW_ROW,
   ReviewAccept,
   ReviewFolder,
   SuggestedAccept,
@@ -144,7 +145,6 @@ export const LibraryRow = memo(function LibraryRow({
   doc: Document;
   /** The Suggested Folder it waits in, if Organize suggested one. */
   suggestedIn: string | null;
-  /** A row of To review: its Folder to change and Accept in place of Format and Added. */
   review?: boolean;
   /** Why Organize couldn't sort it, if it couldn't. */
   notSorted: string | null;
@@ -194,7 +194,7 @@ export const LibraryRow = memo(function LibraryRow({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     objectMenu.rowProps.onKeyDown(event);
     if (event.defaultPrevented || typesText(event.target)) return;
-    // In To review Enter accepts, as the row's button says; elsewhere it opens.
+    // Enter accepts in To review (#241), where it opens everywhere else.
     if (
       review &&
       event.key === "Enter" &&
@@ -251,9 +251,13 @@ export const LibraryRow = memo(function LibraryRow({
       <LibrarySelectBox document={doc} />
       <div
         {...(rename.renaming ? {} : dragSource)}
-        className="flex min-h-[39px] items-center gap-4 pr-1.5 pl-3 group-data-[hide~=narrowest]/page:gap-2"
+        className={
+          review
+            ? REVIEW_ROW
+            : "flex min-h-[39px] items-center gap-4 pr-1.5 pl-3 group-data-[hide~=narrowest]/page:gap-2"
+        }
       >
-        <div className="flex min-w-0 flex-1 items-center">
+        <div className={`flex min-w-0 flex-1 items-center ${review ? REVIEW_COLUMNS.name : ""}`}>
           <span aria-hidden="true" className="w-5 shrink-0" />
           <div className={`min-w-0 flex-1 ${match ? "py-1.5" : ""}`}>
             <div className="flex min-w-0 items-center gap-2">
@@ -354,7 +358,7 @@ export const LibraryRow = memo(function LibraryRow({
         </div>
         <div
           data-row-cell="tags"
-          className={`${COLUMN_CLASSES.tags} flex min-w-0 items-center overflow-hidden`}
+          className={`${review ? REVIEW_COLUMNS.tags : COLUMN_CLASSES.tags} flex min-w-0 items-center overflow-hidden`}
         >
           <RowTags document={doc} />
         </div>

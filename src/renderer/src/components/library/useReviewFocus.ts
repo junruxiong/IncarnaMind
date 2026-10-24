@@ -1,7 +1,6 @@
 import { type RefObject, useEffect, useRef } from "react";
 
 interface Held {
-  /** The row the focus was in, or null: its head. */
   id: string | null;
   next: string | null;
   prev: string | null;
@@ -51,7 +50,6 @@ export function useReviewFocus(page: RefObject<HTMLElement | null>, key: string)
         const panel = root.querySelector("[data-review]");
         const stays = (id: string | null) =>
           id !== null && panel?.querySelector(`[data-document-id="${CSS.escape(id)}"]`) != null;
-        // Its own row still there: nothing left it.
         if (was.id !== null && stays(was.id)) return;
         const wanted = [was.next, was.prev].find(stays);
         const target =
