@@ -197,6 +197,7 @@ The year is left out when it is this year, except in a Date, and a time today is
 | Get info | 文档信息 | As Feishu (文档信息) and Tencent Docs (查看文档信息). The same on every platform. |
 | To review | 待确认 | |
 | Suggested Folder | 推荐的文件夹 | The chip says 推荐. |
+| Accept / Not this Folder (a Suggested Folder) | 接受 / 拒绝推荐的文件夹 | The pair a Proposal has (接受, 拒绝), as verbs; the undo line says 已接受 or 已拒绝, never a bare 不…. |
 | Show in Finder | macOS: 在访达中显示; Windows: 在文件资源管理器中显示; Linux: 在文件管理器中显示 | Per-platform keys. |
 | Copy path | 复制路径 | As VS Code and Obsidian, on every platform. |
 | Open in default app | 用默认应用打开 | |
