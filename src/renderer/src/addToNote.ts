@@ -81,7 +81,7 @@ const originOf = ({ answer }: AddedAnswer): BlockOrigin => ({
  * as one step of the note's Undo. Returns their new ids, or null when the
  * editor couldn't take them.
  */
-function addInEditor(
+export function addInEditor(
   editor: Editor,
   blocks: readonly NodeJSON[],
   atCursor: boolean,

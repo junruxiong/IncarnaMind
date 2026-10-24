@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import { type ElectronApplication, expect, type Locator, type Page, test } from "@playwright/test";
 import type { CoreBridge } from "../src/core/api";
 import { CATALOG_PROVIDERS } from "../src/core/providers/catalog";
 import { createFakeOpenAI } from "../tests/helpers/fakeOpenAI";
@@ -45,6 +45,9 @@ const language = (window: Page, value: "en" | "zh-CN") =>
       }),
     value,
   );
+
+/** The region a form with a choice of two holds: "cn" or "intl". */
+const regionOf = (form: Locator) => form.getByTestId("provider-region").locator("input:checked");
 
 /** The first Question with no model: the setup card waits, with the key form opened. */
 async function openKeyForm(window: Page) {
@@ -572,7 +575,7 @@ const KEYS = {
   bare: `sk-${"aZ3".repeat(16)}`,
 };
 
-const checked = (form: Locator) => form.getByRole("radio", { checked: true });
+const checked = (form: Locator) => form.locator('input[name$="-kind"]:checked');
 
 for (const { value, first, other, anyway, notAnthropic, notGoogle } of [
   {
@@ -635,18 +638,16 @@ for (const { value, first, other, anyway, notAnthropic, notGoogle } of [
       await key.fill(KEYS.openrouter);
       await expect(checked(form)).toHaveAccessibleName("OpenRouter");
 
-      // xAI is a best-effort provider, so first run doesn't offer it (ADR-0019): the key waits for the User.
+      // xAI is under More… with every other provider, so its key picks it too.
       await key.fill(KEYS.xai);
       await expect(line).toContainText(value === "en" ? "This is xAI’s key" : "这是 xAI 的密钥");
-      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
-      await expect(useKey).toBeDisabled();
-      await key.press("Enter");
-      await expect(form.getByTestId("connection-test")).toHaveCount(0);
-      await expect(useKey).toBeDisabled();
-      await line.getByTestId("provider-key-anyway").click();
-      await expect(line).toHaveCount(0);
+      await expect(checked(form)).toHaveAccessibleName("xAI");
       await expect(useKey).toBeEnabled();
+      await line.getByTestId("provider-key-anyway").click();
+      await expect(checked(form)).toHaveAccessibleName("OpenRouter");
+      await expect(line).toHaveCount(0);
       await key.fill(`${KEYS.xai}x`);
+      await expect(checked(form)).toHaveAccessibleName("xAI");
       await expect(line).toHaveCount(1);
 
       await form.getByRole("radio", { name: "Anthropic" }).check({ force: true });
@@ -689,7 +690,7 @@ test("Kimi's form opens on the region of the interface's language: International
     ] as const) {
       await language(window, value);
       const form = await addProviderForm(settings, "kimi");
-      await expect(form.getByRole("combobox", { name: /^(Region|地域)/ })).toHaveValue(region);
+      await expect(regionOf(form)).toHaveValue(region);
       await settings.getByTestId("models-back").click();
     }
   } finally {
@@ -735,10 +736,19 @@ test("a key refused on the chosen region says which host refused it, in English 
     await language(window, "en");
     expect(new Set(await askedMoonshot())).toEqual(new Set(["api.moonshot.ai"]));
 
+    // The button sends the same key to the other region; refused there too, the line offers the first again.
+    const sent = (await askedMoonshot()).length;
+    await form.getByTestId("provider-send-other-region").click();
+    await expect(refused).toContainText("China: api.moonshot.cn refused this key.");
+    await expect(form.getByTestId("provider-send-other-region")).toHaveText(
+      "Send it to International",
+    );
+    expect(new Set((await askedMoonshot()).slice(sent))).toEqual(new Set(["api.moonshot.cn"]));
+
     await app.evaluate(() => {
       (globalThis as unknown as { askedMoonshot: string[] }).askedMoonshot.length = 0;
     });
-    await form.getByRole("combobox", { name: /^Region/ }).selectOption("cn");
+    await form.getByRole("radio", { name: "China" }).check({ force: true });
     await form.getByLabel(/^API key/).fill(KEYS.bare);
     await form.getByTestId("provider-use-key").click();
     await expect(refused).toContainText(
@@ -754,6 +764,262 @@ test("a key refused on the chosen region says which host refused it, in English 
     await expect(qwen.getByTestId("connection-test")).toContainText(
       "China (Beijing): dashscope.aliyuncs.com refused this key. Check it on bailian.console.aliyun.com.",
     );
+  } finally {
+    await app.close();
+  }
+});
+
+/** Each region's host, as the catalog has it: the tests never spell a host the app doesn't. */
+const hostOfRegion = (catalogId: string, region: string) => {
+  const endpoint = CATALOG_PROVIDERS.find((each) => each.id === catalogId)?.endpoints.find(
+    (each) => each.id === region,
+  );
+  if (!endpoint) throw new Error(`${catalogId} has no ${region} endpoint.`);
+  return new URL(endpoint.baseUrl).host;
+};
+
+/** Picks a provider's chip on the setup card's key form, opening More… when it is under it. */
+async function chooseProvider(form: Locator, catalogId: string) {
+  const radio = form.locator(`input[name$="-kind"][value="${catalogId}"]`);
+  if ((await radio.count()) === 0) await form.getByTestId("provider-more-toggle").click();
+  await form
+    .locator("label", { has: form.page().locator(`input[name$="-kind"][value="${catalogId}"]`) })
+    .click();
+}
+
+/**
+ * Stands in for the providers' hosts: each host in `accepts` takes only its own key and refuses
+ * every other; the hosts it was asked, in order, are read back with `hostsAsked`.
+ */
+async function standInForHosts(app: ElectronApplication, accepts: Record<string, string>) {
+  await app.evaluate((_electron, accepted) => {
+    const asked: string[] = [];
+    (globalThis as unknown as { askedHosts: string[] }).askedHosts = asked;
+    const original = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      const url = new URL(
+        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+      );
+      const wanted = accepted[url.host];
+      if (wanted === undefined) return original(input, init);
+      asked.push(url.host);
+      const sent = new Headers(init?.headers ?? (input instanceof Request ? input.headers : {}));
+      if (sent.get("authorization") !== `Bearer ${wanted}`) {
+        return Promise.resolve(
+          Response.json({ error: { message: "Invalid Authentication" } }, { status: 401 }),
+        );
+      }
+      if (url.pathname.endsWith("/models")) {
+        return Promise.resolve(Response.json({ data: [{ id: "a-model" }] }));
+      }
+      return Promise.resolve(
+        Response.json({
+          id: "chat_1",
+          object: "chat.completion",
+          created: 1_790_000_000,
+          model: "a-model",
+          choices: [
+            { index: 0, finish_reason: "stop", message: { role: "assistant", content: "OK" } },
+          ],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        }),
+      );
+    };
+  }, accepts);
+}
+
+const hostsAsked = (app: ElectronApplication) =>
+  app.evaluate(() => [...(globalThis as unknown as { askedHosts: string[] }).askedHosts]);
+
+const savedRegions = (window: Page, catalogId: string) =>
+  window.evaluate(async (id) => {
+    const bridge = (globalThis as unknown as { incarnamind: CoreBridge }).incarnamind;
+    return (await bridge.listChatProviders())
+      .filter((each) => (each.catalogId ?? each.kind) === id)
+      .map((each) => each.endpoint);
+  }, catalogId);
+
+const TWO_REGIONS = ["kimi", "qwen", "glm", "siliconflow"] as const;
+
+const REGION_WORDS = {
+  en: { cn: "China", intl: "International" },
+  "zh-CN": { cn: "中国", intl: "国际" },
+} as const;
+
+test("a provider with a region in each shows one inline choice, Region: International | China, that opens on the interface language's region; a provider with one shows none", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    const card = await openKeyForm(window);
+    await card.getByTestId("setup-key").click();
+    const form = card.getByTestId("provider-form");
+    const group = form.getByTestId("provider-region");
+    for (const [value, opens, words] of [
+      ["en", "intl", { label: "Region", intl: "International", cn: "China" }],
+      ["zh-CN", "cn", { label: "区域", intl: "国际", cn: "中国" }],
+    ] as const) {
+      await language(window, value);
+      for (const id of TWO_REGIONS) {
+        await chooseProvider(form, id);
+        await expect(group, `${id}, ${value}`).toBeVisible();
+        await expect(group).toHaveText(
+          `${words.label}${words.intl}${words.cn}`.replace(/\s+/g, ""),
+        );
+        await expect(regionOf(form), `${id}, ${value}`).toHaveValue(opens);
+        await expect(group).toHaveAccessibleName(words.label);
+        const boxes = await group
+          .locator("label")
+          .evaluateAll((labels) => labels.map((each) => each.getBoundingClientRect()));
+        expect(boxes.length).toBe(2);
+        expect(
+          Math.abs((boxes[0]?.top ?? 0) - (boxes[1]?.top ?? 1)),
+          `${id} on one line`,
+        ).toBeLessThan(2);
+      }
+      await chooseProvider(form, "anthropic");
+      await expect(group).toHaveCount(0);
+      await chooseProvider(form, "openrouter");
+      await expect(group).toHaveCount(0);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+for (const { id, tongue, made } of [
+  { id: "kimi", tongue: "zh-CN", made: "intl" },
+  { id: "kimi", tongue: "en", made: "cn" },
+  { id: "qwen", tongue: "en", made: "cn" },
+  { id: "qwen", tongue: "zh-CN", made: "intl" },
+  { id: "glm", tongue: "en", made: "cn" },
+  { id: "glm", tongue: "zh-CN", made: "intl" },
+  { id: "siliconflow", tongue: "en", made: "cn" },
+  { id: "siliconflow", tongue: "zh-CN", made: "intl" },
+] as const) {
+  const opens = tongue === "en" ? "intl" : "cn";
+  test(`a ${id} key made in ${made === "cn" ? "China" : "International"} works with the interface in ${tongue === "en" ? "English" : "Chinese"}: the form's region refuses it, says where, and the button sends it to the other region on purpose`, async () => {
+    const { app, window } = await launchApp(dataDir);
+    try {
+      await setWindowSize(app, window, 900, 900);
+      await acceptPlainTextKeys(window);
+      await language(window, tongue);
+      const theKey = `${id}-key-made-in-${made}`;
+      await standInForHosts(app, {
+        [hostOfRegion(id, made)]: theKey,
+        [hostOfRegion(id, opens)]: "another-key",
+      });
+      const card = await openKeyForm(window);
+      await pointAndClick(window, card.getByTestId("setup-key"));
+      const form = card.getByTestId("provider-form");
+      await chooseProvider(form, id);
+      await expect(regionOf(form)).toHaveValue(opens);
+
+      await form.getByLabel(/^(API key|API 密钥)/).fill(theKey);
+      await pointAndClick(window, form.getByTestId("provider-use-key"));
+      const refused = form.getByTestId("connection-test");
+      await expect(refused).toContainText(hostOfRegion(id, opens));
+      await expect(refused).toContainText(tongue === "en" ? "refused this key" : "拒绝了这个密钥");
+      const send = form.getByTestId("provider-send-other-region");
+      const other = REGION_WORDS[tongue][made];
+      await expect(send).toHaveText(tongue === "en" ? `Send it to ${other}` : `发送到${other}区域`);
+      await expect(send).toHaveAccessibleName(
+        new RegExp(hostOfRegion(id, made).replaceAll(".", "\\.")),
+      );
+      // Refused, it went to the host the form held and to no other.
+      expect(new Set(await hostsAsked(app))).toEqual(new Set([hostOfRegion(id, opens)]));
+      expect(await savedRegions(window, id)).toEqual([]);
+
+      // A key edited after a refusal is not refused yet: the line and its button go, and nothing is sent.
+      const field = form.getByLabel(/^(API key|API 密钥)/);
+      const asked = (await hostsAsked(app)).length;
+      await field.fill(`${theKey}x`);
+      await expect(send).toHaveCount(0);
+      await expect(refused).toHaveCount(0);
+      expect((await hostsAsked(app)).length).toBe(asked);
+      await field.fill(theKey);
+      await pointAndClick(window, form.getByTestId("provider-use-key"));
+      await expect(send).toBeVisible();
+
+      const before = (await hostsAsked(app)).length;
+      if (tongue === "zh-CN") {
+        // By keyboard: the button is the next stop after Use this key, and Enter presses it.
+        await form.getByTestId("provider-use-key").focus();
+        await window.keyboard.press("Tab");
+        await expect(send).toBeFocused();
+        await window.keyboard.press("Enter");
+      } else {
+        await pointAndClick(window, send);
+      }
+      await expect.poll(() => savedRegions(window, id)).toEqual([made]);
+      await expect(regionOf(form)).toHaveCount(0);
+      const after = (await hostsAsked(app)).slice(before);
+      expect(after.length).toBeGreaterThan(0);
+      expect(new Set(after)).toEqual(new Set([hostOfRegion(id, made)]));
+    } finally {
+      await app.close();
+    }
+  });
+}
+
+test("a region picked by hand before sending keeps the typed key and decides the host of every request; nothing goes to the other host", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    const theKey = "kimi-key-made-in-china";
+    await standInForHosts(app, {
+      [hostOfRegion("kimi", "cn")]: theKey,
+      [hostOfRegion("kimi", "intl")]: "another-key",
+    });
+    const card = await openKeyForm(window);
+    await pointAndClick(window, card.getByTestId("setup-key"));
+    const form = card.getByTestId("provider-form");
+    await chooseProvider(form, "kimi");
+    await expect(regionOf(form)).toHaveValue("intl");
+    const field = form.getByLabel(/^API key/);
+    await field.fill(theKey);
+    await pointAndClick(window, form.getByRole("radio", { name: "China" }).locator(".."));
+    await expect(regionOf(form)).toHaveValue("cn");
+    await expect(field).toHaveValue(theKey);
+    expect(await hostsAsked(app)).toEqual([]);
+
+    // The arrow keys move the choice, as in any group of radio buttons, and keep the key too.
+    await regionOf(form).focus();
+    await window.keyboard.press("ArrowLeft");
+    await expect(regionOf(form)).toHaveValue("intl");
+    await window.keyboard.press("ArrowRight");
+    await expect(regionOf(form)).toHaveValue("cn");
+    await expect(field).toHaveValue(theKey);
+
+    await pointAndClick(window, form.getByTestId("provider-use-key"));
+    await expect.poll(() => savedRegions(window, "kimi")).toEqual(["cn"]);
+    expect(new Set(await hostsAsked(app))).toEqual(new Set([hostOfRegion("kimi", "cn")]));
+    expect(await form.getByTestId("provider-send-other-region").count()).toBe(0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a key that names another service, then Use it anyway, brings back the service and the region picked by hand", async () => {
+  const { app, window } = await launchApp(dataDir);
+  try {
+    await setWindowSize(app, window, 900, 900);
+    await acceptPlainTextKeys(window);
+    const card = await openKeyForm(window);
+    await pointAndClick(window, card.getByTestId("setup-key"));
+    const form = card.getByTestId("provider-form");
+    await chooseProvider(form, "kimi");
+    await expect(regionOf(form)).toHaveValue("intl");
+    await pointAndClick(window, form.getByRole("radio", { name: "China" }).locator(".."));
+    await expect(regionOf(form)).toHaveValue("cn");
+
+    await form.getByLabel(/^API key/).fill(KEYS.anthropic);
+    await expect(checked(form)).toHaveAccessibleName("Anthropic");
+    await expect(form.getByTestId("provider-region")).toHaveCount(0);
+    await pointAndClick(window, form.getByTestId("provider-key-anyway"));
+    await expect(checked(form)).toHaveAccessibleName(/^Kimi/);
+    await expect(regionOf(form)).toHaveValue("cn");
   } finally {
     await app.close();
   }
@@ -830,7 +1096,7 @@ for (const { value, line, chips, titles } of [
         await form.getByRole("radio", { name, exact: true }).check({ force: true });
         await expect(card.getByTestId("provider-form-title")).toContainText(name);
         await expect(form.locator('input[type="password"]')).toBeVisible();
-        await expect(form.getByRole("radio", { checked: true })).toHaveAccessibleName(name);
+        await expect(checked(form)).toHaveAccessibleName(name);
       }
     } finally {
       await app.close();
@@ -903,7 +1169,7 @@ test("Kimi is listed under International and under China, and each opens its for
   try {
     await setWindowSize(app, window, 1100, 900);
     const settings = await openSettings(window, "models");
-    const region = (form: Locator) => form.getByRole("combobox", { name: /^(Region|地域)/ });
+    const region = (form: Locator) => regionOf(form);
     const open = async (group: string) => {
       await settings.getByTestId("models-add-provider").click();
       await settings.getByTestId("provider-directory-search").fill("kimi");
@@ -971,7 +1237,7 @@ test("with Kimi saved on China, only the China tile says Added and opens it, and
     await expect(tile("international")).not.toContainText("Added");
     await tile("international").click();
     const form = settings.getByTestId("provider-add").getByTestId("provider-form");
-    await expect(form.getByRole("combobox", { name: /^Region/ })).toHaveValue("intl");
+    await expect(regionOf(form)).toHaveValue("intl");
     await expect(form.getByLabel(/^API key/)).toHaveValue("");
     await settings.getByTestId("models-back").click();
 

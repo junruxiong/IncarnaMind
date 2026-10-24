@@ -55,6 +55,7 @@ import { paletteCommands } from "./palette";
 import { peekCommands } from "./peek";
 import { proposalCommands } from "./proposals";
 import { researchCommands } from "./research";
+import { reviewCommands } from "./review";
 import { sortCommands } from "./sort";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
@@ -66,6 +67,7 @@ import { tabCommands } from "./tabs";
 import { taggingCommands } from "./tagging";
 import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
+import { viewerSelectionCommands } from "./viewerSelection";
 import { webPageCommands } from "./webPages";
 import { wordLookCommands } from "./wordLook";
 
@@ -146,6 +148,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...meetingHelpCommands,
   ...webPageCommands,
+  ...viewerSelectionCommands,
   ...feedbackCommands,
   ...exampleCommands,
   ...sortCommands,
@@ -440,6 +443,7 @@ const appCommands: readonly Command[] = [
   ...tableCommands,
   ...chartCommands,
   ...proposalCommands,
+  ...reviewCommands,
   ...checkCommands,
 ];
 

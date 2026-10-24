@@ -153,8 +153,6 @@ export interface CatalogProvider {
   id: string;
   name: Localized;
   support: Support;
-  /** A best-effort provider the first-run key form offers too, as its key line says (#1375). */
-  firstRun?: boolean;
   group: "international" | "china" | "local" | "other";
   /** A provider with a region in each (Kimi) is listed under the other heading too. */
   alsoListedIn?: "international" | "china";

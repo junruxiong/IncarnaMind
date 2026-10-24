@@ -50,7 +50,7 @@ import { createAiUseStatement } from "./aiUseStatement";
 import { createAiSdkAnswerEngine, createAnswers } from "./answers";
 import { createChecks } from "./answers/checks";
 import { AFTER_NEW_VERSION_MS, CLAIM_TIME_LIMIT_MS } from "./answers/checks/watch";
-import { recheckCitation, recheckKept } from "./answers/citations";
+import { citeSelection, recheckCitation, recheckKept } from "./answers/citations";
 import {
   addCitedUnits,
   addCitedVersions,
@@ -90,6 +90,7 @@ import {
   type SavedFile,
   type ScannedQuoteInput,
   type SearchScope,
+  type SelectedPart,
   type Task,
   type UnlockDocumentInput,
   type UnreadFile,
@@ -421,6 +422,26 @@ function parseQuoted(input: unknown): ScannedQuoteInput {
     pageFrom: unit(input.pageFrom),
     pageTo: unit(input.pageTo),
     quote: input.quote,
+  };
+}
+
+function parseSelectedPart(input: unknown): SelectedPart {
+  if (!isRecord(input) || typeof input.text !== "string") {
+    throw new InvalidInputError({ key: "error.selection.none" });
+  }
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+  const unit = input.unit === null || input.unit === undefined ? null : count(input.unit);
+  // A Unit that isn't one would read as no Unit, and widen the check to the whole Document.
+  if (unit === undefined || unit === 0)
+    throw new InvalidInputError({ key: "error.selection.none" });
+  const linesBefore = count(input.linesBefore);
+  const linesAfter = count(input.linesAfter);
+  return {
+    unit,
+    text: input.text,
+    ...(linesBefore !== undefined && { linesBefore }),
+    ...(linesAfter !== undefined && { linesAfter }),
   };
 }
 
@@ -3745,6 +3766,16 @@ export function createCore(adapters: CoreAdapters): Core {
         pageFrom: page(input.pageFrom),
         pageTo: page(input.pageTo) ?? page(input.pageFrom),
       });
+    },
+    citeSelection: async (input) => {
+      if (!isRecord(input) || !Array.isArray(input.parts)) {
+        throw new InvalidInputError({ key: "error.selection.none" });
+      }
+      const parts = input.parts.map(parseSelectedPart);
+      if (parts.every((part) => part.text.trim() === "")) {
+        throw new InvalidInputError({ key: "error.selection.none" });
+      }
+      return citeSelection(documents, { documentId: parseDocumentId(input.documentId), parts });
     },
     searchPassages: (query, options) => documents.search(query, options),
     searchEvidence: async (query, options) => {

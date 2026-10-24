@@ -80,12 +80,14 @@ import { noteExtensions } from "../editor/noteSchema";
 import { registerMindEditor } from "../editor/openEditors";
 import { PageMenu } from "../editor/PageMenu";
 import { ProposalBars } from "../editor/ProposalBars";
-import { ProposalReview } from "../editor/proposalReview";
+import { editorDoc, ProposalReview } from "../editor/proposalReview";
 import { ProposalRewrites } from "../editor/proposalRewrites";
 import { QuestionView } from "../editor/QuestionView";
 import { askInEditor, QuestionCommands } from "../editor/questionCommands";
 import { QuestionFold } from "../editor/questionFold";
 import { ReferencesBlock } from "../editor/ReferencesBlock";
+import { ReviewFold, ReviewPane } from "../editor/ReviewPane";
+import { ReviewPick } from "../editor/reviewPick";
 import { ScopePicker } from "../editor/ScopePicker";
 import { type SelectionAction, SelectionMenu } from "../editor/SelectionMenu";
 import { SlashMenu } from "../editor/SlashMenu";
@@ -93,6 +95,7 @@ import { compareSlashItem, noteSlashItems, skillSlashItems } from "../editor/sla
 import { Suggestions } from "../editor/suggestions";
 import { TableMenu } from "../editor/TableMenu";
 import { TableKeys } from "../editor/tableCommands";
+import { reviewItemsIn } from "../editor/theirChanges";
 import { TitleLine } from "../editor/titleLine";
 import { SmartTypography } from "../editor/typography";
 import type { EditWithAiField } from "../editor/useEditField";
@@ -117,6 +120,7 @@ import { followMindStyle } from "../mindStyles";
 import { useMindTools } from "../mindTools";
 import { onMindWriting, writingPlaceOf } from "../mindWriting";
 import { firstOpenOf } from "../nudges";
+import { holdReviewable, useReviewPanes } from "../reviewPane";
 import { holdShownPage } from "../shownPages";
 import { skillDescription, skillTitle } from "../skills";
 import { useAppStore } from "../store";
@@ -285,6 +289,7 @@ function MindEditorView({
    * Answers, its menus) has had it. Otherwise an Answer goes at the end of the Mind.
    */
   const cursorInMind = useRef(false);
+  const cursorPlaced = useRef(false);
   const placeholder = useRef({ body: "", title: "" });
   placeholder.current = { body: t("editor.placeholder"), title: t("editor.title") };
   // A Meeting's empty Mind waits for the agenda (as in Granola), with no Question to ask yet.
@@ -407,6 +412,7 @@ function MindEditorView({
         }),
         QuestionFold.configure({ mindId }),
         ProposalReview.configure({ translate: translateNow }),
+        ReviewPick,
         ProposalRewrites.configure({ translate: translateNow }),
         AppliedEditLine.configure({
           translate: translateNow,
@@ -495,6 +501,7 @@ function MindEditorView({
       mindId,
       doc,
       cursorInMind: () => cursorInMind.current,
+      cursorPlaced: () => cursorPlaced.current,
       returnToNote() {
         if (editor.isDestroyed) return;
         // Where the cursor was, or at the end, at once: what is typed next goes there.
@@ -606,8 +613,10 @@ function MindEditorView({
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (editor.view.dom.contains(target)) cursorInMind.current = true;
-      else if (
+      if (editor.view.dom.contains(target)) {
+        cursorInMind.current = true;
+        cursorPlaced.current = true;
+      } else if (
         !assistant?.contains(target) &&
         !(target instanceof Element && target.closest("dialog"))
       ) {
@@ -672,6 +681,7 @@ function MindEditorView({
     if (editor.isDestroyed) return;
     editor.commands.setTextSelection(pos + 1);
     cursorInMind.current = true;
+    cursorPlaced.current = true;
     useComposer.getState().requestFocus();
   };
 
@@ -705,6 +715,18 @@ function MindEditorView({
   const wordLook = useWordLookStyle(doc, mindId, editor);
   // A read-only copy sends nothing to the core, so a switch there wouldn't be remembered.
   useEffect(() => (readOnly ? undefined : holdShownPage(mindId, doc)), [mindId, doc, readOnly]);
+  useEffect(
+    () =>
+      readOnly
+        ? undefined
+        : holdReviewable(mindId, {
+            has: () =>
+              !editor.isDestroyed && reviewItemsIn(editor.state.doc, editorDoc(editor)).length > 0,
+            open: () => useReviewPanes.getState().open(mindId),
+          }),
+    [editor, mindId, readOnly],
+  );
+  const reviewing = !readOnly && slots.reviewShown !== "closed";
   useEffect(() => followMindStyle(mindId, doc), [mindId, doc]);
 
   return (
@@ -719,14 +741,26 @@ function MindEditorView({
         )}
       {slots.menu &&
         createPortal(
-          <PageMenu
-            editor={editor}
-            doc={doc}
-            mindId={mindId}
-            verification={verification}
-            readOnly={readOnly}
-          />,
+          <>
+            {reviewing && slots.reviewShown !== "beside" && (
+              <ReviewFold editor={editor} mindId={mindId} />
+            )}
+            <PageMenu
+              editor={editor}
+              doc={doc}
+              mindId={mindId}
+              verification={verification}
+              readOnly={readOnly}
+            />
+          </>,
           slots.menu,
+        )}
+      {slots.review &&
+        reviewing &&
+        (slots.reviewShown === "beside" || slots.reviewShown === "over") &&
+        createPortal(
+          <ReviewPane editor={editor} mindId={mindId} over={slots.reviewShown === "over"} />,
+          slots.review,
         )}
       {/* The quiet first open shows the example's text alone (#856). */}
       {slots.count &&

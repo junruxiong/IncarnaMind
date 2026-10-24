@@ -186,6 +186,12 @@ export interface LaunchOptions {
    */
   sandboxNotice?: "switch" | "environment" | "on";
   /**
+   * The search, text recognition and speech engines are the real ones instead of the fake ones, on
+   * the models already in the data folder (a test build reaches no model host): for a recording
+   * of the app as the User runs it.
+   */
+  realEngines?: boolean;
+  /**
    * The first Word export asks whether to mark the text IncarnaMind wrote. Without this, a launch
    * answers it "Mark it" if nobody has, so a test that exports to Word is not stopped by it;
    * with it, the app is left asking.
@@ -262,6 +268,7 @@ export async function launchApp(
     contradictionWatchDelayMs,
     sandboxed = false,
     sandboxNotice,
+    realEngines = false,
     askToMarkAiText = false,
     askCitationPlace = false,
   }: LaunchOptions = {},
@@ -339,8 +346,10 @@ export async function launchApp(
   env.INCARNAMIND_DATA_DIR = dataDir;
   env.INCARNAMIND_TEST_HOOKS = "1";
   if (fakeChat) env.INCARNAMIND_FAKE_CHAT = "1";
-  env.INCARNAMIND_TEST_EMBEDDER = "fake";
-  env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  if (!realEngines) {
+    env.INCARNAMIND_TEST_EMBEDDER = "fake";
+    env.INCARNAMIND_TEST_TRANSCRIBER = "fake";
+  }
   if (transcriber) env.INCARNAMIND_TEST_TRANSCRIBER_OPTIONS = JSON.stringify(transcriber);
 
   const app = await electron.launch({
@@ -632,6 +641,16 @@ export async function runFromPalette(window: Page, label: string): Promise<void>
   const item = window.getByTestId("palette-item").filter({ hasText: label }).first();
   await expect(item).toBeVisible();
   await item.click();
+}
+
+/** Runs a command from ⌘K by its id, once ⌘K lists it under its label, as the User types and clicks it. */
+export async function runCommand(window: Page, id: string, label: string): Promise<void> {
+  await window.keyboard.press("ControlOrMeta+k");
+  await expect(window.getByTestId("palette-search")).toBeFocused();
+  await window.keyboard.type(label);
+  const item = window.getByTestId("palette").locator(`[data-key="command:${id}"]`);
+  await expect(item).toContainText(label);
+  await pointAndClick(window, item);
 }
 
 /** A Folder's row in the sidebar's Folders view, with what is listed in it, by its name. */

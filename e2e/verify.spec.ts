@@ -162,6 +162,9 @@ test("Verify a PDF: its Mind opens beside it, its claims are checked, and the co
   await pointAndClick(window, marks(window).and(window.locator('[data-check="unsupported"]')));
   await expect(claimCard).toBeVisible();
   await expect(claimCard.getByTestId("claim-left-out")).toHaveCount(0);
+  // Someone else's words: the claim can be kept as the User's view, never cut.
+  await expect(claimCard.getByTestId("claim-keep")).toBeVisible();
+  await expect(claimCard.getByTestId("claim-cut-sentence")).toHaveCount(0);
   await window.keyboard.press("Escape");
 
   // Each row goes to the next claim of its kind.
