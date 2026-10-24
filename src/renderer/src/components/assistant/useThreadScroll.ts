@@ -77,6 +77,10 @@ export function useThreadScroll(
       release(turn, scroller);
       atFoot.current = true;
     }
+    // After a scroll up released the Question, the room under it still closes as the Answer fills
+    // it: the thread's height stays, so what the User reads doesn't move, and no blank is left.
+    const held = Number.parseFloat(element.style.paddingBottom);
+    if (held > 0) element.style.paddingBottom = `${Math.min(held, roomUnder(scroller, element))}px`;
     if (atFoot.current) scrollThreadTo(scroller, scroller.scrollHeight);
   };
   const settleNow = useRef(settle);

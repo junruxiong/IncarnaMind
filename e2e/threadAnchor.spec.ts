@@ -6,13 +6,13 @@ import {
   addDocuments,
   askInAssistant,
   assistantAnswers,
+  useLocalChatModel as connectLocalChatModel,
   createDataFolder,
   dismissChatSetup,
   launchApp,
   removeDataFolder,
   setLanguage,
   setWindowSize,
-  useLocalChatModel,
 } from "./app";
 
 let dataDir: string;
@@ -113,7 +113,7 @@ for (const language of ["en", "zh-CN"] as const) {
     const { app, window } = await launchApp(dataDir, { fakeChat: true });
     await setWindowSize(app, window, 1440, 900);
     await dismissChatSetup(window);
-    await useLocalChatModel(window);
+    await connectLocalChatModel(window);
     await setLanguage(window, language);
 
     let asked = 0;
@@ -140,8 +140,8 @@ for (const language of ["en", "zh-CN"] as const) {
   });
 }
 
-test("in a thread longer than its panel, the Question just sent goes to the top once, the Answer grows below it, and the thread follows the foot only once it is reached, until the User scrolls up", async () => {
-  test.setTimeout(180_000);
+/** Four Questions in a 640px-high window: the thread is longer than its panel and scrolled to its foot. */
+async function startLongThread() {
   await writeFile(
     join(sources, "Tides.pdf"),
     buildPdf([
@@ -153,11 +153,17 @@ test("in a thread longer than its panel, the Question just sent goes to the top 
   const { app, window } = await launchApp(dataDir, { fakeChat: true });
   await setWindowSize(app, window, 1440, 640);
   await dismissChatSetup(window);
-  await useLocalChatModel(window);
+  await connectLocalChatModel(window);
   await addDocuments(window, [join(sources, "Tides.pdf")]);
   for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday"]) {
     await askInAssistant(window, `What do tides do on ${day}`);
   }
+  return { app, window };
+}
+
+test("in a thread longer than its panel, the Question just sent goes to the top once, the Answer grows below it, and the thread follows the foot only once it is reached, until the User scrolls up", async () => {
+  test.setTimeout(180_000);
+  const { app, window } = await startLongThread();
   const before = await whereIs(window);
   expect(before.fromFoot).toBeLessThanOrEqual(2);
   expect(before.scrollTop).toBeGreaterThan(100);
@@ -203,5 +209,34 @@ test("in a thread longer than its panel, the Question just sent goes to the top 
     )
     .toBeGreaterThan(grown + 60);
   expect(Math.abs((await whereIs(window)).scrollTop - read.scrollTop)).toBeLessThanOrEqual(2);
+  await app.close();
+});
+
+test("a scroll up before the Answer reaches the foot leaves no blank under it once it has ended", async () => {
+  test.setTimeout(180_000);
+  const { app, window } = await startLongThread();
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("What do tides do with forty citations");
+  await window.keyboard.press("Enter");
+  const answers = assistantAnswers(window);
+  await expect(answers).toHaveCount(5);
+  await expect.poll(async () => (await whereIs(window)).question).toBeLessThan(24);
+
+  const thread = await window.getByTestId("assistant-thread").boundingBox();
+  if (!thread) throw new Error("The assistant isn't showing.");
+  await window.mouse.move(thread.x + thread.width / 2, thread.y + thread.height / 2, { steps: 8 });
+  await window.mouse.wheel(0, -200);
+  await expect.poll(async () => (await whereIs(window)).fromFoot).toBeGreaterThan(100);
+
+  await expect(answers.last()).toHaveAttribute("data-status", "done", { timeout: 90_000 });
+  const blank = await window.evaluate(() => {
+    const scroller = document.querySelector('[data-testid="assistant-thread"]');
+    const answer = [...document.querySelectorAll('[data-testid="assistant-answer"]')].at(-1);
+    if (!scroller || !answer) throw new Error("The assistant isn't showing.");
+    const end = answer.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top;
+    return scroller.scrollHeight - (end + scroller.scrollTop);
+  });
+  expect(blank).toBeLessThan(80);
   await app.close();
 });
