@@ -2677,11 +2677,13 @@ export async function fontsDrawing(window: Page, selector: string) {
 /**
  * A local decision server like Ollama's `/v1/systemone` (no model): a Folder chosen by what the
  * Document says (`folderFor`: Finance for an invoice, Reports otherwise), Invoice in the review
- * band for an invoice, Report likely for a report, nothing else. `requests` counts what it was asked.
+ * band for an invoice, Report likely for a report, nothing else. `requests` counts what it was asked;
+ * `delayMs` holds each answer back, for a test that does something else while Organize works.
  */
 export async function decisionServer(
   folderFor: (text: string) => string = (text) =>
     text.includes("invoice") ? "Finance" : "Reports",
+  { delayMs = 0 }: { delayMs?: number } = {},
 ): Promise<{ server: Server; readonly requests: number }> {
   let requests = 0;
   const server = createServer(async (request, response) => {
@@ -2694,6 +2696,7 @@ export async function decisionServer(
       return;
     }
     requests++;
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
     const text = JSON.stringify(body.state).toLowerCase();
     const answers = Object.fromEntries(
       Object.entries(

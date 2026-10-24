@@ -3,7 +3,7 @@ import { displayName } from "../../shared/documentNames";
 import { core } from "./core";
 import { applyAssignments } from "./documentUpdates";
 import { useAppStore } from "./store";
-import { type Undoable, useUndo } from "./undo";
+import { makeInTurn, type Undoable, useUndo } from "./undo";
 
 type Decision = "accept" | "reject";
 
@@ -86,7 +86,11 @@ function stepOf(
   };
 }
 
-async function decide(decision: Decision, ids: readonly string[]): Promise<Undoable | null> {
+// A ⌘Z pressed while it runs waits for it, then takes it back.
+const decide = (decision: Decision, ids: readonly string[]): Promise<Undoable | null> =>
+  makeInTurn(() => decideNow(decision, ids));
+
+async function decideNow(decision: Decision, ids: readonly string[]): Promise<Undoable | null> {
   const waiting = new Set(waitingIds());
   const chosen = [...new Set(ids)].filter((id) => waiting.has(id));
   if (chosen.length === 0) return null;
@@ -97,7 +101,10 @@ async function decide(decision: Decision, ids: readonly string[]): Promise<Undoa
   const folderId = only ? assignmentsNow().get(only.id)?.groupId : null;
   const folder = library?.groups.find((each) => each.id === folderId)?.name ?? "";
   const changes = await apply(decision, chosen);
-  if (changes.length === 0) return null;
+  if (changes.length === 0) {
+    await useAppStore.getState().refreshLibrary();
+    return null;
+  }
   const count = changes.length;
   const one = count === 1 && only !== undefined;
   const said: Undoable["said"] =

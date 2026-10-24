@@ -313,9 +313,25 @@ test("Organize sorts 12 Documents; the User accepts, moves, removes a Tag and tu
     });
     // The focus stays on the page, at its first row.
     await expect(window.getByTestId("library").locator("[data-tree-row]").first()).toBeFocused();
+    // A Document the User put elsewhere since, by a change with no step, stays where they put it
+    // when Accept all is taken back, and when it is done again.
+    await (await coreOf(window)).evaluate(async (core) => {
+      const documents = await core.listDocuments();
+      const { groups } = await core.getLibrary();
+      const moved = documents.find((each) => each.name === "Invoice 08");
+      const archive = groups.find((each) => each.name === "Archive");
+      if (!moved || !archive) throw new Error("No Document or Folder to move.");
+      await core.assignDocumentGroup(moved.id, archive.id);
+    });
+    // The page has it before ⌘Z is pressed.
+    await expect(sectionOf(window, "Archive").getByTestId("library-document")).toHaveCount(2);
     await window.keyboard.press("ControlOrMeta+z");
     await expect(review).toBeVisible();
-    await expect.poll(() => countOf(window)).toBe(8);
+    await expect.poll(() => countOf(window)).toBe(7);
+    expect((await placed(window))["Invoice 08"]).toMatchObject({
+      folder: "Archive",
+      suggested: false,
+    });
 
     // Turned down once, a Folder isn't suggested for that Document again by the next Organize.
     await window.keyboard.press("ControlOrMeta+Shift+z");
@@ -480,8 +496,9 @@ test("To review comes and goes with what waits: none, one, a Document deleted me
 });
 
 test("Home says how many wait and opens them, and a Folder suggested for a Document that is then turned down isn't offered again", async () => {
-  const { server } = await decisionServer((text) =>
-    text.includes("invoice") ? "Finance" : "Thesis",
+  const { server } = await decisionServer(
+    (text) => (text.includes("invoice") ? "Finance" : "Thesis"),
+    { delayMs: 3000 },
   );
   const { app, window } = await launchApp(dataDir);
   try {
@@ -494,7 +511,16 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
       invoices: 2,
       chapters: 0,
     });
-    await expect(reviewOf(window)).toBeVisible({ timeout: 30_000 });
+    // Organize takes a while, and the User goes on writing: its line, from another tab, offers Review.
+    await newMind(window, { title: true });
+    await window.keyboard.type("Second");
+    await expect(window.getByTestId("library")).toBeHidden();
+    await expect(window.getByTestId("undo-line")).toContainText(
+      "Organize suggested a Folder for 2 Documents",
+      { timeout: 30_000 },
+    );
+    await pointAndClick(window, window.getByTestId("undo-review"));
+    await expect(reviewOf(window).getByTestId("library-review-document")).toHaveCount(2);
     await window.keyboard.press("ControlOrMeta+k");
     await window.keyboard.type("Home");
     await window.keyboard.press("Enter");
@@ -523,7 +549,7 @@ test("Home says how many wait and opens them, and a Folder suggested for a Docum
     // Organize, asked again, doesn't offer Finance for either.
     const loose = window.getByTestId("library-section").filter({ hasText: "Not in a Folder" });
     await pointAndClick(window, loose.getByTestId("library-organize"));
-    await expect(window.getByTestId("library-organizing")).toHaveCount(0);
+    await expect(window.getByTestId("library-organizing")).toHaveCount(0, { timeout: 30_000 });
     expect(Object.values(await placed(window)).map((each) => each.folder)).toEqual([null, null]);
     await expect(reviewOf(window)).toHaveCount(0);
 

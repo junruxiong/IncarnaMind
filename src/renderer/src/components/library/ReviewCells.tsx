@@ -10,7 +10,7 @@ import { documentsToMove, useDocumentMove } from "./DocumentMoveTo";
 export const REVIEW_COLUMNS = {
   folder:
     "flex w-[168px] shrink-0 items-center group-data-[hide~=format]/page:w-[140px] group-data-[hide~=narrower]/page:w-[116px] group-data-[hide~=narrowest]/page:w-[96px]",
-  accept: "flex w-[84px] shrink-0 justify-end group-data-[hide~=narrower]/page:w-7",
+  accept: "flex w-[84px] shrink-0 justify-end group-data-[hide~=narrowest]/page:w-7",
 } as const;
 
 export function moveFromReview(documentId: string, anchor: HTMLElement): void {
@@ -58,13 +58,13 @@ export function ReviewAccept({ doc, folder }: { doc: Document; folder: string })
       onClick={() => void acceptSuggestions([doc.id]).catch(reportError)}
       className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[13px] font-semibold text-ink-secondary hover:bg-hover hover:text-ink focus-visible:outline-offset-0"
     >
-      <span className="inline-flex items-center gap-1.5 group-data-[hide~=narrower]/page:hidden">
+      <span className="inline-flex items-center gap-1.5 group-data-[hide~=narrowest]/page:hidden">
         {t("library.review.accept")}
         <kbd className="inline-flex h-[18px] items-center rounded-sm bg-chip px-[5px] font-sans text-[11px] font-semibold text-ink-secondary">
           ↵
         </kbd>
       </span>
-      <CheckLineIcon className="hidden size-3.5 group-data-[hide~=narrower]/page:block" />
+      <CheckLineIcon className="hidden size-3.5 group-data-[hide~=narrowest]/page:block" />
     </button>
   );
 }

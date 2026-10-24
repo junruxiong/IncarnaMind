@@ -80,6 +80,7 @@ export function ToReview({
               <button
                 type="button"
                 data-testid="library-review-undo"
+                title={t("menu.undo.named", { action: t("undo.name.organize") })}
                 onClick={() => void useUndo.getState().undo()}
                 className={quietButtonClass}
               >
