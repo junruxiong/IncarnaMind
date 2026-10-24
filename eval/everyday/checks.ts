@@ -48,7 +48,12 @@ import { changeLogOf } from "../../src/core/answers/claimedChanges";
 import { forPage, withoutPointersBack } from "../../src/core/answers/pointersBack";
 import { withoutSearchTalk } from "../../src/core/answers/searchTalk";
 import { toolTextIn } from "../../src/core/answers/toolText";
-import type { ConversationAnswer, MarkedCitation, MarkedFigure } from "../../src/core/api";
+import type {
+  AskedQuote,
+  ConversationAnswer,
+  MarkedCitation,
+  MarkedFigure,
+} from "../../src/core/api";
 import { markersWithoutCitation } from "../../src/shared/answerBlocks";
 import { datesNotInText } from "./dates";
 import type { ClaimVerdict } from "./judge";
@@ -109,7 +114,8 @@ export interface Expected {
 export interface RequestOutcome {
   expected: Expected;
   answer: Pick<ConversationAnswer, "text" | "toolCalls" | "steps"> & {
-    citations: readonly Pick<MarkedCitation, "documentId" | "marker">[];
+    citations: readonly (Pick<MarkedCitation, "documentId" | "marker"> &
+      Partial<Pick<MarkedCitation, "documentName" | "pageFrom" | "pageTo" | "check">>)[];
     figures?: readonly Pick<MarkedFigure, "shown">[];
   };
   verdict: ClaimVerdict;
@@ -136,6 +142,8 @@ export interface RequestOutcome {
   texts?: readonly string[];
   /** It asked the User which (ask_user), and the Answer stopped there, waiting for them. */
   stoppedAtAsk?: boolean;
+  /** The words it was asked about (#101): its first Citation must be them, found where they were selected. */
+  quoted?: AskedQuote;
 }
 
 export type RequestFailure =
@@ -168,7 +176,9 @@ export type RequestFailure =
   | { kind: "no-ask" }
   | { kind: "asked" }
   | { kind: "not-the-answer" }
-  | { kind: "only-a-copy" };
+  | { kind: "only-a-copy" }
+  /** Its first Citation, as "document, pages, check", or null for none. */
+  | { kind: "not-quoted"; first: string | null };
 
 const QUOTED = /“[^”]*”|"[^"]*"|「[^」]*」|『[^』]*』/g;
 const CITATION_MARKER = /\[\^\d+\]/g;
@@ -605,6 +615,20 @@ function thisFailures(outcome: RequestOutcome): RequestFailure[] {
   if (expected.addsAnswer === false && copies > 0 && fresh === 0) {
     failures.push({ kind: "only-a-copy" });
   }
+  const quoted = outcome.quoted;
+  const [first] = answer.citations;
+  if (
+    quoted &&
+    (first?.documentId !== quoted.documentId ||
+      first.pageFrom !== quoted.pageFrom ||
+      first.pageTo !== quoted.pageTo ||
+      first.check !== "found")
+  ) {
+    const said = first
+      ? `${first.documentName}, pp. ${first.pageFrom}–${first.pageTo}, ${first.check}`
+      : null;
+    failures.push({ kind: "not-quoted", first: said });
+  }
   return failures;
 }
 
@@ -667,5 +691,7 @@ export function failureLine(failure: RequestFailure): string {
       return "didn't add the last Answer as it is, or wrote new text beside it";
     case "only-a-copy":
       return "asked for new notes, it only copied the last Answer";
+    case "not-quoted":
+      return `its first Citation isn't the selected words where they were selected (${failure.first ?? "no Citation"})`;
   }
 }
