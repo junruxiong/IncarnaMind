@@ -7,6 +7,7 @@ import {
   menuLabelOf,
 } from "../../src/renderer/src/commands/registry";
 import type { ObjectRef } from "../../src/renderer/src/objects";
+import type { CommandId } from "../../src/shared/commands";
 import { type MessageKey, type MessageParams, translate } from "../../src/shared/i18n";
 
 /*
@@ -91,6 +92,48 @@ describe("a selection of Documents", () => {
     const remove = entries.find((entry) => entry.command.id === "document.delete");
     expect(remove && menuLabelOf(remove.command, ctx, english)).toBe("Delete 3 Documents");
     expect(remove && menuLabelOf(remove.command, ctx, chinese)).toBe("删除 3 个文档");
+  });
+
+  test("writes counts of a thousand or more as the page's title does, in both languages (#1350)", async () => {
+    const { useAppStore } = await import("../../src/renderer/src/store");
+    const before = useAppStore.getState();
+    const documents = Array.from({ length: 1731 }, (_, at) => doc(`d${at}`));
+    useAppStore.setState({
+      documents: documents.map(
+        ({ id }) =>
+          ({
+            id,
+            name: `Doc ${id}`,
+            kind: "pdf",
+            status: "ready",
+            fileStatus: "available",
+            path: `/${id}.pdf`,
+          }) as never,
+      ),
+    });
+    try {
+      const many = selectionOf(documents);
+      const found = new Map(
+        buildMenu("document", many).flatMap((entry) =>
+          entry === "rule" ? [] : [[entry.command.id, entry.command] as const],
+        ),
+      );
+      const says = (id: CommandId, t: typeof english) => {
+        const command = found.get(id);
+        if (!command) throw new Error(`There is no ${id} here.`);
+        return menuLabelOf(command, many, t);
+      };
+      expect(says("document.ask", english)).toBe("Ask about these 1,731 Documents");
+      expect(says("document.delete", english)).toBe("Delete 1,731 Documents");
+      expect(says("folder.newWith", english)).toBe("New Folder with 1,731 Documents");
+
+      useAppStore.setState({ settings: { language: "zh-CN" } as never });
+      expect(says("document.ask", chinese)).toBe("就这 1,731 个文档提问");
+      expect(says("document.delete", chinese)).toBe("删除 1,731 个文档");
+      expect(says("folder.newWith", chinese)).toBe("新建文件夹并放入 1,731 个文档");
+    } finally {
+      useAppStore.setState({ documents: before.documents, settings: before.settings });
+    }
   });
 
   test("a single Document keeps its own words", () => {
