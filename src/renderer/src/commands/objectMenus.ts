@@ -32,6 +32,8 @@ registerMenu("document", [
   "document.openMind",
   "document.ask",
   "document.startMind",
+  "document.accept",
+  "document.reject",
   "document.moveTo",
   "folder.newWith",
   "document.tags",

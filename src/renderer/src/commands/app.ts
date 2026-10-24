@@ -57,6 +57,7 @@ import { proposalCommands } from "./proposals";
 import { researchCommands } from "./research";
 import { reviewCommands } from "./review";
 import { sortCommands } from "./sort";
+import { suggestionCommands } from "./suggestions";
 import "./objectMenus";
 import { type Command, type CommandContext, commands, fromMenu } from "./registry";
 import { selectionCommands } from "./selection";
@@ -133,6 +134,7 @@ const appCommands: readonly Command[] = [
   ...mindCommands,
   ...documentCommands,
   ...peekCommands,
+  ...suggestionCommands,
   ...folderCommands,
   ...mixedSelectionCommands,
   ...taggingCommands,
