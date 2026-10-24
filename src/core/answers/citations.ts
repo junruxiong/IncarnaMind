@@ -383,7 +383,6 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
         range.pageTo === null ||
         (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
     );
-  // `found`: where a check placed the quote in the covered Units' joined text.
   const result = (
     check: CheckResult,
     range: PageRange,
@@ -582,15 +581,17 @@ export function citeSelection(
 /**
  * Checks words the User selected to ask about (`AskedQuote`) against their Document's current
  * version: found only at their Location on their Units, as `citeSelection` cited them, never
- * moved to the same words elsewhere.
+ * moved to the same words elsewhere. Found, its quote is the Document's own words at that place,
+ * read as `citeSelection` reads them; else it is "". The words given are only looked for: what
+ * they hold that the matching passes over (location marks, say) never comes back.
  */
 export function recheckWhereSelected(
   documents: RecheckDocuments,
   input: Pick<AskedQuote, "documentId" | "quote" | "pageFrom" | "pageTo" | "location">,
-): CitationRecheck {
+): CitedSelection {
   const cited = { pageFrom: input.pageFrom, pageTo: input.pageTo };
   const contentHash = documents.currentVersion(input.documentId);
-  if (contentHash === null) return removedFrom(cited);
+  if (contentHash === null) return { ...removedFrom(cited), quote: "" };
   const quote = cleanQuote(input.quote);
   const version = currentVersion(documents, input.documentId, contentHash);
   const covered = version.inRange(cited);
@@ -602,9 +603,11 @@ export function recheckWhereSelected(
       : placesOf(joinUnits(covered).text, quote, options).find(
           (found) => JSON.stringify(parseLocation(locationOf(covered, found))) === wanted,
         );
-  return place
-    ? version.result(FOUND, cited, quote, place)
-    : version.result(NOT_ON_PAGES, cited, quote);
+  const own = place ? foldRadicals(readableQuote(joinUnits(covered).text, place)) : "";
+  if (!place || !quoteInUnits(covered, cleanQuote(own), version.matching)) {
+    return { ...version.result(NOT_ON_PAGES, cited, quote), quote: "" };
+  }
+  return { ...version.result(FOUND, cited, own, place), quote: own };
 }
 
 /**

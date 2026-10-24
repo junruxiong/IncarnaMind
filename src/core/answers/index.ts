@@ -47,7 +47,7 @@ import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { askedFor, waitsForUser as heldForUser } from "../../shared/askedChanges";
 import { citationNode, withCitations } from "../../shared/blockJson";
-import type { LiveDocument } from "../../shared/citations";
+import { type LiveDocument, shownDocumentName } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
 import { englishPlace } from "../../shared/locations";
 import { holdsNothing } from "../../shared/madeMind";
@@ -83,6 +83,7 @@ import {
   type ChatReadiness,
   type CitationRecheck,
   type CitationSupport,
+  type CitedSelection,
   type ClaimedChange,
   type CommandDone,
   type CommandProblem,
@@ -655,7 +656,7 @@ export interface DocumentsForAnswers
   /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
   passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
   /** Words the User selected to ask about, checked where they were selected (`recheckWhereSelected`). */
-  recheckWhereSelected(quote: AskedQuote): CitationRecheck;
+  recheckWhereSelected(quote: AskedQuote): CitedSelection;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
@@ -670,7 +671,6 @@ export interface DocumentsForAnswers
   ): Promise<WindowedPassage[]>;
 }
 
-/** Words the User selected to ask about, found where they were selected, with the Passages of their Units. */
 interface Quoted {
   quote: AskedQuote;
   passages: WindowedPassage[];
@@ -2676,25 +2676,42 @@ export function createAnswers(options: AnswersOptions) {
     };
   }
 
-  /** The quotes found where they were selected, each with the Passages of its Units, and the others. */
+  // Only the Document's own name and words are kept and sent: what the caller gave is only looked for.
   function checkQuotes(quotes: readonly AskedQuote[]): { quoted: Quoted[]; leftOut: AskedQuote[] } {
     const quoted: Quoted[] = [];
     const leftOut: AskedQuote[] = [];
-    for (const quote of quotes) {
-      const now = options.documents.recheckWhereSelected(quote);
+    const documents = options.documents.names();
+    for (const asked of quotes) {
+      const now = options.documents.recheckWhereSelected(asked);
+      const name = shownDocumentName({ documentId: asked.documentId }, documents);
       const passages =
-        now.check === "found"
+        now.check === "found" && name !== null
           ? withoutOverlap(
               options.documents
-                .passagesBetween(quote.documentId, 0, Number.MAX_SAFE_INTEGER)
+                .passagesBetween(asked.documentId, 0, Number.MAX_SAFE_INTEGER)
                 .filter(
                   (passage) =>
                     passage.contentHash === now.contentHash && holdsUnitsOf(passage, now),
                 ),
             )
           : [];
-      if (passages.length > 0) quoted.push({ quote, passages });
-      else leftOut.push(quote);
+      if (name === null || passages.length === 0) {
+        leftOut.push(asked);
+        continue;
+      }
+      const quote: AskedQuote = {
+        documentId: asked.documentId,
+        documentName: name,
+        quote: now.quote,
+        pageFrom: now.pageFrom,
+        pageTo: now.pageTo,
+        location: now.location,
+      };
+      const same = (each: Quoted) =>
+        each.quote.documentId === quote.documentId &&
+        each.quote.quote === quote.quote &&
+        JSON.stringify(each.quote.location) === JSON.stringify(quote.location);
+      if (!quoted.some(same)) quoted.push({ quote, passages });
     }
     return { quoted, leftOut };
   }

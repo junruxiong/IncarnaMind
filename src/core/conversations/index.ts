@@ -372,6 +372,11 @@ export function parseOnScreen(value: unknown): string[] {
   return [...new Set(value as string[])];
 }
 
+// Each quote goes to the model with the Passages of its pages: more would crowd out the rest.
+const MOST_QUOTES = 10;
+// Two pages of dense text, the most a Citation covers, with room to spare.
+const MOST_QUOTED_CHARACTERS = 50_000;
+
 const pageOf = (value: unknown): number | null | undefined =>
   value === null
     ? null
@@ -379,7 +384,6 @@ const pageOf = (value: unknown): number | null | undefined =>
       ? value
       : undefined;
 
-/** An `AskedQuote`, or null for anything else. */
 function parseQuote(value: unknown): AskedQuote | null {
   if (!isRecord(value)) return null;
   const { documentId, documentName, quote } = value;
@@ -392,6 +396,7 @@ function parseQuote(value: unknown): AskedQuote | null {
     typeof documentName !== "string" ||
     typeof quote !== "string" ||
     quote.trim() === "" ||
+    quote.length > MOST_QUOTED_CHARACTERS ||
     pageFrom === undefined ||
     pageTo === undefined ||
     (value.location !== null && location === null)
@@ -401,11 +406,16 @@ function parseQuote(value: unknown): AskedQuote | null {
   return { documentId, documentName, quote, pageFrom, pageTo, location };
 }
 
-/** The words the User selected to ask about; throws for anything but a list of `AskedQuote`s. */
 function parseQuotes(value: unknown): AskedQuote[] {
   if (value === undefined || value === null) return [];
   const unreadable = () => new InvalidInputError({ key: "error.question.quotes" });
   if (!Array.isArray(value)) throw unreadable();
+  if (value.length > MOST_QUOTES) {
+    throw new InvalidInputError({
+      key: "error.question.quotes.tooMany",
+      values: { count: MOST_QUOTES },
+    });
+  }
   return value.map((each) => {
     const quote = parseQuote(each);
     if (!quote) throw unreadable();

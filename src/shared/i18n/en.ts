@@ -4022,6 +4022,8 @@ export const en = {
   "error.question.onScreen": "IncarnaMind couldn’t tell which Documents are open. Ask again.",
   "error.question.quotes":
     "IncarnaMind couldn’t read the words you selected to ask about. Select them again.",
+  "error.question.quotes.tooMany":
+    "A Question can be about {count} selections at most. Remove some, then ask again.",
   "error.mindStyle.invalid": "That isn’t a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
     "Usage data stays off: “Keep everything on this computer” is on.",

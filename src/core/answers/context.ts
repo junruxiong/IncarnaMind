@@ -13,7 +13,7 @@
  */
 import { createHash } from "node:crypto";
 import * as Y from "yjs";
-import type { LiveDocument } from "../../shared/citations";
+import { type LiveDocument, liveDocumentOf } from "../../shared/citations";
 import { parseThirdPartySource } from "../../shared/textOrigins";
 import {
   ANSWER_BLOCK,
@@ -590,8 +590,13 @@ export function conversationContextOf(
   }: ConversationContextOptions = {},
 ): QuestionContextWithOrigins {
   const pieces: Piece[] = earlier.flatMap((message): Piece[] => {
-    if (message.kind === "question")
-      return message.text ? [{ role: "user", text: askedAbout(message) }] : [];
+    if (message.kind === "question") {
+      // A deleted Document's words go no further than the Question that kept them.
+      const quotes = message.quotes.filter(
+        (quote) => documents === null || liveDocumentOf(quote, documents) !== undefined,
+      );
+      return message.text ? [{ role: "user", text: askedAbout({ ...message, quotes }) }] : [];
+    }
     const record = toolRecord(message.toolCalls, mindNames, message.citations.length, changeStates);
     const text =
       message.status === "failed"
