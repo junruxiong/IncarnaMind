@@ -67,6 +67,7 @@ import { tabCommands } from "./tabs";
 import { taggingCommands } from "./tagging";
 import { mindInFront, mindShown, onlyOne } from "./targets";
 import { taskCommands } from "./tasks";
+import { viewerSelectionCommands } from "./viewerSelection";
 import { webPageCommands } from "./webPages";
 import { wordLookCommands } from "./wordLook";
 
@@ -147,6 +148,7 @@ const appCommands: readonly Command[] = [
   ...meetingCommands,
   ...meetingHelpCommands,
   ...webPageCommands,
+  ...viewerSelectionCommands,
   ...feedbackCommands,
   ...exampleCommands,
   ...sortCommands,

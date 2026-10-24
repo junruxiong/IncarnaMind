@@ -5570,6 +5570,10 @@
   .selection-turn {
     font-weight: 500;
   }
+  /* The menu under text selected in a Document's viewer. */
+  .viewer-selection-menu > .editor-menu {
+    width: 232px;
+  }
   .selection-rule {
     margin: 4px -4px;
     border: 0;

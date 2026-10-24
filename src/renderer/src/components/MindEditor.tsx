@@ -290,6 +290,7 @@ function MindEditorView({
    * Answers, its menus) has had it. Otherwise an Answer goes at the end of the Mind.
    */
   const cursorInMind = useRef(false);
+  const cursorPlaced = useRef(false);
   const placeholder = useRef({ body: "", title: "" });
   placeholder.current = { body: t("editor.placeholder"), title: t("editor.title") };
   // A Meeting's empty Mind waits for the agenda (as in Granola), with no Question to ask yet.
@@ -501,6 +502,7 @@ function MindEditorView({
       mindId,
       doc,
       cursorInMind: () => cursorInMind.current,
+      cursorPlaced: () => cursorPlaced.current,
       returnToNote() {
         if (editor.isDestroyed) return;
         // Where the cursor was, or at the end, at once: what is typed next goes there.
@@ -612,8 +614,10 @@ function MindEditorView({
     const onFocusIn = (event: FocusEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (editor.view.dom.contains(target)) cursorInMind.current = true;
-      else if (
+      if (editor.view.dom.contains(target)) {
+        cursorInMind.current = true;
+        cursorPlaced.current = true;
+      } else if (
         !assistant?.contains(target) &&
         !(target instanceof Element && target.closest("dialog"))
       ) {
@@ -678,6 +682,7 @@ function MindEditorView({
     if (editor.isDestroyed) return;
     editor.commands.setTextSelection(pos + 1);
     cursorInMind.current = true;
+    cursorPlaced.current = true;
     useComposer.getState().requestFocus();
   };
 
