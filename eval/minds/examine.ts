@@ -17,7 +17,7 @@ import {
   unnamedFailure,
 } from "./checks";
 import type { CardRow } from "./report";
-import { decideAll, type MindState, readWorkspace } from "./state";
+import { changeStatesOf, decideAll, type MindState, readWorkspace } from "./state";
 
 export interface Examined {
   failures: MindsFailure[];
@@ -37,7 +37,7 @@ export async function examine(
   const rows = changedMinds(answer);
   const waiting = await readWorkspace(core);
   const titleOf = (id: string) => waiting.find((mind) => mind.id === id)?.title ?? null;
-  const calls = toolRecordLines(answer.toolCalls, titleOf);
+  const calls = toolRecordLines(answer.toolCalls, titleOf, await changeStatesOf(core, rows));
   const unbacked = await judge(answer.text, calls);
 
   const rejected = await decideAll(core, rows, "reject");

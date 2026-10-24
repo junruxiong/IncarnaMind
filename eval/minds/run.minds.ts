@@ -28,6 +28,15 @@ const TRANSIENT =
   /rate.?limit|overload|unavailable|too many requests|econnreset|etimedout|fetch failed|socket hang up|\b(?:429|500|502|503|504|529)\b/i;
 const MAX_RETRIES = 2;
 
+// Here a change that waits is not made: the app tells the model to say that it waits (src/core/tools/minds/tools.ts).
+const APPLIED_OR_WAITING = [
+  "In this record, a change that says it was applied in the Mind at once is in place, and one that says it is waiting for the User is not: it is proposed, and does nothing until they accept it.",
+  "Also flag a sentence that says a change the record shows as waiting was applied, done, made or is in place, unless the same reply says that it waits for the User.",
+  "- Record: edit_mind “Plan” proposed 1 change, waiting for the User. Reply: “I shortened the summary in Plan.” Flag that sentence.",
+  "- Record: edit_mind “Plan” proposed 1 change, waiting for the User. Reply: “I proposed a shorter summary in Plan; it waits for you to accept.” Flag nothing.",
+  "- Record: edit_mind “Plan” proposed 3 changes, applied in the Mind at once, with Undo. Reply: “I shortened the summary in Plan.” Flag nothing.",
+].join("\n");
+
 const providerOf = (kind: ChatSettings["kind"]) => (kind === "kimi" ? "kimi" : "anthropic");
 
 function dollars(tokens: Tokens, modelId: string, kind: ChatSettings["kind"]): number {
@@ -107,7 +116,8 @@ async function runOne(
       each,
       before,
       answer,
-      async (reply, record) => (await judgeClaims(judge, reply, record)).unbacked,
+      async (reply, record) =>
+        (await judgeClaims(judge, reply, record, [], APPLIED_OR_WAITING)).unbacked,
     );
     return {
       ...empty,

@@ -12,8 +12,10 @@ import {
   MIND_PROPOSAL_REQUESTS_FIELD,
   type ProposalRef,
 } from "../../src/core";
+import type { ChangeStates } from "../../src/core/answers/toolRecord";
 import { plainText } from "../../src/core/mindText";
 import type { ChangedMind } from "../../src/renderer/src/changedMinds";
+import { askedFor, waitsForUser } from "../../src/shared/askedChanges";
 import { holdsOnlyItsTitle } from "../../src/shared/madeMind";
 import { decideProposals, pendingProposals } from "../../src/shared/proposals";
 import { connectToMind } from "../../tests/helpers/mindClient";
@@ -161,4 +163,28 @@ export async function decideAll(
       for (const step of [...steps].reverse()) await step.undo();
     },
   };
+}
+
+/**
+ * Which changes apply at once and which wait for the User, as the app tells the model in its own
+ * turn: asked for, and not taking out most of the User's own text in their Mind.
+ */
+export async function changeStatesOf(
+  core: Core,
+  rows: readonly ChangedMind[],
+): Promise<ChangeStates> {
+  const applied = new Set<string>();
+  for (const row of rows) {
+    const { state } = await core.openMind(row.mindId);
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, state);
+    const held = waitsForUser(doc, new Set(row.requests));
+    for (const request of row.requests) {
+      if (!held && askedFor(doc, request)) applied.add(`${row.mindId} ${request}`);
+    }
+  }
+  return (change) =>
+    applied.has(`${change.mindId} ${change.request}`)
+      ? { waiting: 0, accepted: 0, rejected: 0, applied: true }
+      : null;
 }
