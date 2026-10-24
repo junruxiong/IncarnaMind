@@ -84,7 +84,7 @@ Windows releases will be signed through the SignPath Foundation's free signing f
 
 **Start from Home.** From the second launch on, IncarnaMind opens on Home: your latest Minds with their first line, your Folders as cards showing what changed in each, and what needs you, such as Documents still being read. **New Mind** starts a page in one click, and the ▾ beside it holds the other ways to start. The first launch opens a checked example instead.
 
-**Keep a big library tidy.** Organize suggests a Folder and Tags for each Document, and keeps the choices you make yourself. With a model on this computer it runs by itself; with a cloud model it waits until you turn on “Tag and sort new Documents automatically” in **Settings → Models**, which says what it would send.
+**Keep a big library tidy.** Organize suggests a Folder and Tags for each Document, for you to accept, and keeps the choices you make yourself. With a model on this computer it runs by itself; with a cloud model it waits until you turn on “Tag and sort new Documents automatically” in **Settings → Models**, which says what it would send.
 
 **Find and add sources.** Search OpenAlex, arXiv and PubMed and add open-access papers as Documents, save a web page by its address so it can be cited and checked like a file, and import your references from Zotero or any CSL JSON, BibTeX or RIS file.
 

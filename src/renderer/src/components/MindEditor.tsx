@@ -721,6 +721,7 @@ function MindEditorView({
       readOnly
         ? undefined
         : holdReviewable(mindId, {
+            editor,
             has: () =>
               !editor.isDestroyed && reviewItemsIn(editor.state.doc, editorDoc(editor)).length > 0,
             open: () => useReviewPanes.getState().open(mindId),

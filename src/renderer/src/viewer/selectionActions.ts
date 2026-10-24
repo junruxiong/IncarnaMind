@@ -6,6 +6,7 @@
  */
 import { getSchema } from "@tiptap/core";
 import { DOMSerializer, Fragment } from "@tiptap/pm/model";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import {
   CITATION_NODE,
   type CitationAttributes,
@@ -16,6 +17,8 @@ import {
 import type { NodeJSON } from "../../../shared/blockJson";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindName } from "../../../shared/naming";
+import { readableQuoteText } from "../../../shared/readableQuote";
+import { setTextOrigin } from "../../../shared/textOrigins";
 import { type AddTarget, addInEditor } from "../addToNote";
 import { readMindHandle } from "../commands/handles";
 import { core } from "../core";
@@ -29,20 +32,22 @@ import { translateNow } from "../i18n";
 import { useNotices } from "../notices";
 import { useAppStore } from "../store";
 
-/** Words selected in a Document's viewer, part by part (see `pdfSelection`). */
+/** Words selected in a Document's viewer, part by part (see `ReadSelection`). */
 export interface ViewerSelection {
   document: Document;
   parts: SelectedPart[];
+  shown?: string;
 }
 
 const MIND_OPEN_WAIT_MS = 5000;
 
 const REFUSED: Partial<Record<CitationCheckReason, MessageKey>> = {
   "too-many-pages": "viewer.selection.refused.pages",
+  "in-several-places": "viewer.selection.refused.places",
   "no-text": "viewer.selection.refused.noText",
 };
 
-async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> {
+async function quoteOf({ document, parts, shown }: ViewerSelection): Promise<NodeJSON> {
   const cited = await core.citeSelection({ documentId: document.id, parts });
   // Only words found where they were selected are cited: a refused Citation's next check could
   // find the same words somewhere else and move it there.
@@ -68,7 +73,8 @@ async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> 
       {
         type: "paragraph",
         content: [
-          { type: "text", text: cited.quote },
+          // A Markdown file's quote keeps its markup ("**"); the note has the words as shown.
+          { type: "text", text: shown ? readableQuoteText(shown) : cited.quote },
           { type: CITATION_NODE, attrs: { ...citation } },
         ],
       },
@@ -86,10 +92,14 @@ function putIn(
   mindId: string,
   quote: NodeJSON,
   atCursor: boolean,
+  from: Document,
   made = false,
 ) {
   const ids = addInEditor(editor, [quote], atCursor, () => undefined);
   if (!ids) return;
+  // A web page's words are someone else's: a Run that reads them asks before it writes (#78).
+  const doc = ySyncPluginKey.getState(editor.state)?.doc;
+  if (from.kind === "web" && doc) setTextOrigin(doc, ids, "web-page");
   flashBlocks(editor, ids);
   const name = nameOf(mindId);
   offerEditorUndo(editor, (t) =>
@@ -118,7 +128,13 @@ export async function addSelectionToNote(
     const quote = await quoteOf(selection);
     if (!target || (target.kind === "mind" && read?.mindId === target.mindId)) {
       if (read && !read.editor.isDestroyed) {
-        putIn(read.editor, read.mindId, quote, read.cursorInMind() || read.cursorPlaced());
+        putIn(
+          read.editor,
+          read.mindId,
+          quote,
+          read.cursorInMind() || read.cursorPlaced(),
+          selection.document,
+        );
       }
       return;
     }
@@ -134,7 +150,7 @@ export async function addSelectionToNote(
     });
     const editor = await whenMindEditor(mindId, MIND_OPEN_WAIT_MS);
     if (editor) {
-      putIn(editor, mindId, quote, false, made);
+      putIn(editor, mindId, quote, false, selection.document, made);
       return;
     }
     // A Mind a newer version wrote opens read-only, with no editor to take the quote.

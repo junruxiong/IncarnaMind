@@ -1500,6 +1500,11 @@
       color: var(--color-ink-meta);
     }
   }
+  .review-card-actions {
+    display: flex;
+    gap: 6px;
+    padding: 0 8px 8px 38px;
+  }
   .review-card-what {
     color: var(--color-ink-meta);
   }
