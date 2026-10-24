@@ -2673,3 +2673,65 @@ export async function fontsDrawing(window: Page, selector: string) {
     await session.detach();
   }
 }
+
+/**
+ * A local decision server like Ollama's `/v1/systemone` (no model): a Folder chosen by what the
+ * Document says (`folderFor`: Finance for an invoice, Reports otherwise), Invoice in the review
+ * band for an invoice, Report likely for a report, nothing else. `requests` counts what it was asked;
+ * `delayMs` holds each answer back, for a test that does something else while Organize works.
+ */
+export async function decisionServer(
+  folderFor: (text: string) => string = (text) =>
+    text.includes("invoice") ? "Finance" : "Reports",
+  { delayMs = 0 }: { delayMs?: number } = {},
+): Promise<{ server: Server; readonly requests: number }> {
+  let requests = 0;
+  const server = createServer(async (request, response) => {
+    let raw = "";
+    for await (const chunk of request) raw += chunk;
+    const body = raw ? JSON.parse(raw) : {};
+    response.setHeader("content-type", "application/json");
+    if (request.url !== "/v1/systemone") {
+      response.end(JSON.stringify({ models: [] }));
+      return;
+    }
+    requests++;
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const text = JSON.stringify(body.state).toLowerCase();
+    const answers = Object.fromEntries(
+      Object.entries(
+        body.questions as Record<
+          string,
+          { type: string; instructions: string; criteria?: Record<string, string> }
+        >,
+      ).map(([id, question]) => {
+        if (question.type === "choice") {
+          const wanted = folderFor(text);
+          const choice =
+            Object.entries(question.criteria ?? {}).find(([, value]) =>
+              value.startsWith(wanted),
+            )?.[0] ?? "__unsorted__";
+          return [id, { type: "choice", choice }];
+        }
+        const noul = question.instructions.includes("“Invoice”")
+          ? text.includes("invoice")
+            ? 0.65
+            : 0.01
+          : question.instructions.includes("“Report”")
+            ? text.includes("report")
+              ? 0.95
+              : 0.01
+            : 0.01;
+        return [id, { type: "noul", noul }];
+      }),
+    );
+    response.end(JSON.stringify({ answers }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return {
+    server,
+    get requests() {
+      return requests;
+    },
+  };
+}

@@ -142,6 +142,10 @@ _Avoid_: Unsorted, Uncategorised, Inbox
 A Folder that Organize proposes for a Document, which waits for the User to accept it (it becomes the User's choice) or reject it (the Document stays Not in a Folder and that Folder isn't suggested for it again). While it waits, the Document counts as in that Folder, for listings and for the Folder's Search scope, marked as a suggestion.
 _Avoid_: automatic Folder, proposed Folder
 
+**To review**:
+The Library's view of what Organize suggested and the User hasn't accepted yet: the Documents waiting in a Suggested Folder, listed by that Folder, each to accept, move to another Folder or turn down ("Not this Folder"). It is the first section of the Library page while anything waits, with how many, and goes when nothing does.
+_Avoid_: inbox, queue, pending
+
 **Source location**:
 The original file or Linked folder from which IncarnaMind reads Documents. Its folders mirror the disk and are independent of the Folders used to organise Documents inside IncarnaMind.
 
