@@ -201,6 +201,15 @@ describe("what a supported sentence's card offers for the Passage its check foun
     });
   });
 
+  test("already has a valid Citation when a broken one overlaps the same words, and does not replace it", () => {
+    const held = state({ check: "not-found", checkReason: "quote-not-on-pages" }, {});
+    const both = { from: 1, to: 1 + FIRST.length + 1 + 1 + SECOND.length + 1 };
+    expect(citationDecision(held, claimOf(both, { quote: LINE }))).toMatchObject({
+      kind: "already",
+      citation: { number: 2 },
+    });
+  });
+
   test("Add as Citation when the sentence's Citation holds, is in another Document, or there is none", () => {
     const held = state({ quote: SECOND }, null);
     expect(citationDecision(held, claimOf(sentence, { quote: LINE })).kind).toBe("add");

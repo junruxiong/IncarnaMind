@@ -39,11 +39,14 @@ export function citationDecision(state: EditorState, claim: ShownClaim): Citatio
       attributes.documentId !== null && attributes.documentId === evidence.documentId,
   );
   const overlapping = cited.filter(({ attributes }) => overlapsCitation(attributes, evidence));
-  // A Citation whose own check says it doesn't hold is replaced, never widened: it is broken, not partial.
+  const valid = overlapping.filter(({ attributes }) => !DOESNT_HOLD.has(attributes.check));
+  // A Citation whose own check says it doesn't hold is replaced, never widened: it is broken, not
+  // partial. A valid one on the same words comes first, or replacing the broken one would put a
+  // second Citation on them.
   const invalid = overlapping.find(({ attributes }) => DOESNT_HOLD.has(attributes.check));
-  if (invalid) return { kind: "replace", citation: invalid, evidence };
+  if (valid.length === 0 && invalid) return { kind: "replace", citation: invalid, evidence };
   let wider: NumberedCitation | null = null;
-  for (const each of overlapping) {
+  for (const each of valid) {
     if (
       continuesCitation(each.attributes, evidence, claim.sentence.text) &&
       (wider === null ||
@@ -53,7 +56,7 @@ export function citationDecision(state: EditorState, claim: ShownClaim): Citatio
     }
   }
   if (wider) return { kind: "widen", citation: wider, evidence };
-  const already = overlapping[0];
+  const already = valid[0];
   if (already) return { kind: "already", citation: already };
   const replace = cited.find(({ attributes }) => DOESNT_HOLD.has(attributes.check));
   if (replace) return { kind: "replace", citation: replace, evidence };
