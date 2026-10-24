@@ -32,7 +32,6 @@ import {
   setEditTarget,
   watchMovedOn,
 } from "./editor/proposalReview";
-import { offerReviewUndo, type ReviewHistory } from "./editor/reviewHistory";
 import { keepDecisions } from "./editor/theirChanges";
 import { failedEdit } from "./editProblems";
 import { errorMessage } from "./errors";
@@ -443,15 +442,13 @@ export function editFromComposer(
  * Accepts or rejects Proposals in the open Mind, as one step of its Undo,
  * and offers Undo on the undo line while that step is still the last one.
  * What an accepted Proposal wrote goes into the record of AI use (#292),
- * after the change itself has gone to the core. With `review`, the step goes
- * into the reviewing pane's own history instead of the note's (#697).
+ * after the change itself has gone to the core.
  */
 export function resolveProposalsIn(
   editor: Editor,
   mindId: string,
   ids: readonly string[] | "all",
   outcome: "accept" | "reject",
-  review?: ReviewHistory,
 ): void {
   if (editor.isDestroyed || ids.length === 0) return;
   // A Checkpoint of the Mind before an AI change goes in (#113). Not awaited: the core takes it
@@ -476,7 +473,6 @@ export function resolveProposalsIn(
     outcome,
     held,
     (doc, done) => keepDecisions(doc, before, done, outcome),
-    review,
   );
   if (resolved.length === 0) {
     // Only changes out of date were picked: they can't be accepted, and the User hears why.
@@ -502,6 +498,5 @@ export function resolveProposalsIn(
         ? t("proposal.rejected.one")
         : t("proposal.rejected", { count });
   speak(mindId, said(t));
-  if (review) offerReviewUndo(review, said);
-  else offerEditorUndo(editor, said);
+  offerEditorUndo(editor, said);
 }

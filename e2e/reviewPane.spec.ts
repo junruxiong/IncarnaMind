@@ -1,11 +1,13 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { unzip } from "../tests/helpers/docx";
 import { supplyRedline } from "../tests/helpers/redline";
 import { paragraph, wordFile } from "../tests/helpers/word";
 import {
   createDataFolder,
   dismissChatSetup,
+  exportFromMenu,
   focusSettled,
   frontMindName,
   importWordFromMenu,
@@ -16,10 +18,12 @@ import {
   pointAndClick,
   removeDataFolder,
   renameInTab,
+  savedLine,
   setLanguage,
   setWindowSize,
   slideSelect,
   useLocalChatModel,
+  useOutputLocation,
 } from "./app";
 
 /*
@@ -422,7 +426,7 @@ test("decisions one after another are each taken back by ⌘Z in the pane, an ol
   await app.close();
 });
 
-test("⌘Z in the pane takes back the review's own decisions only: a decision after an Undo, and an Edit with AI after them, leave the rename and the edit alone", async () => {
+test("⌘Z and ⇧⌘Z in the pane are the note's own, as in the text: the last step whatever it is, a decision or an Edit with AI, whole, and never the rename", async () => {
   const { app, window } = await launchApp(dataDir, { home, fakeChat: true });
   await setWindowSize(app, window, 1600, 900);
   await dismissChatSetup(window);
@@ -441,24 +445,24 @@ test("⌘Z in the pane takes back the review's own decisions only: a decision af
     await pointAndClick(window, card.getByTestId("review-accept"));
     await expect(card).toHaveAttribute("data-state", "accepted");
   };
+  const undo = () => window.keyboard.press("ControlOrMeta+z");
+  const redo = () => window.keyboard.press("ControlOrMeta+Shift+z");
 
-  // Two decisions, ⌘Z, a third: ⌘Z ⌘Z take back the third and the first, never the rename.
+  // Two decisions, ⌘Z, a third: ⌘Z ⌘Z take back the third, then the first.
   await accept(supply);
   await accept(notice);
-  await window.keyboard.press("ControlOrMeta+z");
+  await undo();
   await expect(notice).toHaveAttribute("data-state", "waiting");
   await accept(prices);
-  await window.keyboard.press("ControlOrMeta+z");
+  await undo();
   await expect(prices).toHaveAttribute("data-state", "waiting");
-  await window.keyboard.press("ControlOrMeta+z");
+  await undo();
   await expect(supply).toHaveAttribute("data-state", "waiting");
   await expect(notice).toHaveAttribute("data-state", "waiting");
-  // Nothing of the review is left to take back: ⌘Z there does nothing.
-  await window.keyboard.press("ControlOrMeta+z");
   await expect(frontMindName(window)).toHaveText("Northwind supply");
-  await expect(cards.locator(":scope[data-state='accepted']")).toHaveCount(0);
 
-  // Two decisions, then an Edit with AI in the text: ⌘Z in the pane takes back the decisions only.
+  // Two decisions, then an Edit with AI in the text: ⌘Z in the pane takes back the edit whole, then
+  // each decision; ⇧⌘Z does them again in order.
   await accept(supply);
   await accept(notice);
   const liability = editor.locator("p", { hasText: "6.1 Nothing in this agreement" });
@@ -472,25 +476,77 @@ test("⌘Z in the pane takes back the review's own decisions only: a decision af
   await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
   await expect(liability).toContainText("caused by gross negligence");
   await pointAndClick(window, notice.locator("[data-review-id]"));
-  await window.keyboard.press("ControlOrMeta+z");
+  await undo();
+  await expect(liability).toHaveText(
+    "6.1 Nothing in this agreement limits liability for death or personal injury caused by negligence.",
+  );
+  await expect(notice).toHaveAttribute("data-state", "accepted");
+  await undo();
   await expect(notice).toHaveAttribute("data-state", "waiting");
+  await expect(supply).toHaveAttribute("data-state", "accepted");
+  await undo();
+  await expect(supply).toHaveAttribute("data-state", "waiting");
+  await expect(frontMindName(window)).toHaveText("Northwind supply");
+  await redo();
+  await expect(supply).toHaveAttribute("data-state", "accepted");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await redo();
+  await expect(notice).toHaveAttribute("data-state", "accepted");
+  await redo();
+  await expect(liability).toContainText("caused by gross negligence");
+  await app.close();
+});
+
+test("words typed into a change decided in the pane are the User's: ⌘Z takes them back, then the decision, and the other person's change goes back to Word exactly as it was", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  const output = join(files, "Exports");
+  await mkdir(output);
+  await useOutputLocation(window, output);
+  await importFile(window, app, "Supply agreement v5.docx", supplyRedline());
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
+  await pointAndClick(window, window.getByTestId("their-changes-review"));
+  const pane = window.getByTestId("review-pane");
+  const editor = window.getByTestId("mind-editor");
+  const supply = cardsOf(pane).first();
+  await pointAndClick(window, supply.locator("[data-review-id]"));
+  await pointAndClick(window, supply.getByTestId("review-accept"));
+  await expect(supply).toHaveAttribute("data-state", "accepted");
+
+  // Typed inside Dana's words, once they are the Mind's.
+  const clause = editor.locator("p", { hasText: "1.2 Northwind" });
+  await slideSelect(window, clause, "Gdańsk");
+  await window.keyboard.press("ArrowLeft");
+  for (let index = 0; index < "Gdań".length; index++) await window.keyboard.press("ArrowRight");
+  await window.keyboard.type("ZZ");
+  await expect(clause).toContainText("Leeds and GdańZZsk and");
+
+  // ⌘Z in the pane: the typing first, then the decision; Dana's change waits as the file had it.
+  await pointAndClick(window, supply.locator("[data-review-id]"));
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(clause).toContainText("Leeds and Gdańsk and");
+  await expect(clause).not.toContainText("ZZ");
+  await expect(supply).toHaveAttribute("data-state", "accepted");
   await window.keyboard.press("ControlOrMeta+z");
   await expect(supply).toHaveAttribute("data-state", "waiting");
-  await window.keyboard.press("ControlOrMeta+z");
-  await expect(liability).toContainText("caused by gross negligence");
-  await expect(frontMindName(window)).toHaveText("Northwind supply");
-  // ⇧⌘Z does them again in order.
-  await window.keyboard.press("ControlOrMeta+Shift+z");
-  await expect(supply).toHaveAttribute("data-state", "accepted");
-  await expect(notice).toHaveAttribute("data-state", "waiting");
-  await window.keyboard.press("ControlOrMeta+Shift+z");
-  await expect(notice).toHaveAttribute("data-state", "accepted");
-  await expect(liability).toContainText("caused by gross negligence");
-  // Done again from the pane, the decision is back on the undo line: ⌘Z outside the pane and the text takes it back.
-  await window.getByTestId("mind-tab").first().focus();
-  await window.keyboard.press("ControlOrMeta+z");
-  await expect(notice).toHaveAttribute("data-state", "waiting");
-  await expect(supply).toHaveAttribute("data-state", "accepted");
+  await expect(editor.locator("ins.proposal-theirs", { hasText: "and Gdańsk" })).toHaveText(
+    " and Gdańsk",
+  );
+
+  await exportFromMenu(window);
+  await expect(window.getByTestId("export-result").getByTestId("export-done")).toContainText(
+    savedLine("Supply agreement v5.docx", output),
+  );
+  const xml =
+    unzip(await readFile(join(output, "Supply agreement v5.docx")))
+      .get("word/document.xml")
+      ?.toString("utf8") ?? "";
+  expect(xml).toContain(
+    '<w:ins w:id="1" w:author="Dana Kim" w:date="2026-10-02T09:00:00Z"><w:r><w:t xml:space="preserve"> and Gdańsk</w:t></w:r></w:ins>',
+  );
+  expect(xml).not.toContain("ZZ");
   await app.close();
 });
 

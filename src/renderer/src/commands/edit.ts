@@ -4,6 +4,7 @@ import { files } from "../core";
 import { noteAround } from "../editor/noteKeymap";
 import { useT } from "../i18n";
 import type { Translate } from "../objects";
+import { noteOfPane } from "../reviewPane";
 import { nextToRedo, nextToUndo, typesText, type Undoable, useUndo } from "../undo";
 import { type Command, type CommandContext, fromMenu } from "./registry";
 
@@ -18,9 +19,12 @@ function placeOf(ctx: CommandContext): EditMenuState["text"] {
   const typing = typesText(focus);
   if (typing && !(focus instanceof HTMLElement && focus.isContentEditable)) return "field";
   // A chart's buttons and values (#436) are in the note, though not text: ⌘Z there takes back the note's change.
-  if (noteAround(focus)) return "note";
+  // So is the reviewing pane beside it (#697): a decision there is a step of the note's, as from its bar.
+  if (noteHere(focus)) return "note";
   return typing ? "field" : null;
 }
+
+const noteHere = (focus: Element | null) => noteAround(focus) ?? noteOfPane(focus);
 
 const nameOf = (change: Undoable | undefined, t: Translate) =>
   change ? (change.name?.(t) ?? "") : null;
@@ -43,7 +47,7 @@ export const editCommands: readonly Command[] = [
       placeOf(ctx) !== null || nextToUndo(useUndo.getState()) ? true : { reason: "undo.nothing" },
     run(ctx) {
       const place = placeOf(ctx);
-      if (place === "note") noteAround(document.activeElement)?.commands.undo();
+      if (place === "note") noteHere(document.activeElement)?.commands.undo();
       // A field's own undo, the system Edit menu's editing command, which only execCommand reaches.
       else if (place === "field") document.execCommand("undo");
       else return useUndo.getState().undo();
@@ -59,7 +63,7 @@ export const editCommands: readonly Command[] = [
       placeOf(ctx) !== null || nextToRedo(useUndo.getState()) ? true : { reason: "redo.nothing" },
     run(ctx) {
       const place = placeOf(ctx);
-      if (place === "note") noteAround(document.activeElement)?.commands.redo();
+      if (place === "note") noteHere(document.activeElement)?.commands.redo();
       else if (place === "field") document.execCommand("redo");
       else return useUndo.getState().redo();
     },

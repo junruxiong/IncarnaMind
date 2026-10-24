@@ -2,7 +2,6 @@ import type { Editor } from "@tiptap/core";
 import { resolveProposalsIn } from "../editWithAi";
 import { authorShown, shownIn, useReviewPanes } from "../reviewPane";
 import { editorDoc, pendingIn } from "./proposalReview";
-import { redoInPane, reviewHistoryOf, undoInPane } from "./reviewHistory";
 import { type PickedRange, pickInMind, scrollMindTo } from "./reviewPick";
 import { type ChangeItem, type ReviewItem, reviewItemsIn } from "./theirChanges";
 
@@ -140,23 +139,12 @@ export function decideAuthor(
   decideInPane(editor, mindId, ids, outcome);
 }
 
-/** Decides from the pane: into the review's own history, which ⌘Z and ⇧⌘Z in the pane walk. */
+/** Decides from the pane, as the change's bar in the text does: one step of the note's Undo. */
 export function decideInPane(
   editor: Editor,
   mindId: string,
   ids: readonly string[],
   outcome: "accept" | "reject",
 ): void {
-  const doc = editorDoc(editor);
-  resolveProposalsIn(editor, mindId, ids, outcome, doc ? reviewHistoryOf(doc) : undefined);
-}
-
-export function undoDecision(editor: Editor): void {
-  const doc = editorDoc(editor);
-  if (doc) undoInPane(reviewHistoryOf(doc));
-}
-
-export function redoDecision(editor: Editor): void {
-  const doc = editorDoc(editor);
-  if (doc) redoInPane(reviewHistoryOf(doc));
+  resolveProposalsIn(editor, mindId, ids, outcome);
 }

@@ -45,10 +45,8 @@ import {
   decideInPane,
   decideSelected,
   itemsOf,
-  redoDecision,
   selectCard,
   selectedChange,
-  undoDecision,
   washSelected,
 } from "./reviewActions";
 import {
@@ -85,9 +83,6 @@ function focusCard(
 
 const ACCEPT_KEYS = "CmdOrCtrl+Enter";
 const REJECT_KEYS = "CmdOrCtrl+Backspace";
-const UNDO_KEYS = "CmdOrCtrl+Z";
-const REDO_KEYS = "CmdOrCtrl+Shift+Z";
-const REDO_OTHER_KEYS = "Ctrl+Y";
 
 const pressedKeys = (keys: ShortcutKeys, event: KeyboardEvent<Element>) =>
   pressed(keysOn(keys, isMacOS()), event.nativeEvent, isMacOS());
@@ -252,22 +247,12 @@ export function ReviewPane({
     <aside
       aria-label={t("review.title")}
       data-testid="review-pane"
+      data-review-of={mindId}
       data-placement={over ? "over" : "beside"}
       className={`review-pane ${over ? "review-pane--over" : ""}`}
       onKeyDown={(event) => {
-        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
-        // In the pane, Undo and Redo walk its own decisions only, never what the User did elsewhere.
-        if (pressedKeys(UNDO_KEYS, event)) {
-          event.preventDefault();
-          undoDecision(editor);
+        if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing)
           return;
-        }
-        if (pressedKeys(REDO_KEYS, event) || (!isMacOS() && pressedKeys(REDO_OTHER_KEYS, event))) {
-          event.preventDefault();
-          redoDecision(editor);
-          return;
-        }
-        if (event.key !== "Escape") return;
         event.preventDefault();
         close();
       }}
