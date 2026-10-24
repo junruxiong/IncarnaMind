@@ -52,7 +52,7 @@ export function pickInMind(editor: Editor, picked: readonly PickedRange[]): void
   editor.view.dispatch(editor.state.tr.setMeta(reviewPickKey, picked));
 }
 
-/** What the foot of the page keeps covered: the count and the check badge fade the text there. */
+// The count and the check badge fade the text at the page's foot.
 const FOOT_PX = 48;
 
 /**

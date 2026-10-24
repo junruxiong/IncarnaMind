@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { resolveProposalsIn } from "../editWithAi";
-import { shownIn, useReviewPanes } from "../reviewPane";
+import { authorShown, shownIn, useReviewPanes } from "../reviewPane";
 import { editorDoc, pendingIn } from "./proposalReview";
 import { type PickedRange, pickInMind, scrollMindTo } from "./reviewPick";
 import { type ChangeItem, type ReviewItem, reviewItemsIn } from "./theirChanges";
@@ -117,10 +117,13 @@ export function decideSelected(
 export function authorInFocus(editor: Editor, mindId: string): string | null | undefined {
   const pane = useReviewPanes.getState().panes[mindId];
   if (!pane) return undefined;
-  const item = itemsOf(editor).find((each) => each.id === pane.selected);
+  const items = itemsOf(editor);
+  // A card the filters hide is never in focus.
+  const item = shownIn(items, pane).find((each) => each.id === pane.selected);
   if (item) return item.author;
-  if (pane.who === null) return undefined;
-  return pane.who === "" ? null : pane.who;
+  const who = authorShown(items, pane);
+  if (who === null) return undefined;
+  return who === "" ? null : who;
 }
 
 /** Every change of one person's still waiting: accepted or rejected in one step of Undo. */

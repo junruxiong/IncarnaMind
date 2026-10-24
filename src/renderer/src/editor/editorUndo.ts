@@ -44,50 +44,93 @@ export function asOneStep<T>(editor: Editor, change: () => T): T {
   }
 }
 
+interface Offered {
+  steps: Set<UndoStep>;
+  stepping: boolean;
+}
+
+const offeredIn = new WeakMap<UndoStack, Offered>();
+
+function offeredOf(manager: UndoStack): Offered {
+  let offered = offeredIn.get(manager);
+  if (!offered) {
+    offered = { steps: new Set(), stepping: false };
+    offeredIn.set(manager, offered);
+  }
+  return offered;
+}
+
+const onlyOfferedAbove = (
+  stack: readonly UndoStep[],
+  step: UndoStep,
+  offered: ReadonlySet<UndoStep>,
+): boolean => {
+  const at = stack.lastIndexOf(step);
+  return at >= 0 && stack.slice(at + 1).every((each) => offered.has(each));
+};
+
 /**
  * Puts the note's last step on the app's undo stack, with its line ("Accepted
- * 2 changes · Undo", or under an Answer with `shownAt`). Once the User edits
- * again, takes it back in the note, or closes the note, it leaves the stack.
+ * 2 changes · Undo", or under an Answer with `shownAt`), to be taken back and
+ * done again from anywhere. Once the User edits again, takes it back in the
+ * note, or closes the note, it leaves the stack. A later step offered the same
+ * way keeps it: each is taken back in turn (#697: decisions one after another
+ * in the reviewing pane).
  */
 export function offerEditorUndo(editor: Editor, said: WordsInLine, shownAt?: string): void {
   const manager = undoStackOf(editor);
-  let step = manager?.undoStack.at(-1);
-  if (!manager || step === undefined) return;
-  let redone: UndoStep | undefined;
-  // Its own Undo and Redo move the note's stack too: only someone else's step makes it stale.
-  let stepping = false;
-  const inStep = (run: () => void) => {
-    stepping = true;
+  const first = manager?.undoStack.at(-1);
+  if (!manager || first === undefined) return;
+  const offered = offeredOf(manager);
+  offered.steps.add(first);
+  let place: { stack: "undoStack" | "redoStack"; step: UndoStep } = {
+    stack: "undoStack",
+    step: first,
+  };
+  const move = (run: () => void, to: "undoStack" | "redoStack") => {
+    offered.stepping = true;
     try {
       run();
     } finally {
-      stepping = false;
+      offered.stepping = false;
     }
+    offered.steps.delete(place.step);
+    const step = manager[to].at(-1);
+    if (step === undefined) return;
+    place = { stack: to, step };
+    offered.steps.add(step);
   };
+  const onTop = (stack: "undoStack" | "redoStack") =>
+    !editor.isDestroyed && place.stack === stack && manager[stack].at(-1) === place.step;
   const change: Undoable = {
     said,
     undo: async () => {
-      if (editor.isDestroyed || manager.undoStack.at(-1) !== step) return;
-      inStep(() => editor.commands.undo());
-      redone = manager.redoStack.at(-1);
+      if (onTop("undoStack")) move(() => editor.commands.undo(), "redoStack");
     },
-    // From outside the text too (#697: ⇧⌘Z in the reviewing pane), as long as nothing came after.
     redo: async () => {
-      if (editor.isDestroyed || redone === undefined || manager.redoStack.at(-1) !== redone) return;
-      inStep(() => editor.commands.redo());
-      step = manager.undoStack.at(-1);
+      if (onTop("redoStack")) move(() => editor.commands.redo(), "undoStack");
     },
     ...(shownAt && { shownAt }),
   };
   const stale = () => {
-    if (stepping) return;
-    manager.off("stack-item-added", stale);
-    manager.off("stack-item-popped", stale);
+    manager.off("stack-item-added", changed);
+    manager.off("stack-item-popped", changed);
+    manager.off("stack-cleared", stale);
     editor.off("destroy", stale);
+    offered.steps.delete(place.step);
     useUndo.getState().withdraw(change);
   };
-  manager.on("stack-item-added", stale);
-  manager.on("stack-item-popped", stale);
+  const changed = () => {
+    // Its own steps and those of its neighbours on the stack move only steps on the stack.
+    if (offered.stepping) return;
+    // Once whatever added a step has had the chance to offer it too.
+    queueMicrotask(() => {
+      if (!onlyOfferedAbove(manager[place.stack], place.step, offered.steps)) stale();
+    });
+  };
+  manager.on("stack-item-added", changed);
+  manager.on("stack-item-popped", changed);
+  manager.on("stack-cleared", stale);
   editor.on("destroy", stale);
   useUndo.getState().push(change);
 }
