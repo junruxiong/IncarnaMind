@@ -36,7 +36,7 @@ const reply = (language: Language) =>
   [
     "Reply in exactly this form, the verdict word in English:",
     "Verdict: supported, unsupported or contradicted",
-    'Scope: the sentence\'s own word for the Passage\'s party or term, then same or wider ("Scope: tenants, wider" for "the Tenant"; "Scope: none, same" when the sentence names none). "wider" when that word is a general one for a wider group than the Passage\'s, the Passage\'s own word in the plural too ("tenants"); "same" otherwise: the Passage\'s own word for its party ("the Tenant" for "the Tenant"), a name for it or another word for the very same party ("Ms Patel" for "the Tenant").',
+    'Scope: the sentence\'s own word for the Passage\'s party or term, then same or wider ("Scope: tenants, wider" for "the Tenant"; "Scope: none, same" when the sentence names none). "wider" when that word is a general one for a wider group than the Passage\'s; "same" otherwise: the Passage\'s own word for its party ("the Tenant" for "the Tenant"), a name for it or another word for the very same party ("Ms Patel" for "the Tenant").',
     'Topic: found or not found. "found" when a Passage is about the sentence\'s own subject and detail, even when it gives another value or only part of it; "not found" when none is, though one may be about a neighbouring topic (rent, for a parking fee).',
     // The words are an anchor for the model, not a list the app matches. Worded without them,
     // Claude Haiku 5.5 still called "must" for "may" and "可" for "须" Supported in up to 8 to 10 of
