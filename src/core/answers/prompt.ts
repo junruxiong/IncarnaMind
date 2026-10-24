@@ -139,6 +139,30 @@ export const THIS_DOCUMENT_RULE = [
   "- When the User asks for it short, keep it to five lines at most in all: a heading, a paragraph and each list item each count as one.",
 ].join("\n");
 
+const inAttribute = (text: string) => listedName(text).replace(/"/g, "'");
+
+const selected = (quote: { documentName: string; quote: string }, place: string | null) =>
+  `<selected document="${inAttribute(quote.documentName)}"${place ? ` location="${inAttribute(place)}"` : ""}>\n${quote.quote}\n</selected>`;
+
+/**
+ * Words the User selected in their Documents to ask about (#101), each followed by the Passages
+ * it is in as the model reads them (`shown`), to cite it from.
+ */
+export function selectedTextBlock(
+  quotes: readonly { documentName: string; quote: string; place: string | null; shown: string }[],
+): string {
+  const each = quotes.map((quote) => `${selected(quote, quote.place)}\n\n${quote.shown}`);
+  return `<selected-text>\nThe User selected these words in their Documents to ask about them, in <selected>: "this", "it", "这段", "这句" and the like in the Question mean them. Answer about them, and cite them before anything else, from the Passage that follows them, at the location their <selected> gives.\n\n${each.join("\n\n")}\n</selected-text>`;
+}
+
+/** An earlier Question as its conversation's context reads it: the words it asked about, then its text. */
+export function askedAbout(question: {
+  text: string;
+  quotes: readonly { documentName: string; quote: string }[];
+}): string {
+  return [...question.quotes.map((quote) => selected(quote, null)), question.text].join("\n\n");
+}
+
 /** The Document the Mind in focus is the working copy of (#1036), by name; empty for none. */
 export function workingCopyNote(original: string | null): string {
   if (original === null) return "";
