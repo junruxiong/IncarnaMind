@@ -34,7 +34,6 @@ export interface RunResult {
   judging: Tokens;
   /** How often the provider was too busy and the run was asked again. */
   retries: number;
-  /** What its Tools did, in the app's own record. */
   calls: string[];
   card: CardRow[];
   transcript: string[];
@@ -52,7 +51,6 @@ export interface Row {
   under: boolean;
 }
 
-/** One row per request and model, in the order first run. */
 export function rowsOf(results: readonly RunResult[]): Row[] {
   const rows = new Map<string, Row>();
   for (const result of results) {

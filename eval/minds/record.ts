@@ -43,7 +43,6 @@ function add(tokens: Tokens, usage: Usage): void {
   tokens.outputTokens += usage.outputTokens.total ?? 0;
 }
 
-/** What the model was told since it last spoke: the results of its calls. */
 function toldIn(prompt: LanguageModelV4Prompt): string[] {
   const told: string[] = [];
   for (let index = prompt.length - 1; index >= 0; index--) {
@@ -66,7 +65,6 @@ function toldIn(prompt: LanguageModelV4Prompt): string[] {
 }
 
 export interface Recorder {
-  /** The chat model's requests, counted and written down. */
   chatModels(inner: ChatModelFactory): ChatModelFactory;
   /** A model whose requests are counted into `judging`. */
   counted(model: Parameters<typeof wrapLanguageModel>[0]["model"]): LanguageModel;

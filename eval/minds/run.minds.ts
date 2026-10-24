@@ -140,7 +140,6 @@ function selected(only: string | undefined): readonly MindsCase[] {
   return CASES.filter((each) => ids.includes(each.id));
 }
 
-/** Asks `runs` times each of `cases`, `parallel` at once, until the budget is spent. */
 async function runAll(
   chat: ChatSettings,
   judging: ChatSettings,
@@ -170,7 +169,12 @@ async function runAll(
       let result = await runOne(chat, judging, next.each, next.run, model, keepData);
       spent += cost(result);
       // A busy provider says nothing of the assistant: the run is asked again, up to twice.
-      while (result.error && TRANSIENT.test(result.error) && result.retries < MAX_RETRIES) {
+      while (
+        result.error &&
+        TRANSIENT.test(result.error) &&
+        !OUT_OF_CREDIT.test(result.error) &&
+        result.retries < MAX_RETRIES
+      ) {
         log(
           `${model} · ${next.each.id} #${next.run}: asked again after "${result.error.slice(0, 120)}"`,
         );

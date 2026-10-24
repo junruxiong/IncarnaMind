@@ -92,7 +92,6 @@ export async function readState(core: Core, mindId: string, title: string): Prom
   };
 }
 
-/** Every Mind there is, in the order the core lists them. */
 export async function readWorkspace(core: Core): Promise<MindState[]> {
   const minds = await core.listMinds();
   return Promise.all(minds.map((mind) => readState(core, mind.id, mind.title)));
@@ -110,7 +109,6 @@ export async function seedWorkspace(core: Core, seeds: readonly SeedMind[]): Pro
   }
 }
 
-/** What Accept all or Reject all did, and how to take it back. */
 export interface Decided {
   /** How many changes it took in the Minds it reached. */
   count: number;

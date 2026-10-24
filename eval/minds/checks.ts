@@ -44,7 +44,6 @@ const sameBlocks = (a: readonly BlockState[], b: readonly BlockState[]) =>
     );
   });
 
-/** The Blocks of the section a heading opens, up to the next heading of its level or above. */
 function sectionOf(blocks: readonly BlockState[], name: string) {
   const at = blocks.findIndex(
     (block) => block.type === "heading" && plain(block.text) === plain(name),
@@ -136,7 +135,6 @@ function ruleFailure(rule: Rule, before: MindState, after: MindState): string | 
 
 const sameState = (a: MindState, b: MindState) => a.shown === b.shown;
 
-/** The Minds whose text differs, appears or is gone between two readings of the workspace. */
 function changedBetween(before: readonly MindState[], after: readonly MindState[]) {
   const was = new Map(before.map((mind) => [mind.id, mind]));
   const now = new Map(after.map((mind) => [mind.id, mind]));
@@ -153,7 +151,6 @@ function changedBetween(before: readonly MindState[], after: readonly MindState[
   };
 }
 
-/** The Minds and their text once Accept all has been pressed, held to what the request asked for. */
 export function textFailures(
   expected: Expected,
   before: readonly MindState[],
@@ -202,7 +199,6 @@ export function textFailures(
   return failures;
 }
 
-/** What the card should say a Mind came to: the paragraphs and headings changed, added or removed. */
 function unitCounts(before: MindState | undefined, after: MindState) {
   const was = new Map((before?.units ?? []).map((unit) => [unit.key, unit]));
   const now = new Map(after.units.map((unit) => [unit.key, unit]));
@@ -224,7 +220,6 @@ function unitCounts(before: MindState | undefined, after: MindState) {
   return { low, high: low + addedHeadings };
 }
 
-/** The card's rows against the Minds that changed: the same Minds, with counts that add up. */
 export function cardFailures(
   rows: readonly ChangedMind[],
   before: readonly MindState[],
@@ -275,7 +270,6 @@ export function cardFailures(
 
 const byId = (minds: readonly MindState[]) => new Map(minds.map((mind) => [mind.id, mind]));
 
-/** Reject all leaves every Mind as it was: no change waiting, the same text, no Mind added. */
 export function rejectFailures(
   before: readonly MindState[],
   after: readonly MindState[],
@@ -291,7 +285,6 @@ export function rejectFailures(
   return why.length === 0 ? [] : [{ kind: "reject", why: why.join("; ") }];
 }
 
-/** Accept all keeps every change: none left waiting. */
 export function acceptFailures(after: readonly MindState[]): MindsFailure[] {
   const left = after.filter((mind) => mind.pending > 0);
   return left.length === 0
@@ -306,7 +299,6 @@ export function acceptFailures(after: readonly MindState[]): MindsFailure[] {
       ];
 }
 
-/** Undo restores the state before the step: every Mind, with its waiting changes, as it was. */
 export function undoFailures(
   step: "Accept all" | "Reject all",
   before: readonly MindState[],
@@ -333,7 +325,6 @@ export function undoFailures(
     : [{ kind: "undo", why: `after Undo of ${step}: ${why.join("; ")}` }];
 }
 
-/** The reply to a request for a Mind that isn't there says which Mind it could not find. */
 export function unnamedFailure(expected: Expected, reply: string): MindsFailure[] {
   const name = expected.missing;
   return name !== undefined &&
