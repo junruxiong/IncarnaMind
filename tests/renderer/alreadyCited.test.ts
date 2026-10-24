@@ -6,7 +6,7 @@ import {
   type CitationAttributes,
   type ClaimCheckAttributes,
 } from "../../src/core/api";
-import { alreadyCitedBy, citationDecision } from "../../src/renderer/src/editor/alreadyCited";
+import { citationDecision } from "../../src/renderer/src/editor/alreadyCited";
 import { citationNumbersPlugin } from "../../src/renderer/src/editor/citationNumbers";
 import type { ShownClaim } from "../../src/renderer/src/editor/claimChecks";
 import { noteExtensions } from "../../src/renderer/src/editor/noteSchema";
@@ -80,52 +80,55 @@ function claimOf(
 // The paragraph's content starts at 1; a Citation is one position.
 const firstSentence = (cited: boolean) => ({ from: 1, to: 1 + FIRST.length + (cited ? 1 : 0) });
 
-describe("the Citation of a sentence that already cites what its check found", () => {
-  test("is found whatever span the check quoted, the Citation numbered as the Mind numbers it", () => {
+describe("a sentence that already cites what its check found", () => {
+  test("is already cited whatever span the check quoted, the Citation numbered as the Mind numbers it", () => {
     const held = state({}, null);
     for (const quote of [LINE, "may work from home two days a week", "work from home two days"]) {
       const claim = claimOf(firstSentence(true), { quote });
-      expect(alreadyCitedBy(held, claim)?.number).toBe(1);
+      expect(citationDecision(held, claim)).toMatchObject({
+        kind: "already",
+        citation: { number: 1 },
+      });
     }
   });
 
-  test("is none when the check found the same words on another page of the Document", () => {
-    const held = state({}, null);
-    const claim = claimOf(firstSentence(true), { quote: LINE, pageFrom: 9, pageTo: 9 });
-    expect(alreadyCitedBy(held, claim)).toBeNull();
-  });
-
-  test("is none when the check found another clause of the Document, or another Document", () => {
+  test("is offered the Passage on another page, or another clause, or another Document", () => {
     const held = state({}, null);
     const sentence = firstSentence(true);
     expect(
-      alreadyCitedBy(
+      citationDecision(held, claimOf(sentence, { quote: LINE, pageFrom: 9, pageTo: 9 })).kind,
+    ).toBe("add");
+    expect(
+      citationDecision(
         held,
         claimOf(sentence, { quote: "Probation lasts three months.", pageFrom: 3 }),
-      ),
-    ).toBeNull();
+      ).kind,
+    ).toBe("add");
     expect(
-      alreadyCitedBy(held, claimOf(sentence, { documentId: "handbook", quote: LINE })),
-    ).toBeNull();
+      citationDecision(held, claimOf(sentence, { documentId: "handbook", quote: LINE })).kind,
+    ).toBe("add");
   });
 
-  test("is none for a sentence with no Citation of its own, though the next sentence cites the Passage", () => {
+  test("is offered it for a sentence with no Citation of its own, though the next sentence cites it", () => {
     const held = state(null, {});
-    expect(alreadyCitedBy(held, claimOf(firstSentence(false), { quote: LINE }))).toBeNull();
+    expect(citationDecision(held, claimOf(firstSentence(false), { quote: LINE })).kind).toBe("add");
   });
 
-  test("is the one of several Citations that overlaps", () => {
+  test("is already cited by the one of several Citations that overlaps", () => {
     const held = state({ documentId: "handbook" }, {});
     const sentence = { from: 1, to: 1 + FIRST.length + 1 + 1 + SECOND.length + 1 };
-    expect(alreadyCitedBy(held, claimOf(sentence, { quote: LINE }))?.number).toBe(2);
+    expect(citationDecision(held, claimOf(sentence, { quote: LINE }))).toMatchObject({
+      kind: "already",
+      citation: { number: 2 },
+    });
     expect(
-      alreadyCitedBy(held, claimOf(sentence, { documentId: "handbook", quote: LINE }))?.number,
-    ).toBe(1);
+      citationDecision(held, claimOf(sentence, { documentId: "handbook", quote: LINE })),
+    ).toMatchObject({ kind: "already", citation: { number: 1 } });
   });
 
-  test("is none for a figure worked out or a check that found nothing", () => {
+  test("offers nothing for a figure worked out or a check that found nothing", () => {
     const held = state({}, null);
-    expect(alreadyCitedBy(held, claimOf(firstSentence(true), null))).toBeNull();
+    expect(citationDecision(held, claimOf(firstSentence(true), null)).kind).toBe("none");
     const figure = claimOf(
       firstSentence(true),
       { quote: LINE },
@@ -133,7 +136,7 @@ describe("the Citation of a sentence that already cites what its check found", (
         calculation: {} as ClaimCheckAttributes["calculation"],
       },
     );
-    expect(alreadyCitedBy(held, figure)).toBeNull();
+    expect(citationDecision(held, figure).kind).toBe("none");
   });
 });
 
@@ -188,6 +191,14 @@ describe("what a supported sentence's card offers for the Passage its check foun
         citation: { number: 1 },
       });
     }
+  });
+
+  test("Replace the Citation that doesn't hold rather than widen it, even when the clause goes on", () => {
+    const held = state({ check: "not-found", checkReason: "quote-not-on-pages" }, null);
+    expect(citationDecision(held, claimOf(sentence, { quote: LINE }, {}, LINE))).toMatchObject({
+      kind: "replace",
+      citation: { number: 1 },
+    });
   });
 
   test("Add as Citation when the sentence's Citation holds, is in another Document, or there is none", () => {

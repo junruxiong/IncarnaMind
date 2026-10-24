@@ -19,10 +19,10 @@ const DOESNT_HOLD: ReadonlySet<CitationCheck> = new Set([
 
 /**
  * What a supported sentence's card offers for the Passage its check found
- * (#1620): the Citation that already covers it, as it is or widened to the
- * whole clause; the Citation that doesn't hold, which the Passage should
- * replace; Add as Citation when the sentence cites nothing on those words; or
- * none, for a figure worked out or nothing found.
+ * (#1620): the Citation that doesn't hold, which the Passage should replace;
+ * the Citation that already covers it, as it is or widened to the whole clause;
+ * Add as Citation when the sentence cites nothing on those words; or none, for
+ * a figure worked out or nothing found.
  */
 export type CitationDecision =
   | { kind: "already"; citation: NumberedCitation }
@@ -39,6 +39,9 @@ export function citationDecision(state: EditorState, claim: ShownClaim): Citatio
       attributes.documentId !== null && attributes.documentId === evidence.documentId,
   );
   const overlapping = cited.filter(({ attributes }) => overlapsCitation(attributes, evidence));
+  // A Citation whose own check says it doesn't hold is replaced, never widened: it is broken, not partial.
+  const invalid = overlapping.find(({ attributes }) => DOESNT_HOLD.has(attributes.check));
+  if (invalid) return { kind: "replace", citation: invalid, evidence };
   let wider: NumberedCitation | null = null;
   for (const each of overlapping) {
     if (
@@ -55,13 +58,4 @@ export function citationDecision(state: EditorState, claim: ShownClaim): Citatio
   const replace = cited.find(({ attributes }) => DOESNT_HOLD.has(attributes.check));
   if (replace) return { kind: "replace", citation: replace, evidence };
   return { kind: "add" };
-}
-
-/**
- * The sentence's Citation that already cites the Passage its check found, or
- * null. A figure worked out has inputs, not one Passage to cite.
- */
-export function alreadyCitedBy(state: EditorState, claim: ShownClaim): NumberedCitation | null {
-  const decision = citationDecision(state, claim);
-  return decision.kind === "already" || decision.kind === "widen" ? decision.citation : null;
 }
