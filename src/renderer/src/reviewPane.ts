@@ -1,5 +1,7 @@
+import type { Editor } from "@tiptap/core";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import type { ChangeItem, ReviewItem } from "./editor/theirChanges";
 import { heldByMind } from "./heldByMind";
 
 /** Under a Mind this wide the pane folds to its button (DESIGN.md, the reviewing pane). */
@@ -8,13 +10,15 @@ export const NARROWEST_MIND = 760;
 export type ReviewFilter = "all" | "unresolved";
 
 export interface ReviewPaneState {
-  /** Over the Mind's right edge, while the Mind is too narrow to have it beside; else folded to its button. */
+  /** Open at the page's right edge while the Mind is too narrow to have it beside; else folded to its button. */
   over: boolean;
   /** Null until the User picks: Unresolved once anything has been decided, else All. */
   filter: ReviewFilter | null;
   /** The author shown (`authorKey`); null for everyone. */
   who: string | null;
   selected: string | null;
+  /** The change decided last from the pane: selected again if Undo makes it wait again. */
+  decided: string | null;
   /** Counts the times it was asked to open, so it takes the focus each time. */
   opened: number;
 }
@@ -26,7 +30,14 @@ interface ReviewPanes {
   update(mindId: string, patch: Partial<ReviewPaneState>): void;
 }
 
-const CLOSED: ReviewPaneState = { over: false, filter: null, who: null, selected: null, opened: 0 };
+const CLOSED: ReviewPaneState = {
+  over: false,
+  filter: null,
+  who: null,
+  selected: null,
+  decided: null,
+  opened: 0,
+};
 
 /** Which Minds show their reviewing pane (#697), and what it shows. */
 export const useReviewPanes = create<ReviewPanes>((set) => ({
@@ -56,7 +67,44 @@ export const useReviewPanes = create<ReviewPanes>((set) => ({
 /** The key an author is filtered by: the name, or "" for someone the file doesn't name. */
 export const authorKey = (author: string | null): string => author ?? "";
 
-const reviewables = heldByMind<{ has(): boolean; open(): void }>();
+export const isDecided = (item: Pick<ReviewItem, "kind"> & { state?: ChangeItem["state"] }) =>
+  item.kind === "change" && (item.state === "accepted" || item.state === "rejected");
+
+/** The filter a pane shows: the one the User picked, else Unresolved once anything has been decided. */
+export function filterOf(
+  pane: Pick<ReviewPaneState, "filter"> | undefined,
+  items: readonly (Pick<ReviewItem, "kind"> & { state?: ChangeItem["state"] })[],
+): ReviewFilter {
+  return pane?.filter ?? (items.some(isDecided) ? "unresolved" : "all");
+}
+
+type Listed = Pick<ReviewItem, "kind" | "author"> & { state?: ChangeItem["state"] };
+
+const inFilterOf = (filter: ReviewFilter) => (item: Listed) => filter === "all" || !isDecided(item);
+
+/** The author a pane shows, or null for everyone: also once the filter shows nothing of theirs. */
+export function authorShown(
+  items: readonly Listed[],
+  pane: Pick<ReviewPaneState, "filter" | "who"> | undefined,
+): string | null {
+  const who = pane?.who ?? null;
+  const inFilter = inFilterOf(filterOf(pane, items));
+  return who !== null && items.some((item) => inFilter(item) && authorKey(item.author) === who)
+    ? who
+    : null;
+}
+
+/** The cards a pane shows, by its filter and its author. */
+export function shownIn<T extends Listed>(
+  items: readonly T[],
+  pane: Pick<ReviewPaneState, "filter" | "who"> | undefined,
+): T[] {
+  const inFilter = inFilterOf(filterOf(pane, items));
+  const who = authorShown(items, pane);
+  return items.filter((item) => inFilter(item) && (who === null || authorKey(item.author) === who));
+}
+
+const reviewables = heldByMind<{ editor: Editor; has(): boolean; open(): void }>();
 export const useReviewables = reviewables.use;
 export const holdReviewable = reviewables.hold;
 

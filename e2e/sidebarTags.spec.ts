@@ -1,5 +1,4 @@
 import { writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
@@ -7,6 +6,7 @@ import type { CoreBridge } from "../src/core/api";
 import {
   addDocuments,
   createDataFolder,
+  decisionServer,
   dismissChatSetup,
   focusRingShows,
   launchApp,
@@ -116,51 +116,6 @@ const setLanguage = (window: Page, language: "en" | "zh-CN") =>
     language,
   );
 
-/**
- * A local decision server like Ollama's `/v1/systemone` (no model): the
- * Finance Folder for an invoice, Reports otherwise; Invoice in the review
- * band for an invoice, Report likely for a report, nothing else.
- */
-async function decisionServer(): Promise<Server> {
-  const server = createServer(async (request, response) => {
-    let raw = "";
-    for await (const chunk of request) raw += chunk;
-    response.setHeader("content-type", "application/json");
-    if (request.url !== "/v1/systemone") {
-      response.end(JSON.stringify({ models: [] }));
-      return;
-    }
-    const body = JSON.parse(raw);
-    const text = JSON.stringify(body.state).toLowerCase();
-    const questions = body.questions as Record<
-      string,
-      { type: string; instructions: string; criteria?: Record<string, string> }
-    >;
-    const answers = Object.fromEntries(
-      Object.entries(questions).map(([id, question]) => {
-        if (question.type === "choice") {
-          const wanted = text.includes("invoice") ? "Finance" : "Reports";
-          const choice =
-            Object.entries(question.criteria ?? {}).find(([, value]) =>
-              value.startsWith(wanted),
-            )?.[0] ?? "__unsorted__";
-          return [id, { type: "choice", choice }];
-        }
-        const noul =
-          question.instructions.includes("“Invoice”") && text.includes("invoice")
-            ? 0.65
-            : question.instructions.includes("“Report”") && text.includes("report")
-              ? 0.95
-              : 0.01;
-        return [id, { type: "noul", noul }];
-      }),
-    );
-    response.end(JSON.stringify({ answers }));
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  return server;
-}
-
 /** Each Tag row's name, count and dot's colour (null for "Needs review", which has the review ring). */
 const tagRowsListed = (rows: Locator) =>
   rows.evaluateAll((all) =>
@@ -187,7 +142,7 @@ const marksOf = (row: Locator) =>
   });
 
 test("the Tags section lists each Tag a Document carries with its colour and count, and filters the Library by it, with the mouse and the keyboard", async () => {
-  const server = await decisionServer();
+  const { server } = await decisionServer();
   const { app, window } = await launchApp(dataDir);
   try {
     await dismissChatSetup(window);

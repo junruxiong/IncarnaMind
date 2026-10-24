@@ -1652,6 +1652,11 @@ export type CitationCheckReason =
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
   | "too-many-pages"
+  /**
+   * Not found: words selected in a Document are in several places, and the words around them
+   * don't tell which (`citeSelection`, #101).
+   */
+  | "in-several-places"
   /** Can't check: the cited Units have no text, e.g. scanned pages. */
   | "no-text"
   /** Can't check: the Document was deleted. */
@@ -1699,6 +1704,12 @@ export interface SelectedPart {
    */
   linesBefore?: number;
   linesAfter?: number;
+  /**
+   * The Document's words right before the first part, and after the last, as
+   * the viewer shows them: they tell one place of the same words from another.
+   */
+  before?: string;
+  after?: string;
 }
 
 /** A Citation of what the User selected: the attributes to store on its node, and its quote. */
@@ -8579,7 +8590,8 @@ export interface CoreApi {
   /**
    * Puts a Document's assignment back as it was (null: none), with who chose it, so an
    * automatic choice stays automatic and Organize may change it again, and a Suggested
-   * Folder is a suggestion again. Rejected suggestions stay rejected.
+   * Folder is a suggestion again, which also takes back its rejection: Organize may offer that
+   * Folder for the Document again. Other rejections stay.
    */
   restoreAssignment(
     documentId: string,
