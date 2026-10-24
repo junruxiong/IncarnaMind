@@ -462,6 +462,8 @@ test("⌘Z in the pane takes back the review's own decisions only: a decision af
   await accept(supply);
   await accept(notice);
   const liability = editor.locator("p", { hasText: "6.1 Nothing in this agreement" });
+  // The decisions scrolled the Mind to the top clauses: 6.1 is further down.
+  await liability.scrollIntoViewIfNeeded();
   await slideSelect(window, liability, "negligence");
   await window.keyboard.press("ControlOrMeta+j");
   await expect(window.getByTestId("selection-edit-field")).toBeFocused();
@@ -484,6 +486,11 @@ test("⌘Z in the pane takes back the review's own decisions only: a decision af
   await window.keyboard.press("ControlOrMeta+Shift+z");
   await expect(notice).toHaveAttribute("data-state", "accepted");
   await expect(liability).toContainText("caused by gross negligence");
+  // Done again from the pane, the decision is back on the undo line: ⌘Z outside the pane and the text takes it back.
+  await window.getByTestId("mind-tab").first().focus();
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await expect(supply).toHaveAttribute("data-state", "accepted");
   await app.close();
 });
 

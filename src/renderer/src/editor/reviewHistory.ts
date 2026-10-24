@@ -18,8 +18,14 @@ export interface ReviewHistory {
 }
 
 const histories = new WeakMap<Y.Doc, ReviewHistory>();
+interface Entry {
+  change: Undoable;
+  step: Step;
+  undone: boolean;
+}
+
 // So that ⌘Z in the pane goes through the undo line when its entry is next, and the line stays true.
-const offers = new WeakMap<Step, Undoable>();
+const entries = new WeakMap<Step, Entry>();
 
 export function reviewHistoryOf(doc: Y.Doc): ReviewHistory {
   let history = histories.get(doc);
@@ -35,6 +41,17 @@ export function reviewHistoryOf(doc: Y.Doc): ReviewHistory {
   return history;
 }
 
+// Each Undo and Redo makes the step anew on the other stack: the entry follows it.
+function step(manager: Y.UndoManager, entry: Entry, undo: boolean): void {
+  if (undo) manager.undo();
+  else manager.redo();
+  const now = (undo ? manager.redoStack : manager.undoStack).at(-1);
+  if (!now) return;
+  entry.step = now;
+  entry.undone = undo;
+  entries.set(now, entry);
+}
+
 /**
  * Puts the last decision on the app's undo stack, with its line ("Accepted 1
  * change · Undo"): Undo and Redo there act on this decision alone, and do
@@ -42,54 +59,60 @@ export function reviewHistoryOf(doc: Y.Doc): ReviewHistory {
  */
 export function offerReviewUndo(history: ReviewHistory, said: WordsInLine): void {
   const { manager } = history;
-  let step = manager.undoStack.at(-1);
-  if (!step) return;
-  let undone = false;
-  const change: Undoable = {
-    said,
-    undo: async () => {
-      if (undone || !step || manager.undoStack.at(-1) !== step) return;
-      manager.undo();
-      undone = true;
-      step = manager.redoStack.at(-1);
-      if (step) offers.set(step, change);
+  const last = manager.undoStack.at(-1);
+  if (!last) return;
+  const entry: Entry = {
+    change: {
+      said,
+      undo: async () => {
+        if (!entry.undone && manager.undoStack.at(-1) === entry.step) step(manager, entry, true);
+      },
+      redo: async () => {
+        if (entry.undone && manager.redoStack.at(-1) === entry.step) step(manager, entry, false);
+      },
     },
-    redo: async () => {
-      if (!undone || !step || manager.redoStack.at(-1) !== step) return;
-      manager.redo();
-      undone = false;
-      step = manager.undoStack.at(-1);
-      if (step) offers.set(step, change);
-    },
+    step: last,
+    undone: false,
   };
-  offers.set(step, change);
-  useUndo.getState().push(change);
+  entries.set(last, entry);
+  useUndo.getState().push(entry.change);
 }
 
 /** ⌘Z in the pane: the last decision made from it, through its undo line when that is next. */
 export function undoInPane(history: ReviewHistory): void {
-  const step = history.manager.undoStack.at(-1);
-  if (!step) return;
-  const offer = offers.get(step);
+  const { manager } = history;
+  const top = manager.undoStack.at(-1);
+  if (!top) return;
+  const entry = entries.get(top);
   const app = useUndo.getState();
-  if (offer && app.done.at(-1) === offer) {
+  if (!entry) {
+    manager.undo();
+    return;
+  }
+  if (app.done.at(-1) === entry.change) {
     void app.undo();
     return;
   }
-  if (offer) app.withdraw(offer);
-  history.manager.undo();
+  // Taken back here, out of turn with the line: off the line until it is done again.
+  app.withdraw(entry.change);
+  step(manager, entry, true);
 }
 
-/** ⇧⌘Z in the pane: the decision taken back last, done again. */
+/** ⇧⌘Z in the pane: the decision taken back last, done again, and back on the undo line. */
 export function redoInPane(history: ReviewHistory): void {
-  const step = history.manager.redoStack.at(-1);
-  if (!step) return;
-  const offer = offers.get(step);
+  const { manager } = history;
+  const top = manager.redoStack.at(-1);
+  if (!top) return;
+  const entry = entries.get(top);
   const app = useUndo.getState();
-  if (offer && app.undone.at(-1) === offer) {
+  if (!entry) {
+    manager.redo();
+    return;
+  }
+  if (app.undone.at(-1) === entry.change) {
     void app.redo();
     return;
   }
-  if (offer) app.withdraw(offer);
-  history.manager.redo();
+  step(manager, entry, false);
+  app.renew(entry.change);
 }
