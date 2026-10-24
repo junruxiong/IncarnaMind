@@ -8,7 +8,7 @@ import { ask } from "../../eval/everyday/asking";
 import { CASES, type MindsCase, WORKSPACES } from "../../eval/minds/cases";
 import { sentencesIn } from "../../eval/minds/checks";
 import { examine } from "../../eval/minds/examine";
-import { BAR, median, type RunResult, rowsOf } from "../../eval/minds/report";
+import { BAR, median, type RunResult, report, rowsOf } from "../../eval/minds/report";
 import { readWorkspace, seedWorkspace } from "../../eval/minds/state";
 import { createTempDataFolder, startCore } from "../helpers/core";
 import {
@@ -364,6 +364,60 @@ describe("The requests and their scoring", () => {
     expect(sentencesIn("Revenue was €4.2 million. It grew 6%.")).toBe(2);
     expect(sentencesIn("Revenue grew")).toBe(1);
     expect(sentencesIn("收入增长了。支出持平！")).toBe(2);
+  });
+
+  // protects=the report names the requests under the bar, counts the changes applied at once and waiting, and prints a failure's transcript; fails_when=a failing run's transcript or the counts are missing; no_claim=none beyond protects.
+  test("the report lists the failures with their transcripts", () => {
+    const tokens = {
+      requests: 1,
+      inputTokens: 10,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 2,
+    };
+    const run = (passed: boolean): RunResult => ({
+      id: "term-three-en",
+      language: "en",
+      request: "Change supplier to vendor.",
+      model: "m/x",
+      run: 1,
+      failures: passed ? [] : [{ kind: "wrong-minds", missing: ["Harbour risks"], extra: [] }],
+      error: null,
+      reply: "Done.",
+      answeredSeconds: 4,
+      seconds: 5,
+      chat: tokens,
+      judging: tokens,
+      retries: 0,
+      calls: [
+        "- edit_mind “Harbour plan”: proposed 3 changes, applied in the Mind at once, with Undo",
+        "- edit_mind “Harbour budget”: proposed 1 change, waiting for the User",
+      ],
+      card: [{ mind: "Harbour plan", created: false, changed: 2, wrote: 0 }],
+      transcript: ["calls edit_mind {}", "says: Done."],
+    });
+    const results = [run(false)];
+    const text = report(results, rowsOf(results), {
+      commit: "abc",
+      judge: "j/j",
+      spentDollars: 0.1,
+      stopped: null,
+    });
+
+    expect(text).toContain(
+      "| term-three-en | en | m/x | 0 of 1 **under the bar** | 4 | 10 / 2 | 1 / 1 |",
+    );
+    expect(text).toContain("wrong Minds changed");
+    expect(text).toContain("not changed: Harbour risks");
+    expect(text).toContain("calls edit_mind {}");
+    expect(
+      report([run(true)], rowsOf([run(true)]), {
+        commit: "abc",
+        judge: "j/j",
+        spentDollars: 0,
+        stopped: null,
+      }),
+    ).toContain("No run failed.");
   });
 
   // protects=a request is under the bar below 9 of 10 runs and not at 9; fails_when=9 of 10 is under the bar, or an error counts as a pass; no_claim=none beyond protects.

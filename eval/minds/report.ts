@@ -83,6 +83,8 @@ export function median(values: readonly number[]): number {
     : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 }
 
+const MIND_WRITES = /^- (?:edit_mind|add_to_mind|create_mind)\b.*\bproposed\b/;
+
 const percent = (passed: number, total: number) => `${Math.round((100 * passed) / total)}%`;
 const cell = (text: string) => text.replace(/\|/g, "\\|").replace(/\n/g, " ");
 const thousands = (count: number) => Math.round(count).toLocaleString("en");
@@ -141,11 +143,15 @@ export function report(
     }),
     "## By request",
     "",
-    "| Request | Language | Model | Passed | Median s | Tokens in / out a run |",
-    "|---|---|---|---|---|---|",
+    "The last column counts the Minds changed in all of a request's runs: those whose changes the app applies at once, and those that wait for the User to accept them.",
+    "",
+    "| Request | Language | Model | Passed | Median s | Tokens in / out a run | Applied at once / waiting |",
+    "|---|---|---|---|---|---|---|",
     ...rows.map((row) => {
       const own = results.filter((result) => result.id === row.id && result.model === row.model);
-      return `| ${row.id} | ${row.language} | ${row.model} | ${row.passed} of ${row.runs}${row.under ? " **under the bar**" : ""} | ${median(own.map((each) => each.answeredSeconds)).toFixed(0)} | ${thousands(average(own.map((each) => each.chat.inputTokens)))} / ${thousands(average(own.map((each) => each.chat.outputTokens)))} |`;
+      const fates = own.flatMap((each) => each.calls).filter((line) => MIND_WRITES.test(line));
+      const applied = fates.filter((line) => line.includes("applied in the Mind at once")).length;
+      return `| ${row.id} | ${row.language} | ${row.model} | ${row.passed} of ${row.runs}${row.under ? " **under the bar**" : ""} | ${median(own.map((each) => each.answeredSeconds)).toFixed(0)} | ${thousands(average(own.map((each) => each.chat.inputTokens)))} / ${thousands(average(own.map((each) => each.chat.outputTokens)))} | ${applied} / ${fates.length - applied} |`;
     }),
     "",
     "## By language",
