@@ -430,6 +430,11 @@ test("decisions one after another are each taken back by ⌘Z in the pane, an ol
   await window.keyboard.press("ControlOrMeta+Shift+z");
   await expect(notice).toHaveAttribute("data-state", "accepted");
   await expect(frontMindName(window)).toHaveText("Northwind supply");
+  // Taken back again after Redo, it is selected again too.
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await expect(notice).toHaveAttribute("data-selected", "true");
+  await expect(notice.locator("[data-review-id]")).toBeFocused();
   await app.close();
 });
 

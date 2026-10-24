@@ -108,7 +108,9 @@ export function decideSelected(
   const index = changes.findIndex((each) => each.id === change.id);
   const next = changes[index + 1] ?? changes[index - 1] ?? null;
   decideInPane(editor, mindId, [change.id], outcome);
-  useReviewPanes.getState().update(mindId, { decided: [...decided, change.id] });
+  useReviewPanes
+    .getState()
+    .update(mindId, { decided: [...decided.filter((each) => each !== change.id), change.id] });
   if (next) selectCard(editor, mindId, next.id, { scroll: true });
   else washSelected(editor, useReviewPanes.getState().panes[mindId]?.selected ?? null);
   return next?.id ?? null;

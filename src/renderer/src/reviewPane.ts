@@ -18,8 +18,8 @@ export interface ReviewPaneState {
   who: string | null;
   selected: string | null;
   /**
-   * The changes decided one by one from the pane, most recent last: each is
-   * selected again if Undo makes it wait again.
+   * The changes decided one by one from the pane, most recent last: the one
+   * Undo makes wait again is selected again.
    */
   decided: readonly string[];
   /** Counts the times it was asked to open, so it takes the focus each time. */

@@ -157,18 +157,22 @@ export function ReviewPane({
   useEffect(() => washSelected(editor, selected), [editor, selected, items]);
   useEffect(() => () => washSelected(editor, null), [editor]);
 
-  // Undo brings back each change decided from the pane, the last first: each is selected again, so ⌘↵ after ⌘Z acts on it.
+  // Undo brings back a change decided from the pane: the one that starts waiting again is selected, so ⌘↵ after ⌘Z acts on it.
+  const waitingBefore = useRef<ReadonlySet<string> | null>(null);
   useEffect(() => {
-    const decided = useReviewPanes.getState().panes[mindId]?.decided ?? [];
-    const undone = decided.findLast((id) =>
-      items.some((item) => item.id === id && item.kind === "change" && item.state === "waiting"),
+    const waiting = new Set(
+      items
+        .filter((item) => item.kind === "change" && item.state === "waiting")
+        .map((item) => item.id),
     );
+    const before = waitingBefore.current;
+    waitingBefore.current = waiting;
+    if (before === null) return;
+    const decided = useReviewPanes.getState().panes[mindId]?.decided ?? [];
+    const undone = decided.findLast((id) => waiting.has(id) && !before.has(id));
     if (undone === undefined) return;
     const inPane = list.current?.contains(document.activeElement) ?? false;
     selectCard(editor, mindId, undone, { scroll: true });
-    useReviewPanes
-      .getState()
-      .update(mindId, { decided: decided.filter((each) => each !== undone) });
     if (inPane) focusCard(list, closeButton, undone);
   }, [items, editor, mindId]);
 
