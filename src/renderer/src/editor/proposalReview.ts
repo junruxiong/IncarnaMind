@@ -799,7 +799,8 @@ export function changeReason(
  * `"all"` takes every Proposal the Mind holds when it runs, ones an Undo has
  * just brought back included, rather than a list read earlier, but those an
  * edit is applying and those of the requests `except` names. `alsoRecord`
- * writes more into the Mind in the same step, with what was resolved.
+ * writes more into the Mind in the same step, with what was resolved. With
+ * `history`, the step is that history's, not the editor's.
  */
 export function resolveInEditor(
   editor: Editor,
@@ -807,10 +808,12 @@ export function resolveInEditor(
   outcome: "accept" | "reject",
   except: ReadonlySet<string> = new Set(),
   alsoRecord?: (doc: Y.Doc, resolved: readonly ResolvedProposal[]) => void,
+  history?: { manager: Y.UndoManager; origin: object },
 ): ResolvedProposal[] {
   const binding = bindingOf(editor);
   if (!binding || (ids !== "all" && ids.size === 0)) return [];
-  const undo: Y.UndoManager | undefined = yUndoPluginKey.getState(editor.state)?.undoManager;
+  const undo: Y.UndoManager | undefined =
+    history?.manager ?? yUndoPluginKey.getState(editor.state)?.undoManager;
   // The counts of what was decided (`decideProposals`) go back with the Blocks.
   undo?.addToScope(binding.doc.getMap(MIND_PROPOSAL_REQUESTS_FIELD));
   undo?.stopCapturing();
@@ -827,7 +830,7 @@ export function resolveInEditor(
       outcome,
     );
     alsoRecord?.(binding.doc, resolved);
-  }, ySyncPluginKey);
+  }, history?.origin ?? ySyncPluginKey);
   undo?.stopCapturing();
   return resolved;
 }

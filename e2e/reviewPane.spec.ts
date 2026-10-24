@@ -18,6 +18,8 @@ import {
   renameInTab,
   setLanguage,
   setWindowSize,
+  slideSelect,
+  useLocalChatModel,
 } from "./app";
 
 /*
@@ -417,6 +419,71 @@ test("decisions one after another are each taken back by ⌘Z in the pane, an ol
   await window.keyboard.press("ControlOrMeta+Shift+z");
   await expect(notice).toHaveAttribute("data-state", "accepted");
   await expect(frontMindName(window)).toHaveText("Northwind supply");
+  await app.close();
+});
+
+test("⌘Z in the pane takes back the review's own decisions only: a decision after an Undo, and an Edit with AI after them, leave the rename and the edit alone", async () => {
+  const { app, window } = await launchApp(dataDir, { home, fakeChat: true });
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  await useLocalChatModel(window);
+  await importFile(window, app, "Supply agreement v5.docx", supplyRedline());
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
+  await renameInTab(window, "Northwind supply");
+  await pointAndClick(window, window.getByTestId("their-changes-review"));
+  const pane = window.getByTestId("review-pane");
+  const editor = window.getByTestId("mind-editor");
+  const cards = cardsOf(pane);
+  const [supply, notice, prices] = [cards.nth(0), cards.nth(1), cards.nth(2)];
+  const accept = async (card: Locator) => {
+    await pointAndClick(window, card.locator("[data-review-id]"));
+    await pointAndClick(window, card.getByTestId("review-accept"));
+    await expect(card).toHaveAttribute("data-state", "accepted");
+  };
+
+  // Two decisions, ⌘Z, a third: ⌘Z ⌘Z take back the third and the first, never the rename.
+  await accept(supply);
+  await accept(notice);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await accept(prices);
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(prices).toHaveAttribute("data-state", "waiting");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(supply).toHaveAttribute("data-state", "waiting");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  // Nothing of the review is left to take back: ⌘Z there does nothing.
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(frontMindName(window)).toHaveText("Northwind supply");
+  await expect(cards.locator(":scope[data-state='accepted']")).toHaveCount(0);
+
+  // Two decisions, then an Edit with AI in the text: ⌘Z in the pane takes back the decisions only.
+  await accept(supply);
+  await accept(notice);
+  const liability = editor.locator("p", { hasText: "6.1 Nothing in this agreement" });
+  await slideSelect(window, liability, "negligence");
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("selection-edit-field")).toBeFocused();
+  await window.keyboard.type("replace negligence with gross negligence");
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("selection-edit-working")).toHaveCount(0);
+  await expect(liability).toContainText("caused by gross negligence");
+  await pointAndClick(window, notice.locator("[data-review-id]"));
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(supply).toHaveAttribute("data-state", "waiting");
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(liability).toContainText("caused by gross negligence");
+  await expect(frontMindName(window)).toHaveText("Northwind supply");
+  // ⇧⌘Z does them again in order.
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(supply).toHaveAttribute("data-state", "accepted");
+  await expect(notice).toHaveAttribute("data-state", "waiting");
+  await window.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(notice).toHaveAttribute("data-state", "accepted");
+  await expect(liability).toContainText("caused by gross negligence");
   await app.close();
 });
 

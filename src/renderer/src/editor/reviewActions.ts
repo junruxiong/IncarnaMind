@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { resolveProposalsIn } from "../editWithAi";
 import { authorShown, shownIn, useReviewPanes } from "../reviewPane";
 import { editorDoc, pendingIn } from "./proposalReview";
+import { redoInPane, reviewHistoryOf, undoInPane } from "./reviewHistory";
 import { type PickedRange, pickInMind, scrollMindTo } from "./reviewPick";
 import { type ChangeItem, type ReviewItem, reviewItemsIn } from "./theirChanges";
 
@@ -99,14 +100,14 @@ export function decideSelected(
   if (!change) return null;
   // Not accepted, and the User hears why.
   if (outcome === "accept" && change.outOfDate) {
-    resolveProposalsIn(editor, mindId, [change.id], outcome);
+    decideInPane(editor, mindId, [change.id], outcome);
     return change.id;
   }
   const pane = useReviewPanes.getState().panes[mindId];
   const changes = shownIn(itemsOf(editor), pane).filter(waiting);
   const index = changes.findIndex((each) => each.id === change.id);
   const next = changes[index + 1] ?? changes[index - 1] ?? null;
-  resolveProposalsIn(editor, mindId, [change.id], outcome);
+  decideInPane(editor, mindId, [change.id], outcome);
   useReviewPanes.getState().update(mindId, { decided: change.id });
   if (next) selectCard(editor, mindId, next.id, { scroll: true });
   else washSelected(editor, useReviewPanes.getState().panes[mindId]?.selected ?? null);
@@ -136,5 +137,26 @@ export function decideAuthor(
   const ids = itemsOf(editor)
     .filter((item): item is ChangeItem => waiting(item) && item.author === author)
     .map((each) => each.id);
-  resolveProposalsIn(editor, mindId, ids, outcome);
+  decideInPane(editor, mindId, ids, outcome);
+}
+
+/** Decides from the pane: into the review's own history, which ⌘Z and ⇧⌘Z in the pane walk. */
+export function decideInPane(
+  editor: Editor,
+  mindId: string,
+  ids: readonly string[],
+  outcome: "accept" | "reject",
+): void {
+  const doc = editorDoc(editor);
+  resolveProposalsIn(editor, mindId, ids, outcome, doc ? reviewHistoryOf(doc) : undefined);
+}
+
+export function undoDecision(editor: Editor): void {
+  const doc = editorDoc(editor);
+  if (doc) undoInPane(reviewHistoryOf(doc));
+}
+
+export function redoDecision(editor: Editor): void {
+  const doc = editorDoc(editor);
+  if (doc) redoInPane(reviewHistoryOf(doc));
 }

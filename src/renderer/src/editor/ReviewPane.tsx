@@ -29,7 +29,6 @@ import {
   segmentedClass,
 } from "../components/ui";
 import { usePopoverMenu } from "../components/usePopoverMenu";
-import { resolveProposalsIn } from "../editWithAi";
 import { useLanguage, useT } from "../i18n";
 import {
   authorKey,
@@ -42,7 +41,16 @@ import {
   useReviewPanes,
 } from "../reviewPane";
 import { pendingIn } from "./proposalReview";
-import { decideSelected, itemsOf, selectCard, selectedChange, washSelected } from "./reviewActions";
+import {
+  decideInPane,
+  decideSelected,
+  itemsOf,
+  redoDecision,
+  selectCard,
+  selectedChange,
+  undoDecision,
+  washSelected,
+} from "./reviewActions";
 import {
   type ChangeItem,
   type CommentItem,
@@ -77,6 +85,9 @@ function focusCard(
 
 const ACCEPT_KEYS = "CmdOrCtrl+Enter";
 const REJECT_KEYS = "CmdOrCtrl+Backspace";
+const UNDO_KEYS = "CmdOrCtrl+Z";
+const REDO_KEYS = "CmdOrCtrl+Shift+Z";
+const REDO_OTHER_KEYS = "Ctrl+Y";
 
 const pressedKeys = (keys: ShortcutKeys, event: KeyboardEvent<Element>) =>
   pressed(keysOn(keys, isMacOS()), event.nativeEvent, isMacOS());
@@ -244,8 +255,19 @@ export function ReviewPane({
       data-placement={over ? "over" : "beside"}
       className={`review-pane ${over ? "review-pane--over" : ""}`}
       onKeyDown={(event) => {
-        if (event.key !== "Escape" || event.defaultPrevented || event.nativeEvent.isComposing)
+        if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+        // In the pane, Undo and Redo walk its own decisions only, never what the User did elsewhere.
+        if (pressedKeys(UNDO_KEYS, event)) {
+          event.preventDefault();
+          undoDecision(editor);
           return;
+        }
+        if (pressedKeys(REDO_KEYS, event) || (!isMacOS() && pressedKeys(REDO_OTHER_KEYS, event))) {
+          event.preventDefault();
+          redoDecision(editor);
+          return;
+        }
+        if (event.key !== "Escape") return;
         event.preventDefault();
         close();
       }}
@@ -426,7 +448,7 @@ function PaneMenu({ editor, mindId }: { editor: Editor; mindId: string }) {
   const authors = [...new Set(waiting.map((each) => authorKey(each.author)))];
   const decide = (ids: string[], outcome: "accept" | "reject") => {
     menu.close();
-    resolveProposalsIn(editor, mindId, ids, outcome);
+    decideInPane(editor, mindId, ids, outcome);
   };
   const item = (testId: string, label: string, ids: string[], outcome: "accept" | "reject") => (
     <button
