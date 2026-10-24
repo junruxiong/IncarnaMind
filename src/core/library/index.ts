@@ -1100,6 +1100,14 @@ export function createLibrary(options: {
       const status = previous.status === "classifying" ? "pending" : previous.status;
       db.transaction(() => {
         write(doc, previous.groupId, previous.source, status, previous.model, previous.suggested);
+        // Taking back a rejection brings the Folder back among those Organize may offer again.
+        if (previous.suggested && previous.groupId) {
+          const at = now();
+          db.run(
+            "UPDATE document_group_rejections SET deleted_at = ?, updated_at = ? WHERE document_id = ? AND group_id = ? AND deleted_at IS NULL",
+            [at, at, doc.id, previous.groupId],
+          );
+        }
         if (previous.filedAt !== undefined)
           db.run(
             "UPDATE document_groups SET filed_at = ? WHERE document_id = ? AND deleted_at IS NULL",

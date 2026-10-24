@@ -18,6 +18,7 @@ export function SectionHead({
   name,
   count,
   tip,
+  after,
   end,
   testId,
   rowProps,
@@ -32,6 +33,7 @@ export function SectionHead({
   name: ReactNode;
   count: number;
   tip?: string | undefined;
+  after?: ReactNode;
   end?: ReactNode;
   testId: string;
   rowProps?: HTMLAttributes<HTMLDivElement>;
@@ -73,6 +75,7 @@ export function SectionHead({
       >
         {count}
       </span>
+      {after}
       <span className="min-w-0 flex-1" />
       {end}
     </div>
