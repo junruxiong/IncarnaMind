@@ -48,11 +48,11 @@ test.afterEach(async () => {
  * The app with the scripted model (none set up with `model: false`), the paper beside a new
  * Mind, and a page's text layer.
  */
-async function paperBesideMind({ model = true, name = "Rate cuts" } = {}) {
+async function paperBesideMind({ model = true, name = "Rate cuts", width = 1440 } = {}) {
   const path = join(sources, `${name}.pdf`);
   await writeFile(path, PAPER);
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
-  await setWindowSize(app, window, 1440, 900);
+  await setWindowSize(app, window, width, 900);
   await dismissChatSetup(window);
   if (model) await connectLocalChatModel(window);
   await addDocuments(window, [path]);
@@ -116,6 +116,26 @@ test("Ask about this puts the words in the composer, and the Question keeps them
 
 const heldDrawn = (window: Page) =>
   window.evaluate(() => CSS.highlights.get("viewer-held-selection")?.size ?? 0);
+
+test("at 900 px, a chip added with the Document's tab in front goes with the words into the Mind's composer, and is asked", async () => {
+  const { window, layer } = await paperBesideMind({ width: 900 });
+  await expect(window.getByTestId("mind-tab").first()).toHaveAttribute("aria-selected", "false");
+  await select(window, layer(1), "Grocers studied across the eleven chains");
+  await pointAndClick(window, window.getByTestId("viewer-selection-ask"));
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("What does this mean?");
+
+  await pointAndClick(window, window.getByTestId("mind-tab").first());
+
+  await expect(window.getByTestId("composer-input")).toHaveValue("What does this mean?");
+  await expect(chips(window)).toHaveCount(1);
+  await window.getByTestId("composer-input").focus();
+  await window.keyboard.press("Enter");
+  const question = window.getByTestId("assistant").getByTestId("assistant-question").last();
+  await expect(question.getByTestId("assistant-question-quote")).toContainText(
+    "Grocers studied across the eleven chains",
+  );
+});
 
 test("with no model set, the waiting Question shows its quote, and Set up later or a quit gives back the words and the chip", async () => {
   const { app, window, layer } = await paperBesideMind({ model: false });

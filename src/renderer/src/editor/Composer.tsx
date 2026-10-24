@@ -159,7 +159,8 @@ export function Composer({
   // What the chips show: what the core will search (#1359). Asking sends `composerScope`.
   const scope = mindSearchScope(draft.scope, folderId, folderHolds);
   // The Mind in focus changes under the one composer: what was typed with no Mind goes with the
-  // User into the Mind that opens, whose draft is empty; the rest of its state starts over.
+  // User into the Mind that opens, whose draft is empty, and the quotes waiting with it go
+  // whatever that draft holds; the rest of its state starts over.
   const was = useRef(key);
   useEffect(() => {
     const before = was.current;
@@ -173,10 +174,18 @@ export function Composer({
     const state = useComposer.getState();
     const loose = state.draft(NO_MIND);
     const own = state.draft(key);
-    if (loose.text === "" && loose.pastes.length === 0) return;
-    if (own.text !== "" || own.pastes.length > 0) return;
-    state.update(key, { text: loose.text, pastes: loose.pastes });
-    state.update(NO_MIND, { text: "", pastes: [] });
+    const quotes = loose.quotes ?? [];
+    const words =
+      (loose.text !== "" || loose.pastes.length > 0) && own.text === "" && own.pastes.length === 0;
+    if (!words && quotes.length === 0) return;
+    state.update(key, {
+      ...(words && { text: loose.text, pastes: loose.pastes }),
+      ...(quotes.length > 0 && { quotes: withQuotes(own.quotes ?? [], quotes) }),
+    });
+    state.update(NO_MIND, {
+      ...(words && { text: "", pastes: [] }),
+      ...(quotes.length > 0 && { quotes: [] }),
+    });
   }, [key]);
   const problem = useAnswers((state) => state.blocked[composerKey(mindId)]);
   const skills = useAppStore((state) => state.skills);
