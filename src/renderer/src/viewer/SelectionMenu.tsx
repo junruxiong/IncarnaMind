@@ -89,9 +89,11 @@ export function SelectionMenu({
     const read = () => {
       const range = rangeIn(section);
       if (!range) return;
-      const parts = reader(range);
+      const { parts, shown } = reader(range);
       setHeld(
-        parts.length > 0 ? { selection: { document, parts }, range: range.cloneRange() } : null,
+        parts.length > 0
+          ? { selection: { document, parts, shown }, range: range.cloneRange() }
+          : null,
       );
       setOpen(parts.length > 0);
       setPicking(false);
@@ -190,9 +192,9 @@ export function SelectionMenu({
   // What is selected when the User acts, should Shift have changed it since it was read.
   const heldNow = useCallback((): Held | null => {
     const range = section && rangeIn(section);
-    const parts = range ? reader(range) : [];
+    const { parts, shown } = range ? reader(range) : { parts: [], shown: undefined };
     return range && parts.length > 0
-      ? { selection: { document, parts }, range: range.cloneRange() }
+      ? { selection: { document, parts, shown }, range: range.cloneRange() }
       : null;
   }, [section, reader, document]);
 

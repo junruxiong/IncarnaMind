@@ -1155,6 +1155,8 @@ export const en = {
   "viewer.selection.copied": "Copied with its citation",
   "viewer.selection.refused":
     "Couldn’t cite these words: the Document’s text where you selected them doesn’t have them.",
+  "viewer.selection.refused.places":
+    "Couldn’t cite these words: the Document has them in several places. Select a few more words around them.",
   "viewer.selection.refused.pages":
     "Couldn’t cite these words: a Citation covers two pages at most.",
   "viewer.selection.refused.noText":
@@ -3059,6 +3061,8 @@ export const en = {
   "citation.reason.quote-not-on-pages": "The quote isn’t in the text of the place it cites.",
   "citation.reason.pages-outside-passage": "The cited place isn’t in the quote’s Passage.",
   "citation.reason.too-many-pages": "A Citation can cite one place, or two in a row.",
+  "citation.reason.in-several-places":
+    "The words are in several places, and nothing around them tells which.",
   "citation.reason.no-text": "The cited place has no text, e.g. a scan.",
   "citation.reason.document-removed": "The Document has been deleted.",
   "citation.reason.quoted-words-not-on-pages": "The quoted words aren’t in the cited place.",

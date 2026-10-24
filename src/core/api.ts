@@ -1652,6 +1652,11 @@ export type CitationCheckReason =
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
   | "too-many-pages"
+  /**
+   * Not found: words selected in a Document are in several places, and the words around them
+   * don't tell which (`citeSelection`, #101).
+   */
+  | "in-several-places"
   /** Can't check: the cited Units have no text, e.g. scanned pages. */
   | "no-text"
   /** Can't check: the Document was deleted. */
@@ -1699,6 +1704,12 @@ export interface SelectedPart {
    */
   linesBefore?: number;
   linesAfter?: number;
+  /**
+   * The Document's words right before the first part, and after the last, as
+   * the viewer shows them: they tell one place of the same words from another.
+   */
+  before?: string;
+  after?: string;
 }
 
 /** A Citation of what the User selected: the attributes to store on its node, and its quote. */
