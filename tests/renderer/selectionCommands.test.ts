@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from "vitest";
+import type { Document, Mind } from "../../src/core/api";
 import { buildMenu, buildMixedMenu, type MenuEntry } from "../../src/renderer/src/commands/menus";
 import {
   type CommandContext,
@@ -27,6 +28,49 @@ const idsIn = (entries: MenuEntry[]) =>
 const english = (key: MessageKey, params?: MessageParams) => translate("en", key, params);
 const chinese = (key: MessageKey, params?: MessageParams) => translate("zh-CN", key, params);
 
+/** A Mind as the store holds one. */
+const mindOf = (id: string): Mind => ({
+  id,
+  title: "",
+  autoTitle: "",
+  kind: "mind",
+  createdAt: "",
+  updatedAt: "",
+  folderId: null,
+});
+
+/** A ready Document as the store holds one. */
+const documentOf = (id: string): Document => ({
+  id,
+  name: `Doc ${id}`,
+  kind: "pdf",
+  contentHash: "",
+  path: `/${id}.pdf`,
+  fileStatus: "available",
+  linkedFolderId: null,
+  size: 0,
+  pageCount: null,
+  status: "ready",
+  progress: null,
+  scan: null,
+  failure: null,
+  folderId: null,
+  tags: [],
+  tagging: "off",
+  taggingError: null,
+  creationDate: null,
+  modifiedAt: null,
+  title: null,
+  web: null,
+  reference: null,
+  ownFile: null,
+  notCited: false,
+  found: null,
+  importedAs: null,
+  createdAt: "",
+  updatedAt: "",
+});
+
 beforeAll(async () => {
   const bridge = new Proxy({}, { get: () => () => () => undefined });
   (globalThis as unknown as { window: unknown }).window = {
@@ -36,18 +80,8 @@ beforeAll(async () => {
   await import("../../src/renderer/src/commands/app");
   const { useAppStore } = await import("../../src/renderer/src/store");
   useAppStore.setState({
-    minds: ["m", "n"].map((id) => ({ id }) as never),
-    documents: ["a", "b", "c"].map(
-      (id) =>
-        ({
-          id,
-          name: `Doc ${id}`,
-          kind: "pdf",
-          status: "ready",
-          fileStatus: "available",
-          path: `/${id}.pdf`,
-        }) as never,
-    ),
+    minds: ["m", "n"].map(mindOf),
+    documents: ["a", "b", "c"].map(documentOf),
   });
 });
 
@@ -98,19 +132,7 @@ describe("a selection of Documents", () => {
     const { useAppStore } = await import("../../src/renderer/src/store");
     const before = useAppStore.getState();
     const documents = Array.from({ length: 1731 }, (_, at) => doc(`d${at}`));
-    useAppStore.setState({
-      documents: documents.map(
-        ({ id }) =>
-          ({
-            id,
-            name: `Doc ${id}`,
-            kind: "pdf",
-            status: "ready",
-            fileStatus: "available",
-            path: `/${id}.pdf`,
-          }) as never,
-      ),
-    });
+    useAppStore.setState({ documents: documents.map(({ id }) => documentOf(id)) });
     try {
       const many = selectionOf(documents);
       const found = new Map(
@@ -126,13 +148,11 @@ describe("a selection of Documents", () => {
       expect(says("document.ask", english)).toBe("Ask about these 1,731 Documents");
       expect(says("document.delete", english)).toBe("Delete 1,731 Documents");
       expect(says("folder.newWith", english)).toBe("New Folder with 1,731 Documents");
-
-      useAppStore.setState({ settings: { language: "zh-CN" } as never });
       expect(says("document.ask", chinese)).toBe("就这 1,731 个文档提问");
       expect(says("document.delete", chinese)).toBe("删除 1,731 个文档");
       expect(says("folder.newWith", chinese)).toBe("新建文件夹并放入 1,731 个文档");
     } finally {
-      useAppStore.setState({ documents: before.documents, settings: before.settings });
+      useAppStore.setState({ documents: before.documents });
     }
   });
 
