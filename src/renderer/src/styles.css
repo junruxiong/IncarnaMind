@@ -6770,17 +6770,11 @@
    * between turns, so the note beside it stays the largest text on screen.
    * Each Answer's checks sit in a margin at its right, as in a Mind.
    */
-  /* Short, it sits at the foot, by the composer, as in Claude and ChatGPT. */
+  /* Short, it starts at the top, so a Question holds its place while its Answer grows below it. */
   .assistant-log {
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
     gap: 10px;
-    min-height: 100%;
-
-    &:has(> .assistant-empty) {
-      justify-content: flex-start;
-    }
   }
   .assistant-question {
     display: flex;
