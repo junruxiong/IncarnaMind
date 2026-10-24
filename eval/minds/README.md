@@ -76,3 +76,39 @@ The report goes into `eval/results/<start time>-minds/`. `report.md` has the pas
 `npm run eval:minds` needs only the variables above, and no key is in the repository. The nightly real-model job (`scripts/nightlyRealModel.ts`) doesn't run it yet. For that, its `STEPS` need an entry that runs `npm run eval:minds` with `INCARNAMIND_EVAL_MINDS_RUNS=3` on Claude Haiku 5.5 (and one on Kimi K2.6 with its judge), and the driver needs to read `report.json` from a `*-minds` folder as it does from `*-everyday`. The secrets are the job's: `NIGHTLY_ANTHROPIC_KEY_1` and `_2`, and `NIGHTLY_KIMI_KEY`, from capped keys.
 
 ## Results
+
+### 2026-10-24: the first measurement (#1781)
+
+Commit 6044399af, the code of this folder. Ten runs of each request on each model, three or four at a time. Claude Haiku 5.5 (`claude-haiku-5-5`) and Kimi K2.6 (`kimi-k2.6`, International endpoint, made-up Minds only), the claims judged by Claude Sonnet 5.5. "Passed" is the share of runs that pass every check; the bar is 9 of 10. Seconds are the median from asking to the end of the Answer; tokens are a run's average over all its model requests, the rewrites `edit_mind` asks for included.
+
+| Request | Haiku 5.5 passed | s | tokens in / out | Kimi K2.6 passed | s | tokens in / out |
+|---|---|---|---|---|---|---|
+| `shorten-three-en` | 10 of 10 | 7 | 26,107 / 1,139 | 7 of 10 **under the bar** | 14 | 17,526 / 1,234 |
+| `shorten-three-zh` | 9 of 10 | 7 | 25,464 / 1,174 | 9 of 10 | 16 | 19,367 / 1,256 |
+| `decision-two-en` | 10 of 10 | 5 | 23,401 / 629 | 10 of 10 | 7 | 17,716 / 487 |
+| `decision-two-zh` | 9 of 10 | 8 | 32,148 / 869 | 10 of 10 | 9 | 19,875 / 542 |
+| `term-three-en` | 10 of 10 | 6 | 18,273 / 920 | 10 of 10 | 10 | 15,760 / 874 |
+| `term-three-zh` | 10 of 10 | 5 | 18,126 / 831 | 10 of 10 | 10 | 15,936 / 760 |
+| `term-one-open-en` | 10 of 10 | 6 | 23,170 / 992 | 10 of 10 | 12 | 17,015 / 919 |
+| `term-one-open-zh` | 10 of 10 | 7 | 25,469 / 941 | 10 of 10 | 10 | 17,384 / 846 |
+| `new-from-two-en` | 10 of 10 | 3 | 21,471 / 332 | 10 of 10 | 6 | 14,589 / 391 |
+| `new-from-two-zh` | 10 of 10 | 5 | 22,585 / 444 | 10 of 10 | 6 | 14,614 / 427 |
+| `new-from-two-plain-en` | 0 of 10 **under the bar** | 2 | 6,828 / 204 | 8 of 10 **under the bar** | 10 | 16,568 / 806 |
+| `new-from-two-plain-zh` | 0 of 10 **under the bar** | 3 | 8,999 / 338 | 9 of 10 | 8 | 17,752 / 528 |
+| `missing-mind-en` | 10 of 10 | 4 | 14,070 / 256 | 10 of 10 | 4 | 9,072 / 221 |
+| `missing-mind-zh` | 8 of 10 **under the bar** | 5 | 14,089 / 367 | 10 of 10 | 3 | 9,020 / 138 |
+| **All** | 116 of 140 | | | 133 of 140 | | |
+
+The runs that failed, by cause:
+
+- **A Mind named without the word "Mind" is taken for a Document** (#1790): `new-from-two-plain`, Haiku 5.5 20 of 20 runs, Kimi K2.6 3 of 20. The assistant says it can't search the Documents and makes nothing. The same request saying "Mind" passed 40 of 40.
+- **A shortening that is no shorter, reported as shortened** (#1791): `shorten-three-en`, Kimi K2.6, 3 of 10. The Monthly report's three-sentence Summary came back as two sentences of the same length ("from 60 to 60 words" in the rewrite's result).
+- **A turn that ends with no reply** (#1792): `missing-mind-zh`, Haiku 5.5, 2 of 10. After "The User has no Mind called …" the model wrote nothing.
+- **Below the bar by one, not filed:** Haiku 5.5 `shorten-three-zh` (one Summary came back with three sentences) and `decision-two-zh` (the Project plan's rewrite was judged to need no change, and the reply said so); Kimi K2.6 `shorten-three-zh` (the judge flagged the lead-in line of a reply that goes on to say which Mind waits, which is accurate: a judge miss).
+- **No run failed the card, Reject all, Undo or Accept all checks** (280 runs): the card listed the Minds that changed with counts that add up, Reject all and the two Undos brought every Mind back, Accept all left nothing waiting.
+
+Seen across the seven full sweeps of this code's earlier versions (four on Haiku 5.5, three on Kimi K2.6), always at or above the bar: a term change that leaves the one heading that holds the word ("Supplier risks") in 4 of 280 runs of the two term requests; a line already in the section changed when a decision was added, in 3 of 140 runs of the two `decision-two` requests, and in 1 of 50 more runs on Haiku 5.5. The section's rewrite joined the new decision onto the line above it ("Hire a part-time designer.Open the beta to 50 customers.").
+
+What the app does with a change varies with the rewrite: whether a Mind's changes apply at once or wait for the User (more than half of the User's own text in that Mind would go) decides what the card shows. For `shorten-three-en`, 5 of 30 Minds changed applied at once on Haiku 5.5 and 28 of 30 on Kimi K2.6; the Chinese request, 22 and 19.
+
+**Spend:** about $4.6 for everything, counted from every request's tokens at the catalog's prices: these two sweeps $0.19 on Haiku 5.5 and $1.10 on Kimi K2.6 (the judge's $0.09 each included), the rest earlier sweeps and checks of the judge. The providers' consoles have the exact bill.
