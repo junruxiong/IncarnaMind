@@ -104,6 +104,12 @@ describe("where a Document comes from", () => {
         path: "/data/Transcripts/2896a7b6-5f1e-4039-820a-55725dfb8a17.vtt",
       }),
     ).toBe("Meeting.vtt");
+    expect(
+      sourceOf({
+        name: "Meeting.VTT",
+        path: "/data/Transcripts/2896a7b6-5f1e-4039-820a-55725dfb8a17.vtt",
+      }),
+    ).toBe("Meeting.VTT");
   });
 
   test("a file the User named keeps its own name, and a web page its address", () => {

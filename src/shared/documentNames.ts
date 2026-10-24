@@ -89,5 +89,7 @@ export function sourceOf(document: {
   const base = file.replace(/\.[^.]+$/, "");
   if (!looksMachineMade(base)) return file;
   const extension = file.slice(base.length);
-  return document.name.endsWith(extension) ? document.name : `${document.name}${extension}`;
+  return document.name.toLowerCase().endsWith(extension.toLowerCase())
+    ? document.name
+    : `${document.name}${extension}`;
 }
