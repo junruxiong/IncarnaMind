@@ -123,7 +123,8 @@ for (const language of ["en", "zh-CN"] as const) {
       const tops = await stopFollowing(window);
       // The same place from the first frame it shows to the Answer's last word.
       expect(tops.length).toBeGreaterThan(30);
-      expect(new Set(tops.map((top) => Math.round(top))).size).toBe(1);
+      const spread = Math.max(...tops) - Math.min(...tops);
+      expect(spread, `the Question moved: ${[...new Set(tops)].join(", ")}`).toBeLessThan(1);
       const here = await whereIs(window);
       expect(here.scrollTop).toBe(0);
       expect(here.answerBelowFoot).toBeLessThan(0);

@@ -1125,6 +1125,7 @@
    */
   .mind-editor-frame .mind-editor:not(.assistant-answer-text) {
     padding-top: var(--mind-band);
+    min-height: calc(10rem + var(--mind-band));
   }
   /*
    * Above the Ask pill (20px up, 40px tall) the page fades out over 56px, so no line runs under it.
