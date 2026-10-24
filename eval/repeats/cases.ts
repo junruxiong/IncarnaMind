@@ -174,9 +174,9 @@ export const DOCUMENTS: readonly RepeatDocument[] = [
  * contradictions of the agreement, of a kind each, so a change to a verdict or
  * a judgement is measured against the conflicts it loses (#1647). The near
  * misses give a figure or a detail of another person or role than the
- * agreement's, or add one to its own, so a nearest line is never taken for
- * their contradiction (#1708). The paraphrases say a clause's duty or
- * permission in other words, each expected Supported.
+ * agreement's, or add one to its own, each expected not Contradicted. The
+ * paraphrases say a clause's duty or permission in other words, each expected
+ * Supported.
  */
 const sentencesOf =
   (kind: RepeatSentence["kind"], expected: Expected) =>
