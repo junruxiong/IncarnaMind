@@ -12,9 +12,12 @@ export function QuoteChip({
   onShow,
   onRemove,
   testId,
+  whereFirst = false,
 }: {
   quote: string;
   from: string;
+  /** Where the words are from stays whole first, as a Document's page does: the words are cut first. */
+  whereFirst?: boolean;
   /** The × button's name and tooltip. */
   removeLabel: string;
   onShow(): void;
@@ -26,7 +29,7 @@ export function QuoteChip({
     <span
       data-testid={testId}
       title={quote}
-      className="question-skill composer-quote composer-quote--passage"
+      className={`question-skill composer-quote composer-quote--passage${whereFirst ? " quote-chip--where-first" : ""}`}
     >
       <button
         type="button"

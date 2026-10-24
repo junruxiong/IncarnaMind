@@ -920,6 +920,9 @@ export const en = {
   "composer.edit.send": "Change it (Enter)",
   "composer.selection.drop": "Don’t ask about this",
   "assistant.question.quote": "About:",
+  "assistant.question.quoteGone": "{source}, since deleted",
+  "assistant.quote.leftOut":
+    "A quote from “{document}” wasn’t sent: the Document no longer has those words where you selected them.",
   "composer.edit.translateInto": "Translate into ",
   "proposal.region": "Changes from the assistant",
   "proposal.count": "{count} changes from the assistant",
@@ -1115,6 +1118,7 @@ export const en = {
   "viewer.outline.collapse": "Collapse {title}",
   "viewer.outline.untitled": "Untitled",
   "viewer.selection.label": "Selected text",
+  "viewer.selection.ask": "Ask about this",
   "viewer.selection.addToNote": "Add to note",
   "viewer.selection.copy": "Copy with citation",
   "viewer.selection.added": "Added a quote to “{mind}”",
@@ -1130,6 +1134,7 @@ export const en = {
     "Couldn’t cite these words: a Citation covers two pages at most.",
   "viewer.selection.refused.noText":
     "Couldn’t cite these words: the Document has no text there to check them against.",
+  "command.viewer.selection.ask": "Ask about the selected text",
   "command.viewer.selection.addToNote": "Add the selected text to note",
   "command.viewer.selection.copy": "Copy the selected text with its citation",
   "viewer.mark.found": "Citation {number}: quote found",

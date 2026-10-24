@@ -3,6 +3,7 @@ import type {
   AskInConversationInput,
   Conversation,
   ConversationAnswer,
+  ConversationAskResult,
   ConversationMessage,
   ConversationQuestion,
 } from "../../core/api";
@@ -16,6 +17,7 @@ import { core } from "./core";
 import { translateNow } from "./i18n";
 import { documentsOnScreenOf, groupsMerged } from "./layoutSlice";
 import { useModelSetup, waitForModel } from "./modelSetup";
+import { useNotices } from "./notices";
 import { useAppStore } from "./store";
 import { useUndo } from "./undo";
 
@@ -156,6 +158,18 @@ export async function askReadyQuestion(): Promise<void> {
   }
 }
 
+// Words a Document no longer has where they were selected went without them: the User is told.
+function sayLeftOut(result: ConversationAskResult): void {
+  if (!result.asked) return;
+  for (const quote of result.leftOut ?? []) {
+    useNotices
+      .getState()
+      .showError(
+        new Error(translateNow("assistant.quote.leftOut", { document: quote.documentName })),
+      );
+  }
+}
+
 const documentsOnScreen = () => documentsOnScreenOf(useAppStore.getState().layout, groupsMerged());
 
 /**
@@ -170,7 +184,8 @@ export async function askInAssistant(
   const key = composerKey(input.mindId);
   useConversations.setState({
     asking: input.text,
-    askingQuote: input.mindId ? (input.focus?.selection ?? "") : "",
+    askingQuote:
+      (input.mindId ? (input.focus?.selection ?? "") : "") || (input.quotes?.[0]?.quote ?? ""),
     stopWanted: false,
     sought: null,
   });
@@ -191,6 +206,7 @@ export async function askInAssistant(
       return true;
     }
     settleAsk(key, result);
+    sayLeftOut(result);
     if (!result.asked) return false;
     watchMindsMadeBy(result.answerId);
     applyWhatWasAsked(result.answerId);
@@ -264,15 +280,14 @@ export async function regenerateAnswer(
     watchMindsMadeBy(answerId);
     applyWhatWasAsked(answerId, { keepWritten: clearScope });
     watchCommands(answerId);
-    settleAsk(
+    const result = await core.regenerateConversationAnswer({
+      conversationId,
       answerId,
-      await core.regenerateConversationAnswer({
-        conversationId,
-        answerId,
-        ...(clearScope && { clearScope }),
-        onScreen: documentsOnScreen(),
-      }),
-    );
+      ...(clearScope && { clearScope }),
+      onScreen: documentsOnScreen(),
+    });
+    settleAsk(answerId, result);
+    sayLeftOut(result);
   } catch (error) {
     settleAsk(answerId, null, error);
   }

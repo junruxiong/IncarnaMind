@@ -1,23 +1,29 @@
 /**
  * What the viewer's selection menu does with the words selected (#101), each
  * time with a Citation of them checked where they were selected
- * (`citeSelection`): Add to note puts them in a Mind as a quote, and Copy with
- * citation puts them on the clipboard as copying that quote from a Mind would.
+ * (`citeSelection`): Ask about this puts them in the composer as a quote chip,
+ * Add to note puts them in a Mind as a quote, and Copy with citation puts them
+ * on the clipboard as copying that quote from a Mind would.
  */
 import { getSchema } from "@tiptap/core";
 import { DOMSerializer, Fragment } from "@tiptap/pm/model";
 import {
+  type AskedQuote,
   CITATION_NODE,
   type CitationAttributes,
   type CitationCheckReason,
+  type CitedSelection,
   type Document,
+  MOST_ASKED_QUOTES,
   type SelectedPart,
 } from "../../../core/api";
 import type { NodeJSON } from "../../../shared/blockJson";
 import type { MessageKey } from "../../../shared/i18n";
 import { mindName } from "../../../shared/naming";
 import { type AddTarget, addInEditor } from "../addToNote";
+import { focusComposer } from "../commands/assistant";
 import { readMindHandle } from "../commands/handles";
+import { NO_MIND, useComposer } from "../composer";
 import { core } from "../core";
 import { flashBlocks } from "../editor/blockOrigins";
 import { sourceContext } from "../editor/copyCitations";
@@ -42,7 +48,7 @@ const REFUSED: Partial<Record<CitationCheckReason, MessageKey>> = {
   "no-text": "viewer.selection.refused.noText",
 };
 
-async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> {
+async function citedSelection({ document, parts }: ViewerSelection): Promise<CitedSelection> {
   const cited = await core.citeSelection({ documentId: document.id, parts });
   // Only words found where they were selected are cited: a refused Citation's next check could
   // find the same words somewhere else and move it there.
@@ -50,6 +56,12 @@ async function quoteOf({ document, parts }: ViewerSelection): Promise<NodeJSON> 
     const reason = cited.checkReason && REFUSED[cited.checkReason];
     throw new Error(translateNow(reason ?? "viewer.selection.refused"));
   }
+  return cited;
+}
+
+async function quoteOf(selection: ViewerSelection): Promise<NodeJSON> {
+  const { document } = selection;
+  const cited = await citedSelection(selection);
   const citation: CitationAttributes = {
     passageId: cited.passageId,
     documentId: document.id,
@@ -153,6 +165,44 @@ export async function addSelectionToNote(
         run: () => copySelectionWithCitation(selection),
       },
     );
+  } catch (error) {
+    useAppStore.getState().reportError(error);
+  }
+}
+
+const sameQuote = (one: AskedQuote, other: AskedQuote) =>
+  one.documentId === other.documentId &&
+  one.quote === other.quote &&
+  JSON.stringify(one.location) === JSON.stringify(other.location);
+
+/**
+ * Puts the selection in the composer as a quote chip, after any already there, and the cursor
+ * in the composer, unfolding the assistant: the Question asked next is about it.
+ */
+export async function askAboutSelection(selection: ViewerSelection): Promise<void> {
+  try {
+    const { quote, pageFrom, pageTo, location } = await citedSelection(selection);
+    const { document } = selection;
+    const asked: AskedQuote = {
+      documentId: document.id,
+      documentName: document.name,
+      quote,
+      pageFrom,
+      pageTo,
+      location,
+    };
+    const composer = useComposer.getState();
+    const key = composer.seat?.mindId ?? NO_MIND;
+    const quotes = composer.draft(key).quotes ?? [];
+    if (!quotes.some((each) => sameQuote(each, asked))) {
+      if (quotes.length >= MOST_ASKED_QUOTES) {
+        throw new Error(
+          translateNow("error.question.quotes.tooMany", { count: MOST_ASKED_QUOTES }),
+        );
+      }
+      composer.update(key, { quotes: [...quotes, asked] });
+    }
+    focusComposer();
   } catch (error) {
     useAppStore.getState().reportError(error);
   }

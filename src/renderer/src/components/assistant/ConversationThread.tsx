@@ -14,6 +14,7 @@ import {
   useOpenConversation,
 } from "../../conversations";
 import { askedAgainCounts } from "../../coverage";
+import { AskedQuoteLines } from "../../editor/AskedQuotes";
 import { useT } from "../../i18n";
 import { isLive, useMeetings } from "../../meetings";
 import { useModelSetup } from "../../modelSetup";
@@ -330,6 +331,7 @@ function QuestionBubble({
             <span className="sr-only">{t("assistant.question.quote")}</span>“{about.trim()}”
           </span>
         )}
+        {question && <AskedQuoteLines quotes={question.quotes} />}
         {skill && (
           <span data-testid="assistant-question-skill" className="assistant-question-skill">
             <SparkLineIcon aria-hidden="true" className="size-3" />

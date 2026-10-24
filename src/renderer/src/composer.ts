@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
 import { create } from "zustand";
-import type { SearchScope } from "../../core/api";
+import type { AskedQuote, SearchScope } from "../../core/api";
 import { folderScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
@@ -22,6 +22,8 @@ export interface Draft {
   tell?: string;
   /** Long pastes, each a chip above the text until it is put back, saved as a Document, or asked with. */
   pastes: Paste[];
+  /** Words selected in Documents to ask about ("Ask about this", #101), each a chip before the text. */
+  quotes?: AskedQuote[];
 }
 
 /** Text pasted into the composer that was too long to leave in it (DESIGN.md, Composer › Height). */
@@ -50,9 +52,15 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((each) => typeof each === "string");
 
+const isQuote = (value: unknown): value is AskedQuote =>
+  isObject(value) &&
+  typeof value.documentId === "string" &&
+  typeof value.documentName === "string" &&
+  typeof value.quote === "string";
+
 function isDraft(value: unknown): value is Draft {
   if (!isObject(value)) return false;
-  const { text, scope, skill, pastes } = value;
+  const { text, scope, skill, pastes, quotes } = value;
   const validScope =
     scope === null ||
     (isObject(scope) &&
@@ -66,7 +74,8 @@ function isDraft(value: unknown): value is Draft {
     Array.isArray(pastes) &&
     pastes.every(
       (paste) => isObject(paste) && typeof paste.id === "string" && typeof paste.text === "string",
-    )
+    ) &&
+    (quotes === undefined || (Array.isArray(quotes) && quotes.every(isQuote)))
   );
 }
 

@@ -70,6 +70,7 @@ import { tellTask, useTasks } from "../tasks";
 import { takeBackLast, tellable } from "../taskTell";
 import { taskName } from "../taskText";
 import { AnswerAnnouncer } from "./AnswerAnnouncer";
+import { AskedQuoteChips } from "./AskedQuotes";
 import { AskProblem } from "./AskProblem";
 import { EditStatus } from "./EditStatus";
 import { AskArrowIcon, CollapseIcon, ExpandIcon, RemoveIcon } from "./icons";
@@ -539,7 +540,8 @@ export function Composer({
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));
-    if (said === undefined) update({ text: "", skill: null, pastes: [] });
+    if (said === undefined) update({ text: "", skill: null, pastes: [], quotes: [] });
+    else update({ quotes: [] });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
@@ -551,6 +553,7 @@ export function Composer({
       scope: composerScope(current, folderId),
       model: modelInUseOf(mind?.doc ?? null),
       forcedSkill: draft.skill,
+      quotes: draft.quotes ?? [],
     });
     if (asked) {
       selection.asked();
@@ -559,7 +562,12 @@ export function Composer({
     // Not asked: its words come back here, unless the User has typed anew meanwhile.
     const now = useComposer.getState().draft(key);
     if (now.text === "" && now.pastes.length === 0) {
-      update({ text: typed, pastes: draft.pastes, skill: now.skill ?? draft.skill });
+      update({
+        text: typed,
+        pastes: draft.pastes,
+        skill: now.skill ?? draft.skill,
+        quotes: [...(draft.quotes ?? []), ...(now.quotes ?? [])],
+      });
     }
   };
 
@@ -591,16 +599,18 @@ export function Composer({
         return;
       }
     }
+    const quotes = draft.quotes ?? [];
     if (
       event.key === "Backspace" &&
-      selection.quote !== "" &&
+      (selection.quote !== "" || quotes.length > 0) &&
       draft.text === "" &&
       event.currentTarget.selectionStart === 0 &&
       event.currentTarget.selectionEnd === 0
     ) {
       // As in a recipient field, Backspace at the start takes the last chip away.
       event.preventDefault();
-      selection.leaveOut();
+      if (quotes.length > 0) update({ quotes: quotes.slice(0, -1) });
+      else selection.leaveOut();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !isCommand(event)) {
@@ -797,6 +807,13 @@ export function Composer({
             }}
           />
         )}
+        <AskedQuoteChips
+          quotes={draft.quotes ?? []}
+          onRemove={(quote) => {
+            update({ quotes: (draft.quotes ?? []).filter((each) => each !== quote) });
+            field.current?.focus();
+          }}
+        />
         {editing && (
           <span
             data-testid="composer-edit-quote"
