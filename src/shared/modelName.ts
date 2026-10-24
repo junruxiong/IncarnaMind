@@ -27,7 +27,6 @@ const SETS = [
 
 const tidy = (name: string) => name.replace(/\s*\(latest\)$/i, "").trim();
 
-/** Whether a set's provider names the model for a role: it is that provider's own, not one it resells (#1317). */
 const namesForRole = (set: string, modelId: string): boolean => {
   const provider = catalogProvider(set.split("/")[0] ?? set);
   const id = withoutDateSuffix(modelId);
