@@ -12,6 +12,7 @@ import { vi } from "vitest";
 import * as Y from "yjs";
 import {
   type AnswerUsage,
+  type AskedQuote,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
   CITATION_NODE,
@@ -189,6 +190,7 @@ export async function ask(
     conversationId: string | null;
     focus: MindFocus | null;
     onScreen?: string[];
+    quotes?: AskedQuote[];
   },
   { choose, stopped }: { choose?: string; stopped?: () => void } = {},
 ): Promise<ConversationAnswer> {
@@ -303,6 +305,25 @@ function citedDocuments(doc: Y.Doc): string[] {
   };
   visit(doc.getXmlFragment(MIND_CONTENT_FIELD));
   return found;
+}
+
+/** The words a request asks about, cited where they were selected as the viewer cites them (#101). */
+async function quoteOf(
+  core: Core,
+  scoped: readonly { id: string; name: string }[],
+  { document, page, words }: NonNullable<EverydayCase["quote"]>,
+): Promise<AskedQuote> {
+  const found = scoped.find((each) => each.name === document);
+  if (!found) throw new Error(`No Document “${document}” to select words in.`);
+  const cited = await core.citeSelection({
+    documentId: found.id,
+    parts: [{ unit: page, text: words }],
+  });
+  if (cited.check !== "found") {
+    throw new Error(`“${words}” isn't on p. ${page} of “${document}”: ${cited.checkReason}.`);
+  }
+  const { quote, pageFrom, pageTo, location } = cited;
+  return { documentId: found.id, documentName: found.name, quote, pageFrom, pageTo, location };
 }
 
 export async function runCase(
@@ -447,12 +468,20 @@ export async function runCase(
     addedBlocks = ids.flatMap((id, block) => (earlier.has(id) ? [] : [block]));
     before = acceptedTexts(client.doc, new Set());
   }
+  const quoted = each.quote ? await quoteOf(core, scoped, each.quote) : null;
   watch?.begin(each.firstReply ?? null);
   await decideFirst(each.request);
   const stoppedAtAsk = { last: false };
   const answer = await ask(
     core,
-    { text: each.request, mindId: mind?.id ?? null, conversationId, focus, onScreen },
+    {
+      text: each.request,
+      mindId: mind?.id ?? null,
+      conversationId,
+      focus,
+      onScreen,
+      ...(quoted && { quotes: [quoted] }),
+    },
     { choose: each.answerAsk, stopped: () => (stoppedAtAsk.last = true) },
   );
   const answeredSeconds = (Date.now() - started) / 1000;
@@ -524,6 +553,7 @@ export async function runCase(
     scoped,
     texts: each.expected.textDates ? DATED_TEXTS : undefined,
     stoppedAtAsk: stoppedAtAsk.last,
+    ...(quoted && { quoted }),
   };
   const failures = requestFailures(outcome);
   return {

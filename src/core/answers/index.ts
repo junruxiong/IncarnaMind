@@ -47,8 +47,9 @@ import { hasText, pageBlocks } from "../../shared/answerBlocks";
 import { runsByDefault } from "../../shared/approvalRules";
 import { askedFor, waitsForUser as heldForUser } from "../../shared/askedChanges";
 import { citationNode, withCitations } from "../../shared/blockJson";
-import type { LiveDocument } from "../../shared/citations";
+import { type LiveDocument, shownDocumentName } from "../../shared/citations";
 import { withFigures, withFigureText } from "../../shared/figureMarkers";
+import { englishPlace } from "../../shared/locations";
 import { holdsNothing } from "../../shared/madeMind";
 import { linkTableSources } from "../../shared/markdownTables";
 import type { MeetingHelpKind } from "../../shared/meetingHelp";
@@ -75,11 +76,14 @@ import {
   type AnswerToolCall,
   type AnswerUsage,
   type AskedFrom,
+  type AskedQuote,
   type AskResult,
   BLOCK_ID_ATTRIBUTE,
   type ChatModelChoice,
   type ChatReadiness,
+  type CitationRecheck,
   type CitationSupport,
+  type CitedSelection,
   type ClaimedChange,
   type CommandDone,
   type CommandProblem,
@@ -209,6 +213,7 @@ import {
   skimTokens,
   skimWithin,
   upFrontTokens,
+  withoutOverlap,
 } from "./documentText";
 import type {
   AnswerEngine,
@@ -244,6 +249,7 @@ import {
   loadedSkillText,
   meetingInstructions,
   mindInstructions,
+  selectedTextBlock,
   signInNeededInstructions,
   skillInstructions,
   skillLanguageNote,
@@ -649,6 +655,8 @@ export interface DocumentsForAnswers
   searchableBySize(documentIds: readonly string[] | null): SizedDocument[];
   /** The live Passages of a live Document at positions `from` to `to`, in reading order. */
   passagesBetween(documentId: string, from: number, to: number): WindowedPassage[];
+  /** Words the User selected to ask about, checked where they were selected (`recheckWhereSelected`). */
+  recheckWhereSelected(quote: AskedQuote): CitedSelection;
   /** The languages the Documents to search are in, the most common first, with how many are in each. */
   searchableLanguages(documentIds: readonly string[] | null): DocumentLanguage[];
   /** The Documents among these (null: every Document) whose text couldn't be read, or some of it. */
@@ -662,6 +670,19 @@ export interface DocumentsForAnswers
     options?: AnswerSearchOptions,
   ): Promise<WindowedPassage[]>;
 }
+
+interface Quoted {
+  quote: AskedQuote;
+  passages: WindowedPassage[];
+}
+
+const holdsUnitsOf = (passage: WindowedPassage, cited: CitationRecheck) =>
+  cited.pageFrom === null || cited.pageTo === null
+    ? passage.passageId === cited.passageId
+    : passage.pageFrom !== null &&
+      passage.pageTo !== null &&
+      passage.pageFrom <= cited.pageTo &&
+      passage.pageTo >= cited.pageFrom;
 
 /** The Documents one Answer searches: those of its Question's Search scope, or all of them (null). */
 function inScope(
@@ -857,6 +878,8 @@ export function createAnswers(options: AnswersOptions) {
      * `listening` is, as much of it as fits half the model's window.
      */
     transcript?: WindowedPassage[];
+    /** Words the User selected in Documents to ask about (#101), right before the Question. */
+    quoted?: readonly Quoted[];
     /**
      * One-click help during the call: the button pressed. Its Answer is laid out as
      * the panel reads it, and is offered the Documents' Tools only.
@@ -1658,6 +1681,25 @@ export function createAnswers(options: AnswersOptions) {
         mindRequest = within.request;
         readShare = within.share;
         if (read) read = within.request.text ? { ...read, partial: true } : null;
+      }
+      if (input.quoted && input.quoted.length > 0) {
+        messages = withBeforeQuestion(
+          messages,
+          selectedTextBlock(
+            input.quoted.map(({ quote, passages }) => ({
+              ...quote,
+              place: englishPlace(quote.location),
+              shown: session.show(passages),
+            })),
+          ),
+        );
+        // Someone else wrote a saved web page: quoted, it is read as a search reads it (#78).
+        if (
+          input.quoted.some(({ passages }) => passages.some((each) => each.documentKind === "web"))
+        ) {
+          contextReasons.push({ via: "read", source: "web-page" });
+          textOrigin ??= "web-page";
+        }
       }
       if (input.listening) {
         let heard: WindowedPassage[] | null = null;
@@ -2541,6 +2583,7 @@ export function createAnswers(options: AnswersOptions) {
     emptyScope: boolean,
     mind: MindToRead | null,
     onScreen: readonly string[],
+    { quoted, leftOut }: { quoted: Quoted[]; leftOut: AskedQuote[] },
     remake: string | null = null,
   ): ConversationAskResult {
     const { conversation, question, answer } = turn;
@@ -2610,6 +2653,7 @@ export function createAnswers(options: AnswersOptions) {
       consentNeeded: ready.consentNeeded,
       ...(mind && { listening: () => options.liveTranscript(mind.mindId) }),
       ...(help && { help }),
+      quoted,
       assistant: {
         focused: mind && {
           mindId: mind.mindId,
@@ -2623,7 +2667,53 @@ export function createAnswers(options: AnswersOptions) {
         renames: renamesIn(turn.earlier),
       },
     });
-    return { asked: true, conversation, questionId: question.id, answerId: answer.id };
+    return {
+      asked: true,
+      conversation,
+      questionId: question.id,
+      answerId: answer.id,
+      ...(leftOut.length > 0 && { leftOut }),
+    };
+  }
+
+  // Only the Document's own name and words are kept and sent: what the caller gave is only looked for.
+  function checkQuotes(quotes: readonly AskedQuote[]): { quoted: Quoted[]; leftOut: AskedQuote[] } {
+    const quoted: Quoted[] = [];
+    const leftOut: AskedQuote[] = [];
+    const documents = options.documents.names();
+    for (const asked of quotes) {
+      const now = options.documents.recheckWhereSelected(asked);
+      const name = shownDocumentName({ documentId: asked.documentId }, documents);
+      const passages =
+        now.check === "found" && name !== null
+          ? withoutOverlap(
+              options.documents
+                .passagesBetween(asked.documentId, 0, Number.MAX_SAFE_INTEGER)
+                .filter(
+                  (passage) =>
+                    passage.contentHash === now.contentHash && holdsUnitsOf(passage, now),
+                ),
+            )
+          : [];
+      if (name === null || passages.length === 0) {
+        leftOut.push(asked);
+        continue;
+      }
+      const quote: AskedQuote = {
+        documentId: asked.documentId,
+        documentName: name,
+        quote: now.quote,
+        pageFrom: now.pageFrom,
+        pageTo: now.pageTo,
+        location: now.location,
+      };
+      const same = (each: Quoted) =>
+        each.quote.documentId === quote.documentId &&
+        each.quote.quote === quote.quote &&
+        JSON.stringify(each.quote.location) === JSON.stringify(quote.location);
+      if (!quoted.some(same)) quoted.push({ quote, passages });
+    }
+    return { quoted, leftOut };
   }
 
   // One outside the Search scope can't be searched: naming it would point the model at nothing.
@@ -2810,8 +2900,21 @@ export function createAnswers(options: AnswersOptions) {
       const scope = options.searchedScope(question.scope, question.mind?.id ?? null);
       const { documentIds, emptyScope } = scopeNow(scope, question.mind?.id ?? null);
       const mind = mindToRead(question.mind?.id ?? null, question.focus, question.text);
-      const turn = options.conversations.add({ ...question, scope }, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind, question.onScreen);
+      const quotes = checkQuotes(question.quotes);
+      const turn = options.conversations.add(
+        { ...question, scope, quotes: quotes.quoted.map((each) => each.quote) },
+        ready.model,
+        readOf(mind),
+      );
+      return startInConversation(
+        turn,
+        ready,
+        documentIds,
+        emptyScope,
+        mind,
+        question.onScreen,
+        quotes,
+      );
     },
 
     /** Writes an Answer of a conversation again, in place (see `CoreApi.regenerateConversationAnswer`). */
@@ -2839,7 +2942,16 @@ export function createAnswers(options: AnswersOptions) {
       const mind =
         !from || from.deleted ? null : mindToRead(from.mindId, question.focus, question.text);
       const turn = options.conversations.restartAnswer(answerId, ready.model, readOf(mind));
-      return startInConversation(turn, ready, documentIds, emptyScope, mind, onScreen, remake);
+      return startInConversation(
+        turn,
+        ready,
+        documentIds,
+        emptyScope,
+        mind,
+        onScreen,
+        checkQuotes(question.quotes),
+        remake,
+      );
     },
 
     /** Stops an Answer of a conversation being written, keeping what it has. */
