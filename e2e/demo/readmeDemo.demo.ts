@@ -76,8 +76,8 @@ async function clearAside(window: Page): Promise<void> {
 }
 
 async function dismissNotice(window: Page): Promise<void> {
-  const notice = window.getByTestId("tab-notice");
-  if ((await notice.count()) > 0) await notice.locator(".tab-notice-close").click();
+  const notice = window.getByTestId("undo-message");
+  if ((await notice.count()) > 0) await window.keyboard.press("Escape");
   await expect(notice).toHaveCount(0);
 }
 
