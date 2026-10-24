@@ -105,7 +105,7 @@ test("Ask about this puts the words in the composer, and the Question keeps them
   });
 });
 
-test("⌘J and ⌘K ask about the selection, and Backspace and × take the chip away, in Chinese", async () => {
+test("⌘J and ⌘K ask about the selection, the same words once, and Backspace and × take the chip away, in Chinese", async () => {
   const { window, layer } = await paperBesideMind();
   await setLanguage(window, "zh-CN");
   await select(window, layer(1), "Grocers studied across the eleven chains.");
@@ -123,6 +123,10 @@ test("⌘J and ⌘K ask about the selection, and Backspace and × take the chip 
   await window.keyboard.press("Enter");
   await expect(chips(window)).toHaveCount(1);
   await expect(chips(window)).toContainText("第 1 页");
+  // The same words asked about again make no second chip.
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await expect(chips(window)).toHaveCount(1);
   await pointAndClick(window, window.getByTestId("composer-quote-remove"));
   await expect(chips(window)).toHaveCount(0);
 });
