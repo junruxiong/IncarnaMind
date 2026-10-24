@@ -383,7 +383,13 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
         range.pageTo === null ||
         (unit.page !== null && unit.page >= range.pageFrom && unit.page <= range.pageTo),
     );
-  const result = (check: CheckResult, range: PageRange, quote: string): CitationRecheck => {
+  // `found`: where a check placed the quote in the covered Units' joined text.
+  const result = (
+    check: CheckResult,
+    range: PageRange,
+    quote: string,
+    found?: readonly TextRange[],
+  ): CitationRecheck => {
     const covered = inRange(range);
     return {
       ...check,
@@ -392,7 +398,7 @@ function currentVersion(documents: RecheckDocuments, documentId: string, content
       ...range,
       location: locationOf(
         covered,
-        check.check === "found" ? quoteInUnits(covered, quote, matching) : null,
+        check.check === "found" ? (found ?? quoteInUnits(covered, quote, matching)) : null,
       ),
     };
   };
