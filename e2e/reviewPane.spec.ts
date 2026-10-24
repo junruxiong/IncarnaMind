@@ -22,6 +22,7 @@ import {
   setLanguage,
   setWindowSize,
   slideSelect,
+  splitFromTabMenu,
   useLocalChatModel,
   useOutputLocation,
 } from "./app";
@@ -547,6 +548,73 @@ test("words typed into a change decided in the pane are the User's: ⌘Z takes t
     '<w:ins w:id="1" w:author="Dana Kim" w:date="2026-10-02T09:00:00Z"><w:r><w:t xml:space="preserve"> and Gdańsk</w:t></w:r></w:ins>',
   );
   expect(xml).not.toContain("ZZ");
+  await app.close();
+});
+
+test("⌘Z in a pane takes back that half's own decision: the same Mind in both halves, then two Minds side by side", async () => {
+  const { app, window } = await launchApp(dataDir, { home });
+  await setWindowSize(app, window, 1600, 900);
+  await dismissChatSetup(window);
+  await importFile(window, app, "Supply A.docx", supplyRedline());
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  await expect(window.getByTestId("sidebar-panel")).toHaveAttribute("data-hidden", "true");
+  await splitFromTabMenu(window);
+  const groups = window.getByTestId("tab-group");
+  await expect(groups).toHaveCount(2);
+  const [left, right] = [groups.nth(0), groups.nth(1)];
+  const opened = async (group: Locator) => {
+    const pane = group.getByTestId("review-pane");
+    if (!(await pane.isVisible())) {
+      const fold = group.getByTestId("review-fold");
+      await pointAndClick(
+        window,
+        (await fold.isVisible()) ? fold : group.getByTestId("their-changes-review"),
+      );
+    }
+    await expect(pane).toBeVisible();
+    return pane;
+  };
+  const leftPane = await opened(left);
+  const leftCards = cardsOf(leftPane);
+
+  // Typed in the right half first, then a decision in the left pane: ⌘Z there takes back the decision.
+  const typedIn = right.getByTestId("mind-editor").locator("p", { hasText: "6.1 Nothing" });
+  await typedIn.scrollIntoViewIfNeeded();
+  await slideSelect(window, typedIn, "negligence");
+  await window.keyboard.press("ArrowRight");
+  await window.keyboard.type(" alone");
+  await expect(typedIn).toContainText("negligence alone.");
+  await pointAndClick(window, leftCards.first().locator("[data-review-id]"));
+  await pointAndClick(window, leftCards.first().getByTestId("review-accept"));
+  await expect(leftCards.first()).toHaveAttribute("data-state", "accepted");
+  await pointAndClick(window, leftCards.first().locator("[data-review-id]"));
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(leftCards.first()).toHaveAttribute("data-state", "waiting");
+  await expect(typedIn).toContainText("negligence alone.");
+
+  // Another Mind in the right half: each pane's ⌘Z takes back its own Mind's decision.
+  await pointAndClick(window, typedIn);
+  await window.keyboard.press("ControlOrMeta+Backslash");
+  await expect(window.getByTestId("sidebar-panel")).not.toHaveAttribute("data-hidden", "true");
+  await importFile(window, app, "Supply B.docx", supplyRedline());
+  await expect(right.getByTestId("mind-tab").filter({ hasText: "Supply B" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const rightCards = cardsOf(await opened(right));
+  await pointAndClick(window, leftCards.nth(1).locator("[data-review-id]"));
+  await pointAndClick(window, leftCards.nth(1).getByTestId("review-accept"));
+  await expect(leftCards.nth(1)).toHaveAttribute("data-state", "accepted");
+  await pointAndClick(window, rightCards.nth(2).locator("[data-review-id]"));
+  await pointAndClick(window, rightCards.nth(2).getByTestId("review-accept"));
+  await expect(rightCards.nth(2)).toHaveAttribute("data-state", "accepted");
+  await pointAndClick(window, leftCards.nth(1).locator("[data-review-id]"));
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(leftCards.nth(1)).toHaveAttribute("data-state", "waiting");
+  await expect(rightCards.nth(2)).toHaveAttribute("data-state", "accepted");
+  await pointAndClick(window, rightCards.nth(2).locator("[data-review-id]"));
+  await window.keyboard.press("ControlOrMeta+z");
+  await expect(rightCards.nth(2)).toHaveAttribute("data-state", "waiting");
   await app.close();
 });
 

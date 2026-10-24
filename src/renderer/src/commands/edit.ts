@@ -4,7 +4,6 @@ import { files } from "../core";
 import { noteAround } from "../editor/noteKeymap";
 import { useT } from "../i18n";
 import type { Translate } from "../objects";
-import { noteOfPane } from "../reviewPane";
 import { nextToRedo, nextToUndo, typesText, type Undoable, useUndo } from "../undo";
 import { type Command, type CommandContext, fromMenu } from "./registry";
 
@@ -24,7 +23,11 @@ function placeOf(ctx: CommandContext): EditMenuState["text"] {
   return typing ? "field" : null;
 }
 
-const noteHere = (focus: Element | null) => noteAround(focus) ?? noteOfPane(focus);
+// A reviewing pane's note is the one in its own Mind tab (#697): the tab beside may show the same Mind.
+function noteHere(focus: Element | null) {
+  const tab = focus?.closest("[data-review-of]")?.closest(".mind-tab-row");
+  return noteAround(tab?.querySelector('[data-testid="mind-editor"]') ?? focus);
+}
 
 const nameOf = (change: Undoable | undefined, t: Translate) =>
   change ? (change.name?.(t) ?? "") : null;

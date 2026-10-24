@@ -108,13 +108,6 @@ const reviewables = heldByMind<{ editor: Editor; has(): boolean; open(): void }>
 export const useReviewables = reviewables.use;
 export const holdReviewable = reviewables.hold;
 
-/** The Mind's note a reviewing pane belongs to, for ⌘Z and ⇧⌘Z there, which are the note's own. */
-export function noteOfPane(element: Element | null): Editor | null {
-  const mindId = element?.closest<HTMLElement>("[data-review-of]")?.dataset.reviewOf;
-  const editor = mindId ? useReviewables.getState()[mindId]?.editor : undefined;
-  return editor && !editor.isDestroyed ? editor : null;
-}
-
 /**
  * Whether the Mind, `row`, is wide enough to have the pane beside its page:
  * else it folds to "Changes ({n})", which opens it at the page's right edge.
