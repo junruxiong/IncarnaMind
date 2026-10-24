@@ -167,7 +167,22 @@ export function sourceSelection(
     const to = Math.min(end, unit.end);
     return start >= 0 && from < to ? [{ unit: unit.page, start: from, end: to }] : [];
   });
-  return { parts: partsOf(source, spans), shown: range.toString() };
+  return { parts: partsOf(source, spans), shown: shownIn(range, root) };
+}
+
+// As the view shows the words, a line break between two blocks, as `domSelection` reads them.
+function shownIn(range: Range, root: Element): string {
+  const nodes = textNodes(root);
+  const pieces = piecesOf(nodes);
+  let shown = "";
+  let broken = false;
+  nodes.forEach((node, index) => {
+    const clip = clipOf(node, range);
+    if (!clip) return;
+    shown += `${broken && shown !== "" ? "\n" : ""}${node.data.slice(clip[0], clip[1])}`;
+    broken = pieces[index]?.breakAfter === true;
+  });
+  return shown;
 }
 
 /** Where the selection ends on screen, for its menu: its last line's end. */

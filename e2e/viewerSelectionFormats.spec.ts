@@ -88,6 +88,10 @@ async function addToNote(window: Page, line: Locator, words: string): Promise<Lo
 }
 
 const citedAt = (quote: Locator) => quote.getByTestId("citation-chip");
+// A press inside the words still selected would drag them away rather than select anew.
+const clearSelection = (window: Page) =>
+  window.evaluate(() => globalThis.getSelection()?.removeAllRanges());
+const quotesIn = (window: Page) => window.locator('[data-testid="mind-pane"]:visible blockquote');
 
 test("Word: words the file says in two sections cite the section they were selected in", async () => {
   const path = join(sources, "Coastal Flood Risk Review.docx");
@@ -100,7 +104,7 @@ test("Word: words the file says in two sections cite the section they were selec
   await expect(citedAt(quote)).toHaveAttribute("aria-label", /§ 1\.1 Scope/);
 });
 
-test("PowerPoint: a slide's text and its speaker notes cite their slide", async () => {
+test("PowerPoint: a slide's text, over its bullet points, and its speaker notes cite their slide", async () => {
   const path = join(sources, "Quarterly Research Update.pptx");
   await copyFile(join(FORMATS, "Quarterly Research Update.pptx"), path);
   const window = await openBesideMind([path], "Quarterly Research");
@@ -108,6 +112,16 @@ test("PowerPoint: a slide's text and its speaker notes cite their slide", async 
 
   const text = await addToNote(window, slide, "Customer churn fell to 4.2 per cent");
   await expect(citedAt(text)).toHaveAttribute("aria-label", /slide 2/);
+  // The bullets are drawn, not written: they are no part of the words.
+  await clearSelection(window);
+  await slideSelect(window, slide, "Customer churn", { line: slide, words: "112 per" });
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+  const bullets = quotesIn(window).filter({ hasText: "dropped by a third" });
+  await expect(bullets).toContainText(
+    "redesign. Support tickets per customer dropped by a third. Net",
+  );
+  await expect(citedAt(bullets)).toHaveAttribute("data-check", "found");
+  await expect(citedAt(bullets)).toHaveAttribute("aria-label", /slide 2/);
 
   const notes = slide.getByTestId("viewer-slide-notes");
   await pointAndClick(window, notes.locator("summary"));
@@ -137,6 +151,53 @@ test("Markdown: across bold and a link, the note has the words as shown, cited i
   await expect(quote).toContainText("fell sharply in the spring review");
   await expect(quote).not.toContainText("**");
   await expect(citedAt(quote)).toHaveAttribute("aria-label", /§ Results/);
+});
+
+test("Markdown: words over two paragraphs read apart in the note and on the clipboard", async () => {
+  const path = join(sources, "Notes.md");
+  await writeFile(
+    path,
+    ["The survey closed in June as expected.", "", "Second round answers came in July."].join("\n"),
+  );
+  const window = await openBesideMind([path], "Notes");
+  const copied = await stubClipboard(window);
+  const view = window.getByTestId("viewer-text");
+
+  await slideSelect(window, view, "in June", { line: view, words: "round answers" });
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+
+  const quote = quotesIn(window).filter({ hasText: "Second round" });
+  await expect(quote).toContainText("as expected. Second round");
+  await expect(citedAt(quote)).toHaveAttribute("data-check", "found");
+  await clearSelection(window);
+  await slideSelect(window, view, "in June", { line: view, words: "round answers" });
+  await pointAndClick(window, window.getByTestId("viewer-selection-copy"));
+  await expect
+    .poll(async () => (await copied())["text/plain"] ?? "")
+    .toContain("as expected. Second round");
+});
+
+test("Text: the same line ten times over isn't cited, and the notice says the words are in several places", async () => {
+  const path = join(sources, "Repeated.txt");
+  await writeFile(path, Array.from({ length: 10 }, () => "Tides rise twice a day.").join("\n"));
+  const window = await openBesideMind([path], "Repeated");
+  const view = window.getByTestId("viewer-text");
+  await expect(view).toContainText("Tides rise twice a day.");
+  // The fifth line, which has the same lines all around it.
+  await view.evaluate((element) => {
+    const text = element.querySelector("[data-unit] [data-at]")?.firstChild as Text;
+    const line = "Tides rise twice a day.\n".length;
+    const range = document.createRange();
+    range.setStart(text, line * 4);
+    range.setEnd(text, line * 5 - 1);
+    globalThis.getSelection()?.removeAllRanges();
+    globalThis.getSelection()?.addRange(range);
+  });
+  await expect(window.getByTestId("viewer-selection-menu")).toBeVisible();
+  await pointAndClick(window, window.getByTestId("viewer-selection-add"));
+
+  await expect(window.getByTestId("error-notice-message")).toContainText("several places");
+  await expect(window.locator('[data-testid="mind-pane"]:visible blockquote')).toHaveCount(0);
 });
 
 test("Text: the second of two same lines cites its own line, and copies with it", async () => {

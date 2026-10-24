@@ -43,6 +43,7 @@ const MIND_OPEN_WAIT_MS = 5000;
 
 const REFUSED: Partial<Record<CitationCheckReason, MessageKey>> = {
   "too-many-pages": "viewer.selection.refused.pages",
+  "in-several-places": "viewer.selection.refused.places",
   "no-text": "viewer.selection.refused.noText",
 };
 

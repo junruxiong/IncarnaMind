@@ -274,6 +274,38 @@ describe("citeSelection", () => {
       expect(cited.location).toEqual({ kind: "lines", from: 3, to: 3 });
     });
 
+    // A text file's Units are blocks of 50 lines: at a block's edge, the words around the selection
+    // are in the next block, and a place inside the block with the same nearer words must not win.
+    test.each([50, 51, 100, 101])(
+      "in a text file, the line at a block's edge (line %i), though the same lines are elsewhere in its block",
+      async (line) => {
+        const core = startCore(await createTempDataFolder());
+        const decoy = line <= 50 ? 25 : line <= 100 ? (line === 51 ? 80 : 75) : 130;
+        const lines = Array.from({ length: 150 }, (_, index) => `Shelf ${index + 1} checked.`);
+        for (const at of [line, decoy]) {
+          lines[at - 2] = "Packed by Ana";
+          lines[at - 1] = "Total: 5 boxes";
+          lines[at] = "Signed by Ben";
+        }
+        const document = await addPaper(core, Buffer.from(lines.join("\n")), "Deliveries.txt");
+
+        const cited = await core.citeSelection({
+          documentId: document.id,
+          parts: [
+            {
+              unit: Math.ceil(line / 50),
+              text: "Total: 5 boxes",
+              before: `${lines.slice(line - 5, line - 1).join("\n")}\n`,
+              after: `\n${lines.slice(line, line + 4).join("\n")}`,
+            },
+          ],
+        });
+
+        expect(cited).toMatchObject({ check: "found" });
+        expect(cited.location).toEqual({ kind: "lines", from: line, to: line });
+      },
+    );
+
     test("words a long file has in many places aren't cited", async () => {
       const core = startCore(await createTempDataFolder());
       const lines = Array.from(
@@ -304,7 +336,12 @@ describe("citeSelection", () => {
         parts: [{ unit: 1, text: "Tides rise twice a day." }],
       });
 
-      expect(cited).toMatchObject({ check: "not-found", pageFrom: 1, pageTo: 1 });
+      expect(cited).toMatchObject({
+        check: "not-found",
+        checkReason: "in-several-places",
+        pageFrom: 1,
+        pageTo: 1,
+      });
     });
 
     test("words around it that tell no place leave words in two places uncited", async () => {

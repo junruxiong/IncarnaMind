@@ -1091,6 +1091,8 @@ export const zhCN = {
   "viewer.selection.notOpenedNew": "未能添加引述：新的 Mind 没有打开。你可以改为复制（含引用）。",
   "viewer.selection.copied": "已复制，含引用",
   "viewer.selection.refused": "无法引用所选文字：文档中所选位置的文字与之不符。",
+  "viewer.selection.refused.places":
+    "无法引用所选文字：文档中多处有这些文字。请连同前后的文字多选一些。",
   "viewer.selection.refused.pages": "无法引用所选文字：一条引用最多涵盖两页。",
   "viewer.selection.refused.noText": "无法引用所选文字：文档在该处没有可核对的文字。",
   "command.viewer.selection.addToNote": "将所选文字添加到笔记",
@@ -2913,6 +2915,7 @@ export const zhCN = {
   "citation.badge.contradicted": "与文档矛盾",
   "citation.reason.quote-not-on-pages": "所引位置的文字中没有这段引文。",
   "citation.reason.pages-outside-passage": "所引位置不在引文所属的段落中。",
+  "citation.reason.in-several-places": "这些文字出现在多处，周围的文字无法确定是哪一处。",
   "citation.reason.too-many-pages": "一个引用只能引一处，或相邻的两处。",
   "citation.reason.no-text": "所引位置没有文字，例如扫描页。",
   "citation.reason.document-removed": "这个文档已删除。",

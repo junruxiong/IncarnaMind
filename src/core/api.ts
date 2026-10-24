@@ -1652,6 +1652,11 @@ export type CitationCheckReason =
   | "pages-outside-passage"
   /** Not found: a Citation covers one Unit, or two consecutive ones of one sheet, at most. */
   | "too-many-pages"
+  /**
+   * Not found: words selected in a Document are in several places, and the words around them
+   * don't tell which (`citeSelection`, #101).
+   */
+  | "in-several-places"
   /** Can't check: the cited Units have no text, e.g. scanned pages. */
   | "no-text"
   /** Can't check: the Document was deleted. */
