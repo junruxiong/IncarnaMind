@@ -920,7 +920,11 @@ export const en = {
   "composer.edit.send": "Change it (Enter)",
   "composer.selection.drop": "Don’t ask about this",
   "assistant.question.quote": "About:",
-  "assistant.question.quoteGone": "{source}, since deleted",
+  "assistant.question.quoteGone": "(since deleted)",
+  "assistant.quote.leftOut.deleted":
+    "A quote from “{document}” wasn’t sent: the Document has been deleted.",
+  "composer.quote.tooMany":
+    "A Question can be about {count} selections at most: remove one to add this.",
   "assistant.quote.leftOut":
     "A quote from “{document}” wasn’t sent: the Document no longer has those words where you selected them.",
   "composer.edit.translateInto": "Translate into ",

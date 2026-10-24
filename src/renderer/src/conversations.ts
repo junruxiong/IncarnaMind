@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  AskedQuote,
   AskInConversationInput,
   Conversation,
   ConversationAnswer,
@@ -38,6 +39,8 @@ interface ConversationsState {
   asking: string | null;
   /** What that Question is about in its Mind (#565); "" when it is about nothing. */
   askingQuote: string;
+  /** The words selected in Documents that Question is about. */
+  askingQuotes: readonly AskedQuote[];
   /** Stop was pressed while that Question was on its way: its Answer stops as it starts. */
   stopWanted: boolean;
   /** An Answer to bring into view and flash once it shows: a link back from a Note leads there. */
@@ -50,6 +53,7 @@ export const useConversations = create<ConversationsState>()(() => ({
   messages: [],
   asking: null,
   askingQuote: "",
+  askingQuotes: [],
   stopWanted: false,
   sought: null,
 }));
@@ -158,15 +162,15 @@ export async function askReadyQuestion(): Promise<void> {
   }
 }
 
-// Words a Document no longer has where they were selected went without them: the User is told.
 function sayLeftOut(result: ConversationAskResult): void {
   if (!result.asked) return;
+  const { documents } = useAppStore.getState();
   for (const quote of result.leftOut ?? []) {
+    const here = documents.some((each) => each.id === quote.documentId);
+    const said = here ? "assistant.quote.leftOut" : "assistant.quote.leftOut.deleted";
     useNotices
       .getState()
-      .showError(
-        new Error(translateNow("assistant.quote.leftOut", { document: quote.documentName })),
-      );
+      .showError(new Error(translateNow(said, { document: quote.documentName })));
   }
 }
 
@@ -184,8 +188,8 @@ export async function askInAssistant(
   const key = composerKey(input.mindId);
   useConversations.setState({
     asking: input.text,
-    askingQuote:
-      (input.mindId ? (input.focus?.selection ?? "") : "") || (input.quotes?.[0]?.quote ?? ""),
+    askingQuote: input.mindId ? (input.focus?.selection ?? "") : "",
+    askingQuotes: input.quotes ?? [],
     stopWanted: false,
     sought: null,
   });

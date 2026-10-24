@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type * as Y from "yjs";
 import { create } from "zustand";
-import type { AskedQuote, SearchScope } from "../../core/api";
+import { type AskedQuote, MOST_ASKED_QUOTES, type SearchScope } from "../../core/api";
 import { folderScope } from "../../shared/searchScope";
 
 /** What the composer holds for one Mind until it is asked: the text, the Search scope and a Skill. */
@@ -32,6 +32,25 @@ export interface Paste {
   text: string;
 }
 
+/** These words from that place: a draft and a Question hold each once. */
+export const quoteKey = (quote: AskedQuote): string =>
+  `${quote.documentId}:${JSON.stringify(quote.location)}:${quote.quote}`;
+
+export const holdsQuote = (quotes: readonly AskedQuote[], quote: AskedQuote): boolean =>
+  quotes.some((each) => quoteKey(each) === quoteKey(quote));
+
+/** The quotes of `first` and then `added`, each once, as many as a Question takes. */
+export function withQuotes(
+  first: readonly AskedQuote[],
+  added: readonly AskedQuote[],
+): AskedQuote[] {
+  const quotes: AskedQuote[] = [];
+  for (const quote of [...first, ...added]) {
+    if (!holdsQuote(quotes, quote)) quotes.push(quote);
+  }
+  return quotes.slice(0, MOST_ASKED_QUOTES);
+}
+
 /** A paste over this many characters, or lines, becomes a chip. */
 export const LONG_PASTE_CHARS = 2000;
 export const LONG_PASTE_LINES = 30;
@@ -51,6 +70,10 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 
 const isStrings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((each) => typeof each === "string");
+
+/** The quotes in what a reload left, as far as they read. */
+export const quotesFrom = (value: unknown): AskedQuote[] =>
+  Array.isArray(value) ? value.filter(isQuote) : [];
 
 const isQuote = (value: unknown): value is AskedQuote =>
   isObject(value) &&

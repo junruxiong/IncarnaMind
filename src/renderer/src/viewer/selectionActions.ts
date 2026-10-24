@@ -23,7 +23,7 @@ import { mindName } from "../../../shared/naming";
 import { type AddTarget, addInEditor } from "../addToNote";
 import { focusComposer } from "../commands/assistant";
 import { readMindHandle } from "../commands/handles";
-import { NO_MIND, useComposer } from "../composer";
+import { holdsQuote, NO_MIND, useComposer } from "../composer";
 import { core } from "../core";
 import { flashBlocks } from "../editor/blockOrigins";
 import { sourceContext } from "../editor/copyCitations";
@@ -170,16 +170,12 @@ export async function addSelectionToNote(
   }
 }
 
-const sameQuote = (one: AskedQuote, other: AskedQuote) =>
-  one.documentId === other.documentId &&
-  one.quote === other.quote &&
-  JSON.stringify(one.location) === JSON.stringify(other.location);
-
 /**
  * Puts the selection in the composer as a quote chip, after any already there, and the cursor
- * in the composer, unfolding the assistant: the Question asked next is about it.
+ * in the composer, unfolding the assistant: the Question asked next is about it. Resolves with
+ * the quote in the composer, or null when it couldn't go there.
  */
-export async function askAboutSelection(selection: ViewerSelection): Promise<void> {
+export async function askAboutSelection(selection: ViewerSelection): Promise<AskedQuote | null> {
   try {
     const { quote, pageFrom, pageTo, location } = await citedSelection(selection);
     const { document } = selection;
@@ -194,17 +190,17 @@ export async function askAboutSelection(selection: ViewerSelection): Promise<voi
     const composer = useComposer.getState();
     const key = composer.seat?.mindId ?? NO_MIND;
     const quotes = composer.draft(key).quotes ?? [];
-    if (!quotes.some((each) => sameQuote(each, asked))) {
+    if (!holdsQuote(quotes, asked)) {
       if (quotes.length >= MOST_ASKED_QUOTES) {
-        throw new Error(
-          translateNow("error.question.quotes.tooMany", { count: MOST_ASKED_QUOTES }),
-        );
+        throw new Error(translateNow("composer.quote.tooMany", { count: MOST_ASKED_QUOTES }));
       }
       composer.update(key, { quotes: [...quotes, asked] });
     }
     focusComposer();
+    return asked;
   } catch (error) {
     useAppStore.getState().reportError(error);
+    return null;
   }
 }
 

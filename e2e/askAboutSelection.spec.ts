@@ -44,14 +44,17 @@ test.afterEach(async () => {
   await removeDataFolder(home);
 });
 
-/** The app with the scripted model, the paper beside a new Mind, and a page's text layer. */
-async function paperBesideMind() {
-  const path = join(sources, "Rate cuts.pdf");
+/**
+ * The app with the scripted model (none set up with `model: false`), the paper beside a new
+ * Mind, and a page's text layer.
+ */
+async function paperBesideMind({ model = true, name = "Rate cuts" } = {}) {
+  const path = join(sources, `${name}.pdf`);
   await writeFile(path, PAPER);
   const { app, window } = await launchApp(dataDir, { fakeChat: true, home });
   await setWindowSize(app, window, 1440, 900);
   await dismissChatSetup(window);
-  await connectLocalChatModel(window);
+  if (model) await connectLocalChatModel(window);
   await addDocuments(window, [path]);
   await expectReadyDocuments(window, 1);
   await newMind(window);
@@ -63,7 +66,7 @@ async function paperBesideMind() {
   const layer = (page: number) =>
     window.getByTestId("viewer").locator(`[data-page-number="${page}"] .textLayer`);
   await expect(layer(2)).toContainText(REPEATED);
-  return { window, layer };
+  return { app, window, layer };
 }
 
 async function select(window: Page, layer: ReturnType<Page["locator"]>, words: string) {
@@ -103,7 +106,82 @@ test("Ask about this puts the words in the composer, and the Question keeps them
   await expect(assistantAnswers(window).last()).toHaveAttribute("data-status", "done", {
     timeout: 45_000,
   });
+
+  // Asked, the words are let go: no longer drawn, and ⌘J only goes to the composer.
+  await expect.poll(() => heldDrawn(window)).toBe(0);
+  await window.keyboard.press("ControlOrMeta+j");
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await expect(chips(window)).toHaveCount(0);
 });
+
+const heldDrawn = (window: Page) =>
+  window.evaluate(() => CSS.highlights.get("viewer-held-selection")?.size ?? 0);
+
+test("with no model set, the waiting Question shows its quote, and Set up later or a quit gives back the words and the chip", async () => {
+  const { app, window, layer } = await paperBesideMind({ model: false });
+  await select(window, layer(2), "Margins recover within two quarters");
+  await pointAndClick(window, window.getByTestId("viewer-selection-ask"));
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+  await window.keyboard.type("What does this mean?");
+  await window.keyboard.press("Enter");
+
+  await expect(window.getByTestId("model-setup")).toBeVisible();
+  const waiting = window.getByTestId("assistant").getByTestId("assistant-question").last();
+  await expect(waiting.getByTestId("assistant-question-quote")).toContainText(
+    "Margins recover within two quarters",
+  );
+  await pointAndClick(window, window.getByTestId("setup-later"));
+  await expect(window.getByTestId("composer-input")).toHaveValue("What does this mean?");
+  await expect(chips(window)).toHaveCount(1);
+
+  // Asked again, it waits again; quitting keeps it for the next start.
+  await window.getByTestId("composer-input").focus();
+  await window.keyboard.press("Enter");
+  await expect(window.getByTestId("model-setup")).toBeVisible();
+  await app.close();
+  const again = await launchApp(dataDir, { fakeChat: true, home });
+  await setWindowSize(again.app, again.window, 1440, 900);
+  await pointAndClick(again.window, again.window.getByTestId("mind-tab").first());
+  await expect(again.window.getByTestId("composer-input")).toHaveValue("What does this mean?");
+  await expect(chips(again.window)).toHaveCount(1);
+  await again.app.close();
+});
+
+test("a long Document name is cut in the chip and above the Question, its page kept whole and the whole name in a tooltip, in Chinese", async () => {
+  const name =
+    "Quarterly review of regional grocery chains margins after the rate cuts of 2025 final revised edition";
+  const { window, layer } = await paperBesideMind({ name });
+  await setLanguage(window, "zh-CN");
+  await select(window, layer(2), "Margins recover within two quarters");
+  await pointAndClick(window, window.getByTestId("viewer-selection-ask"));
+  await expect(window.getByTestId("composer-input")).toBeFocused();
+
+  const chip = chips(window);
+  await expect(chip).toHaveAttribute("title", new RegExp(`${name} 第 2 页$`));
+  await expect(chip.locator(".quote-chip-where")).toHaveText("第 2 页");
+  await expectInside(chip.locator(".quote-chip-where"), chip);
+
+  await window.keyboard.type("这句话是什么意思？");
+  await window.keyboard.press("Enter");
+  const source = window
+    .getByTestId("assistant")
+    .getByTestId("assistant-question")
+    .last()
+    .getByTestId("assistant-question-quote-source");
+  await expect(source).toHaveAttribute("title", `${name} 第 2 页`);
+  await expectInside(source.locator(".assistant-question-quote-where"), source);
+});
+
+/** The page is drawn whole, inside its line, as the name before it is cut to fit. */
+async function expectInside(
+  inner: ReturnType<Page["locator"]>,
+  outer: ReturnType<Page["locator"]>,
+) {
+  const [box, around] = await Promise.all([inner.boundingBox(), outer.boundingBox()]);
+  expect(box && around && box.x + box.width <= around.x + around.width + 1).toBe(true);
+  const fits = await inner.evaluate((element) => element.scrollWidth <= element.clientWidth + 1);
+  expect(fits).toBe(true);
+}
 
 test("⌘J and ⌘K ask about the selection, the same words once, and Backspace and × take the chip away, in Chinese", async () => {
   const { window, layer } = await paperBesideMind();

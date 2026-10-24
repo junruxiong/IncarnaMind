@@ -1,11 +1,12 @@
 import { flip, hide, offset, shift, type VirtualElement } from "@floating-ui/dom";
 import { isMacOS } from "@tiptap/core";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Document } from "../../../core/api";
+import type { AskedQuote, Document } from "../../../core/api";
 import { viewerSelectionHandle } from "../commands/handles";
 import { shortcutLabel } from "../commands/keymap";
 import { AddToMindPicker } from "../components/assistant/AddToMindPicker";
 import { ChatLineIcon, CopyLineIcon, PlusLineIcon } from "../components/lineIcons";
+import { holdsQuote, useComposer } from "../composer";
 import { Popover } from "../editor/Popover";
 import { useT } from "../i18n";
 import { type SelectionReader, selectionEnd } from "./selectedText";
@@ -72,6 +73,7 @@ export function SelectionMenu({
 }) {
   const t = useT();
   const [held, setHeld] = useState<Held | null>(null);
+  const [asked, setAsked] = useState<AskedQuote | null>(null);
   const [open, setOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const menu = useRef<HTMLDivElement>(null);
@@ -96,12 +98,14 @@ export function SelectionMenu({
       setOpen(parts.length > 0);
       setPicking(false);
       setAway(false);
+      setAsked(null);
     };
     const onDown = (event: PointerEvent) => {
       if (inPopover(event.target)) return;
       pressed = true;
       setOpen(false);
       setHeld(null);
+      setAsked(null);
     };
     const onReleased = () => {
       pressed = false;
@@ -163,6 +167,17 @@ export function SelectionMenu({
     return () => window.removeEventListener("keydown", onKey);
   }, [held, open]);
 
+  // Asked about, the words stay drawn while their chip waits in the composer, and go with it.
+  useEffect(() => {
+    if (!asked) return;
+    return useComposer.subscribe(({ drafts }) => {
+      if (!Object.values(drafts).some((draft) => holdsQuote(draft.quotes ?? [], asked))) {
+        setHeld(null);
+        setAsked(null);
+      }
+    });
+  }, [asked]);
+
   useEffect(() => {
     drawHeld(held && away ? held.range : null);
     return () => drawHeld(null);
@@ -201,7 +216,7 @@ export function SelectionMenu({
       held && {
         ask: () => {
           close();
-          void askAboutSelection((heldNow() ?? held).selection);
+          void askAboutSelection((heldNow() ?? held).selection).then(setAsked);
         },
         addToNote: () => {
           const now = heldNow() ?? held;

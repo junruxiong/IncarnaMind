@@ -36,6 +36,7 @@ import {
   NO_MIND,
   type Paste,
   useComposer,
+  withQuotes,
 } from "../composer";
 import {
   answerBeingWritten,
@@ -540,8 +541,9 @@ export function Composer({
       return;
     }
     useAnswers.getState().dismiss(composerKey(mindId));
+    // Words asked from ⌘K go alone: the draft, its chips too, stays for the User.
+    const quotes = said === undefined ? (current.quotes ?? []) : [];
     if (said === undefined) update({ text: "", skill: null, pastes: [], quotes: [] });
-    else update({ quotes: [] });
     setExpanded(false);
     setViewing(null);
     setPicking(null);
@@ -553,21 +555,20 @@ export function Composer({
       scope: composerScope(current, folderId),
       model: modelInUseOf(mind?.doc ?? null),
       forcedSkill: draft.skill,
-      quotes: draft.quotes ?? [],
+      quotes,
     });
     if (asked) {
       selection.asked();
       return;
     }
-    // Not asked: its words come back here, unless the User has typed anew meanwhile.
+    // Not asked: its words come back here, unless the User has typed anew meanwhile; its quotes
+    // come back whatever was typed.
     const now = useComposer.getState().draft(key);
+    const back = withQuotes(quotes, now.quotes ?? []);
     if (now.text === "" && now.pastes.length === 0) {
-      update({
-        text: typed,
-        pastes: draft.pastes,
-        skill: now.skill ?? draft.skill,
-        quotes: [...(draft.quotes ?? []), ...(now.quotes ?? [])],
-      });
+      update({ text: typed, pastes: draft.pastes, skill: now.skill ?? draft.skill, quotes: back });
+    } else if (quotes.length > 0) {
+      update({ quotes: back });
     }
   };
 
