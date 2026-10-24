@@ -4046,6 +4046,10 @@ export const en = {
   "error.approval.commandOnce": "A command is allowed one call at a time, never always.",
   "error.question.answer": "That isn’t an answer this question takes.",
   "error.question.onScreen": "IncarnaMind couldn’t tell which Documents are open. Ask again.",
+  "error.question.quotes":
+    "IncarnaMind couldn’t read the words you selected to ask about. Select them again.",
+  "error.question.quotes.tooMany":
+    "A Question can be about {count} selections at most. Remove some, then ask again.",
   "error.mindStyle.invalid": "That isn’t a font and a text size IncarnaMind has.",
   "error.privacy.usageDataLocalMode":
     "Usage data stays off: “Keep everything on this computer” is on.",
